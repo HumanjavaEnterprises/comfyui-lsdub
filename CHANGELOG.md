@@ -16,7 +16,8 @@ The whole rack: lip-sync for music videos in ComfyUI.
 - **QA:** Verify, Scorecard, Sync QA (with a review card), Fix It (problem -> what to try -> force_shots), Save Cut
   (invisible watermark).
 - Generators run locally in ComfyUI by default; **Comfy Cloud** is an opt-in project setting.
-- Three example workflows and a small demo asset pack (`scripts/fetch_demo.py`).
+- **Performance:** a character image + a song -> a singing-length LTX-2.5 performance video.
+- Four example workflows (incl. Make Your Character Sing) and a small demo asset pack (`scripts/fetch_demo.py`).
 - V3 nodes with a tooltip on every input and output.
 
 ## 0.0.3

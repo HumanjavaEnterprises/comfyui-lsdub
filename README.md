@@ -79,6 +79,8 @@ Every input and output has a tooltip. Categories are `LSDub/video`, `LSDub/audio
 **VIDEO lane**
 - **LSDub Video:** a finished clip or a still, or a still plus a prompt, animated with LTX-2.5.
 - **LSDub Still:** an image, optionally edited by an instruction with Qwen-Image-Edit-2511.
+- **LSDub Performance:** a character image + a song -> a performance video as long as the song: LTX-2.5 shots of
+  ~5 s on the song timeline, each from the character image with a new seed (or chained from the last frame).
 - **LSDub Shot Split:** finds the cuts. Fades and flashes are not cuts.
 - **LSDub Cast:** enrolls the singers from reference pictures, a refs folder or a saved cast file, and names the
   faces in every shot.
@@ -91,7 +93,7 @@ Every input and output has a tooltip. Categories are `LSDub/video`, `LSDub/audio
 - **LSDub Lyrics:** the sung words.
 - **LSDub Vocal Split:** vocals and instrumental (Mel-Band RoFormer).
 - **LSDub Lead Vocal:** lead, backing, and a lead-activity curve.
-- **LSDub Align:** times every word. It runs speech-to-text, reconciles the result with your lyrics, then
+- **LSDub Align:** times every word (lyrics optional: without them the transcript is used). It runs speech-to-text, reconciles the result with your lyrics, then
   force-aligns. It builds the viseme track with vocalisations (ooh, da da) marked to skip, and writes a lyric
   check.
 
@@ -121,7 +123,7 @@ Every input and output has a tooltip. Categories are `LSDub/video`, `LSDub/audio
 
 ## Example workflows
 
-They are in `example_workflows/` and appear in ComfyUI's template browser. All three use `preset=landing` and
+They are in `example_workflows/` and appear in ComfyUI's template browser. Workflows 1-3 use `preset=landing` (4 uses `none`), all
 `backend=local`.
 
 1. **Prompt Everything** (the hero). Still → video (LTX-2.5), tags + lyrics → song (ACE-Step), lip kit built from the
@@ -130,6 +132,9 @@ They are in `example_workflows/` and appear in ComfyUI's template browser. All t
    fix-it and save. Runs on the CPU. The models it needs download on first use.
 3. **Test and Learn.** Triage, alignment, sync QA with its card, and the fix-it notes, with no dub. Run this first
    on any new video.
+4. **Make Your Character Sing.** A song + a character image (+ optional lyrics): vocal split, lead vocal, alignment,
+   a performance video made with LTX-2.5 to the song's length, a lip kit built from it, the dub, verify (the sync
+   score), and the saved video with the song. Needs a GPU and the generator models.
 
 **Test & Learn vs Run:** in `test_learn` mode the Dub node passes the source through untouched, so the QA nodes
 measure your original video. Their analysis is cached and reused when you switch to `run`.
