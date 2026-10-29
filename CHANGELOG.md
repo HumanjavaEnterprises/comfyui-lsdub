@@ -9,15 +9,17 @@ The whole rack: lip-sync for music videos in ComfyUI.
 - **VIDEO lane:** Video slot (bring a clip, or animate a still with LTX-2.5), Still slot (Qwen-Image-Edit-2511),
   Shot Split, Cast (who is who), Triage (which shots can be dubbed, and why not).
 - **AUDIO lane:** Song slot (bring a song, or generate one with ACE-Step 1.5 XL), Lyrics, Vocal Split
-  (Mel-Band RoFormer), Lead Vocal, Align (speech-to-text + forced alignment, vocalisations skipped).
+  (Mel-Band RoFormer), Lead Vocal, Align (speech-to-text prompted with your lyrics + forced alignment; a low lyric match places the
+  lyrics on the voice and is flagged, or stops the run when the lyrics do not belong to the song).
 - **MOUTH lane:** Lip Kit (bring one or build one from a shot), Mouth Tweaks (incl. an optional jaw-curve CSV),
-  Dub (per shot, resumable, failed shots reported and kept as source by default), Occluders (keep a mic in front),
+  Dub (per shot, resumable, failed shots reported and kept as source by default;
+  vocalisations skipped, rested or mouthed), Occluders (keep a mic in front),
   Continuity.
 - **QA:** Verify, Scorecard, Sync QA (with a review card), Fix It (problem -> what to try -> force_shots), Save Cut
   (invisible watermark).
 - Generators run locally in ComfyUI by default; **Comfy Cloud** is an opt-in project setting.
 - **Performance:** a character image + a song -> a singing-length LTX-2.5 performance video.
-- Four example workflows (incl. Make Your Character Sing) and a small demo asset pack (`scripts/fetch_demo.py`).
+- Four example workflows (incl. Make Your Character Sing, experimental) and a small demo asset pack (`scripts/fetch_demo.py`).
 - V3 nodes with a tooltip on every input and output.
 
 ## 0.0.3
