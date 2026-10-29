@@ -117,3 +117,25 @@ def hidden_api_key(cls):
     """the comfy.org API key ComfyUI hands a node that declares Hidden.api_key_comfy_org (None outside ComfyUI)."""
     h = getattr(cls, 'hidden', None)
     return getattr(h, 'api_key_comfy_org', None) if h is not None else None
+
+
+def placeholder_video(path, text, size=(640, 360), seconds=1.0, fps=25.0):
+    """a short black clip with a line of text: what a Video output returns when there is nothing to show, so
+    downstream preview / save nodes never receive None."""
+    import cv2
+    import numpy as np
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+        f = np.zeros((size[1], size[0], 3), np.uint8)
+        cv2.putText(f, text[:60], (20, size[1] // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2, cv2.LINE_AA)
+        tmp = path + '.part.mp4'
+        p = ff.popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{size[0]}x{size[1]}', '-r', str(fps),
+                      '-i', '-', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', tmp], stdin=ff.PIPE)
+        try:
+            for _ in range(max(1, int(seconds * fps))): p.stdin.write(f.tobytes())
+            p.stdin.close()
+        except BrokenPipeError:
+            pass
+        if p.wait() != 0: raise RuntimeError('ffmpeg failed writing a placeholder clip')
+        os.replace(tmp, path)
+    return path

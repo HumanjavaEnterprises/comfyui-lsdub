@@ -48,6 +48,9 @@ def envelope(audio, t_start, n, rate, floor_db=-35.0, attack_ms=30.0, release_ms
     x = np.frombuffer(raw, np.float32)
     hop = sr / rate
     w = int(0.02 * sr)
+    need = int(n * hop + hop / 2) + w
+    if len(x) < need: x = np.concatenate([x, np.zeros(need - len(x), np.float32)])   # past the file's end = silence
+    if t_start < 0: x = np.concatenate([np.zeros(int(round(-t_start * sr)), np.float32), x])[:max(need, len(x))]
     rms = np.array([np.sqrt(np.mean(x[max(0, int(i * hop + hop / 2) - w // 2): int(i * hop + hop / 2) + w // 2] ** 2) + 1e-12)
                     for i in range(n)])
     db = 20 * np.log10(rms + 1e-9)

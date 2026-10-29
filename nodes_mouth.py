@@ -15,6 +15,7 @@ import sys
 from comfy_api.v0_0_2 import io
 
 from . import lsdub_types as T
+from . import media
 from .lsdub_engine import presets
 from .lsdub_engine._inproc import call
 from .project import file_hash, shots_todo, stage_key, text_hash
@@ -507,7 +508,8 @@ class LSDubOccluders(io.ComfyNode):
             review = review or rv
         return io.NodeOutput(T.Masks(dir=os.path.join(project.dir, 'mouth', 'masks'), shots=out,
                                      hash=text_hash(json.dumps(sorted((k, file_hash(p)) for k, p in out.items())))),
-                             LSDubDub._video(review) if review else None)
+                             LSDubDub._video(review or media.placeholder_video(os.path.join(project.dir, 'mouth', 'masks', 'none.mp4'),
+                                                                                'no dubbed shot crops to mask')))
 
 
 class LSDubContinuity(io.ComfyNode):

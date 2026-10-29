@@ -60,3 +60,10 @@ def test_shot_split_on_a_clip(pack, tmp_path, clip):
     shots = V.LSDubShotSplit.execute(p, src).args[0]
     assert shots.shots and shots.shots[0]['f0'] == 0 and os.path.exists(shots.features)
     assert V.load_detected(shots)[1] == pytest.approx(25.0)
+
+
+def test_video_outputs_are_never_none(pack, tmp_path):
+    p = _proj(pack, tmp_path)
+    still = np.zeros((1, 32, 48, 3), np.float32)
+    src, vid = asyncio.run(pack.nodes_video.LSDubVideoSlot.execute(p, None, still)).args
+    assert src.still and vid is not None and os.path.exists(vid if isinstance(vid, str) else vid.get_stream_source())

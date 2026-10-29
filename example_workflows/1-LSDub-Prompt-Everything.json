@@ -139,7 +139,7 @@
     "Node name for S&R": "LSDubStillSlot"
    },
    "widgets_values": [
-    "the same singer on a small club stage, a deep red velvet curtain behind her, warm spotlight"
+    "a close-up of the same singer, head and shoulders filling the frame, on a small club stage, a deep red velvet curtain behind her, warm spotlight"
    ],
    "color": "#253",
    "title": "LSDub Still"
@@ -199,7 +199,7 @@
     "Node name for S&R": "LSDubVideoSlot"
    },
    "widgets_values": [
-    "she sings into a chrome microphone, gentle camera push in, stage light",
+    "close-up, she sings to the camera, her mouth clearly visible, gentle camera push in, stage light",
     "blurry, distorted face, extra fingers",
     5.0
    ],

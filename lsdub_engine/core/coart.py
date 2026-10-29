@@ -583,6 +583,9 @@ def load_dyn(path, t0, n, fps, gap='geo_gap_cm', width='geo_width_cm'):
     dt = float(np.median(np.diff(t))) if len(t) > 1 else 1.0 / fps
     tc = t0 + (np.arange(n) + 0.5) / fps
     if tc[0] < t[0] - dt or tc[-1] > t[-1] + 2 * dt: return None
+    ok = np.isfinite(G) & np.isfinite(Wd)
+    if ok.sum() < 2: return None                                        # no usable curve here (e.g. no vocal): no mix
+    t, G, Wd = t[ok], G[ok], Wd[ok]
     return np.stack([np.interp(tc, t + 0.5 * dt, G), np.interp(tc, t + 0.5 * dt, Wd)], 1)
 
 

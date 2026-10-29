@@ -184,7 +184,8 @@ class LSDubSyncQA(io.ComfyNode):
         rows = json.load(open(js))
         verdicts = {str(r.get('shot')): r.get('corr') for r in rows}
         return io.NodeOutput(T.Report(json=js, md=md, verdicts=verdicts, hash=file_hash(js)),
-                             LSDubDub._video(card) if os.path.exists(card) else None, open(md).read())
+                             LSDubDub._video(card if os.path.exists(card) else media.placeholder_video(st.path('none.mp4'), 'no sung shot to show')),
+                             open(md).read())
 
 
 # reason (substring) -> what to try

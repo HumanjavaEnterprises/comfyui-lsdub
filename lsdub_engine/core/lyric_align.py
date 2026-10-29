@@ -47,6 +47,16 @@ def envelope(x, hop=160):
     return 20 * np.log10(np.sqrt((f ** 2).mean(1)) + 1e-9)    # 10 ms frames, dBFS
 
 
+def spread_lyrics(tokens, env, t0, hop_s=0.01, floor_db=-35.0):
+    """fallback timing: the lyric tokens evenly over the voiced span (env within floor_db of its peak)."""
+    if not tokens or len(env) == 0: return []
+    v = np.flatnonzero(env >= env.max() + floor_db)
+    a, b = (v[0], v[-1] + 1) if len(v) else (0, len(env))
+    d = (b - a) * hop_s / len(tokens)
+    return [{'w': w, 'start': round(t0 + a * hop_s + i * d, 3), 'end': round(t0 + a * hop_s + (i + 1) * d, 3), 'p': 0.0,
+             'heard': '', 'src': 'lyric', 'align': 'spread'} for i, w in enumerate(tokens)]
+
+
 def stt(audio, t0, t1, model='large-v3', prompt='', device='cpu', device_index=0, download_root=None):
     from faster_whisper import WhisperModel
     with tempfile.TemporaryDirectory() as d:
@@ -402,6 +412,10 @@ def main(argv=None):
     pcm = load_pcm(a.audio, a.t0, a.t1)
     env = envelope(pcm)
     thr = env.max() - 35
+    if not words:                                                       # speech-to-text heard no words (e.g. a short or
+        words = spread_lyrics(lyric_tokens(a.lyrics), env, a.t0)         # heavily produced vocal): the lyrics, spread over
+        notes.append('speech-to-text heard no words: lyrics spread evenly over the voiced span (low confidence)')
+        if not words: raise RuntimeError('align: no lyrics and no sung words heard')
     snap(words, env, env.max() - a.snap_db, a.t0)
     phrases, cur = [], [words[0]]
     for w in words[1:]:

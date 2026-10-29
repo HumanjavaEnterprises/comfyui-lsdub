@@ -182,10 +182,11 @@ def prompt_everything():
     wf = WF('LSDub 1: Prompt Everything')
     project(wf, 'run')
     wf.add('load_still', 'LoadImage', (0, 250), image=DEMO + 'landing_still.png')
-    wf.add('still', 'LSDubStillSlot', (400, -300), edit_prompt='the same singer on a small club stage, a deep red velvet curtain '
-                                                                'behind her, warm spotlight')
+    wf.add('still', 'LSDubStillSlot', (400, -300), edit_prompt='a close-up of the same singer, head and shoulders filling the frame, '
+                                                                'on a small club stage, a deep red velvet curtain behind her, warm spotlight')
     wf.link('project', 'project', 'still', 'project').link('load_still', 0, 'still', 'image')
-    wf.add('video', 'LSDubVideoSlot', (400, 0), prompt='she sings into a chrome microphone, gentle camera push in, stage light',
+    wf.add('video', 'LSDubVideoSlot', (400, 0), prompt='close-up, she sings to the camera, her mouth clearly visible, gentle camera '
+                                                       'push in, stage light',
            negative_prompt='blurry, distorted face, extra fingers', seconds=5.0)
     wf.link('project', 'project', 'video', 'project').link('still', 'image', 'video', 'still')
     wf.add('song', 'LSDubSongSlot', (400, 450), tags='dreamy synthpop, female vocal, 100 bpm, warm analog synths',

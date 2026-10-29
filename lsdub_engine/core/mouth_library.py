@@ -111,6 +111,8 @@ def prep(a):
             if a.frame is None or a.frame == i:
                 if best is None or m['open'] < best[0]: best = (m['open'], i, fr.copy(), p)
         i += 1
+    if best is None:
+        raise RuntimeError('lip kit: no readable face in this clip; build the kit from a close-up shot of the singer')
     _, idx, fr, p = best
     fh = np.linalg.norm(p[10] - p[152])
     c = (p[10] + p[152]) / 2

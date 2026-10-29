@@ -15,7 +15,7 @@ from .project import file_hash, stage_key
 VERDICT_COLOUR = {'DUB': (60, 200, 60), 'DUB-MEDIUM': (0, 170, 255), 'NO': (60, 60, 210)}
 
 
-def _fit(wh, long_side=768, multiple=32):
+def _fit(wh, long_side=1024, multiple=32):
     """a still's aspect at ~long_side px, both sides a multiple of 32 (LTX)."""
     w, h = wh
     k = long_side / max(w, h)
@@ -146,8 +146,10 @@ class LSDubVideoSlot(io.ComfyNode):
             dst = st2.path('still.png')
             os.replace(p, dst)
             st2.mark_done(True)
+            from .nodes_mouth import LSDubDub
+            prev = media.placeholder_video(st2.path('still.mp4'), 'a still (dubbed as one frame)')
             return io.NodeOutput(T.Source(path=dst, hash=h, fps=project.fps, n_frames=1,
-                                          wh=(int(still.shape[2]), int(still.shape[1])), still=True), None)
+                                          wh=(int(still.shape[2]), int(still.shape[1])), still=True), LSDubDub._video(prev))
         if (prompt or '').strip():
             raise ValueError('LSDub Video: to generate, connect a still (LSDub Still makes or edits one) and a prompt.')
         raise ValueError('LSDub Video: connect a video (or a still) to dub.')
