@@ -165,6 +165,42 @@ class Embedder:
         return e / (np.linalg.norm(e, axis=1, keepdims=True) + 1e-8)
 
 
+class TorchEmbedder:
+    """the same DINOv2 embedding ([CLS, mean patch], 1536-d, same preprocessing) run by torch on a chosen device: the
+    ComfyUI nodes pass ComfyUI's device. Weights load lazily (Hugging Face, into cache_dir) on first use; offload()
+    moves them back to the CPU so the card is free for the render."""
+
+    def __init__(self, device, hf='facebook/dinov2-base', cache_dir=None, offload_device='cpu'):
+        import torch
+        from transformers import AutoModel
+        self.torch, self.device, self.offload_device = torch, device, offload_device
+        self.m = AutoModel.from_pretrained(hf, cache_dir=cache_dir).eval().to(device)
+
+    def __call__(self, crops):
+        if not crops:
+            return np.zeros((0, 1536), np.float32)
+        torch = self.torch
+        if next(self.m.parameters()).device != torch.device(self.device): self.m.to(self.device)
+        x = np.stack([((c[:, :, ::-1].astype(np.float32) / 255.0) - MEAN) / STD for c in crops]).transpose(0, 3, 1, 2)
+        out = []
+        with torch.inference_mode():
+            for i in range(0, len(x), 16):
+                h = self.m(pixel_values=torch.from_numpy(np.ascontiguousarray(x[i:i + 16])).to(self.device)).last_hidden_state
+                out.append(torch.cat([h[:, 0], h[:, 1:].mean(1)], 1).float().cpu().numpy())
+        e = np.concatenate(out).astype(np.float32)
+        return e / (np.linalg.norm(e, axis=1, keepdims=True) + 1e-8)
+
+    def offload(self):
+        self.m.to(self.offload_device)
+
+
+def make_embedder(model=None, device=None, cache_dir=None, offload_device='cpu'):
+    """device None / 'cpu' -> the ONNX embedder on OpenCV (the CLI default); any other device -> TorchEmbedder."""
+    if device is None or str(device) == 'cpu':
+        return Embedder(model or MODEL)
+    return TorchEmbedder(device, cache_dir=cache_dir, offload_device=offload_device)
+
+
 def colour_sig(crop):
     """Hue x saturation histogram of the saturated pixels + a share for near-black / near-white (L1 = 1)."""
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)

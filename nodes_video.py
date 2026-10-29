@@ -171,10 +171,12 @@ class LSDubCast(io.ComfyNode):
                     raise ValueError(f'LSDub Cast: {int(singer_refs.shape[0])} reference images but {len(nm)} names')
                 for i, n in enumerate(nm):
                     kv.append(f'{n}={media.image_to_png(singer_refs[i:i + 1], st.path(f"ref_{i:02d}_{n}.png"))}')
-            db = qa.build_db(cast_db or None, refs_dir or None, kv)
+            from . import devices
+            emb = devices.embedder()
+            db = qa.build_db(cast_db or None, refs_dir or None, kv, emb=emb)
             if db is None: raise ValueError('LSDub Cast: give singer_refs + names, a cast_db file or a refs_dir')
             np.savez_compressed(db_path, **db)
-            faces, emb = C.Faces(), C.Embedder(C.MODEL)
+            faces = C.Faces()
             mids = {s['shot']: (s['f0'] + s['f1']) // 2 for s in shots.shots}
             F = qa.read_frames(source.path, sorted(set(mids.values())))
             who = {}
@@ -182,6 +184,7 @@ class LSDubCast(io.ComfyNode):
                 img = F.get(f)
                 fs = faces(img) if img is not None else []
                 who[str(sid)] = sorted({qa.identify(db, emb, img, x, project.preset)[0] for x in fs})
+            devices.release(emb)
             media.dump(who, per_shot)
             qa.sheet(source.path, shots.shots, sheet, lambda s: (200, 200, 200), lambda s: ' '.join(who.get(str(s['shot'])) or ['-']))
             st.mark_done(True, names=sorted(set(db['name'].tolist())))
@@ -230,8 +233,13 @@ class LSDubTriage(io.ComfyNode):
             sing = presets.get(project.preset).singers
             targets = tuple(sing) if (sing and db is not None) else ()
             vocal = (song.lead or song.vocal or song.mix) if song else None
-            meta, rows = qa.triage(source.path, vocal, project.song_offset, db, targets, samples,
-                                   detected=load_detected(shots), preset=project.preset)
+            from . import devices
+            emb = devices.embedder() if db is not None else None
+            try:
+                meta, rows = qa.triage(source.path, vocal, project.song_offset, db, targets, samples,
+                                       detected=load_detected(shots), preset=project.preset, emb=emb)
+            finally:
+                if emb is not None: devices.release(emb)
             qa.write_triage(meta, rows, out)
             if source.name:                                              # the report names the user's file, not our copy
                 md = open(out + '.md').read().split('\n', 1)

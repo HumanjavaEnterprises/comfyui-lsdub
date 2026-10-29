@@ -129,11 +129,15 @@ class LSDubAlign(io.ComfyNode):
             stt = st.path('stt.json')
             if transcript_json and not os.path.exists(stt):
                 with open(transcript_json) as f, open(stt, 'w') as g: g.write(f.read())
+            from . import devices
+            wd, wi = devices.whisper_device()
             argv = ['--audio', voc, '--lyrics', lyrics.path, '--t0', '0', '--t1', f'{dur:.3f}', '--out', align,
-                    '--stt-json', stt, '--aligner', 'sphinx', '--whisper-python', '', '--whisper-model', stt_model]
+                    '--stt-json', stt, '--aligner', 'sphinx', '--whisper-python', '', '--whisper-model', stt_model,
+                    '--device', wd, '--device-index', str(wi), '--whisper-dir', devices.models_dir('whisper')]
             for ln in pronunciations.splitlines():
                 if '=' in ln: argv += ['--extra-dict', ln.strip()]
             call(LA.main, argv, quiet=True, name='align')
+            devices.free()
             call(VT.main, ['--align', align, '--t0', '0', '--frames', str(int(dur * project.fps)), '--fps', str(project.fps),
                            '--audio', voc, '--out', vis], quiet=True, name='visemes')
             call(VO.main, ['skip', '--track', vis, '--out', vis_skip, '--lyrics', lyrics.path, '--align', align], quiet=True,

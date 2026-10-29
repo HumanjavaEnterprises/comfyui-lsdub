@@ -8,3 +8,4 @@ pillow>=10
 faster-whisper>=1.0
 soundswallower>=0.6
 g2p>=2.0
+transformers>=4.40

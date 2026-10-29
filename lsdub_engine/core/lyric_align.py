@@ -47,12 +47,17 @@ def envelope(x, hop=160):
     return 20 * np.log10(np.sqrt((f ** 2).mean(1)) + 1e-9)    # 10 ms frames, dBFS
 
 
-def stt(audio, t0, t1, model='large-v3', prompt=''):
+def stt(audio, t0, t1, model='large-v3', prompt='', device='cpu', device_index=0, download_root=None):
     from faster_whisper import WhisperModel
     with tempfile.TemporaryDirectory() as d:
         p = f'{d}/w.wav'
         ff.run(['ffmpeg', '-v', 'error', '-y', '-ss', str(t0), '-t', str(t1 - t0), '-i', audio, '-ac', '1', '-ar', '16000', p], check=True)
-        m = WhisperModel(model, device='cpu', compute_type='int8')
+        try:
+            m = WhisperModel(model, device=device, device_index=device_index, download_root=download_root,
+                             compute_type='int8' if device == 'cpu' else 'float16')
+        except (RuntimeError, ValueError) as e:                       # no usable GPU runtime: the CPU path
+            print(f'stt: {device} unavailable ({e}); using the CPU', file=sys.stderr)
+            m = WhisperModel(model, device='cpu', compute_type='int8', download_root=download_root)
         segs, _ = m.transcribe(p, word_timestamps=True, language='en', vad_filter=False, initial_prompt=prompt or None)
         return [{'w': w.word.strip(), 'start': round(w.start + t0, 3), 'end': round(w.end + t0, 3), 'p': round(w.probability, 3)}
                 for s in segs for w in s.words]
@@ -358,6 +363,9 @@ def main(argv=None):
     ap.add_argument('--stt-json', help='cached stage-1 words; written here if missing')
     ap.add_argument('--whisper-python', default=os.environ.get('LIPS_WHISPER_PYTHON'), help='python with faster_whisper (default: this one, in-process)')
     ap.add_argument('--whisper-model', default='large-v3')
+    ap.add_argument('--device', default='cpu', help='speech-to-text device: cpu (default) or cuda')
+    ap.add_argument('--device-index', type=int, default=0)
+    ap.add_argument('--whisper-dir', help='where speech-to-text weights are downloaded (default: the Hugging Face cache)')
     ap.add_argument('--prompt', default='')
     ap.add_argument('--gap', type=float, default=0.30, help='whisper gap that splits phrases (s)')
     ap.add_argument('--pad', type=float, default=0.25, help='audio padding around each phrase (s)')
@@ -376,11 +384,11 @@ def main(argv=None):
     extra.update({k.strip(): v.strip() for k, v in (e.split('=', 1) for e in a.extra_dict)})
 
     if a.stt_only:
-        json.dump(stt(a.audio, a.t0, a.t1, a.whisper_model, a.prompt), open(a.stt_json, 'w'), indent=1)
+        json.dump(stt(a.audio, a.t0, a.t1, a.whisper_model, a.prompt, a.device, a.device_index, a.whisper_dir), open(a.stt_json, 'w'), indent=1)
         return
     sj = a.stt_json or a.out.replace('.json', '') + '_stt.json'
     if not os.path.exists(sj) and not a.whisper_python:
-        json.dump(stt(a.audio, a.t0, a.t1, a.whisper_model, a.prompt), open(sj, 'w'), indent=1)
+        json.dump(stt(a.audio, a.t0, a.t1, a.whisper_model, a.prompt, a.device, a.device_index, a.whisper_dir), open(sj, 'w'), indent=1)
     if not os.path.exists(sj):
         ff.python(a.whisper_python, 'lsdub_engine.core.lyric_align', ['--stt-only', '--audio', a.audio, '--lyrics', a.lyrics,
                         '--t0', str(a.t0), '--t1', str(a.t1), '--out', a.out, '--stt-json', sj, '--whisper-model', a.whisper_model,

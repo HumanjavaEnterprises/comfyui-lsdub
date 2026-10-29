@@ -52,6 +52,9 @@ class LSDubVocalSplit(io.ComfyNode):
                     torch.bfloat16 if precision == 'bf16' else torch.float32)
         mix = _to_stereo44(audio)
         v = vs.separate(mix, m)
+        m.to('cpu')                                                     # free the card for the render
+        del m
+        if hasattr(mm, 'soft_empty_cache'): mm.soft_empty_cache()
         return io.NodeOutput(_audio(v), _audio(mix - v))
 
 

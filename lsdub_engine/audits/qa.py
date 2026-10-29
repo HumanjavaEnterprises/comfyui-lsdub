@@ -116,7 +116,7 @@ def match_cuts(detected, truth, tol=2):
 
 
 # ---------------------------------------------------------------------------------------------------- identity
-def build_db(cast_db=None, refs=None, faces_kv=(), model=None):
+def build_db(cast_db=None, refs=None, faces_kv=(), model=None, emb=None):
     """the identity db: a cast npz, or enrolled from a refs dir (<dir>/<name>/*.png|jpg) and/or name=image pairs."""
     from ..core import cast as C
     if cast_db: return C.load_db(cast_db)
@@ -129,7 +129,7 @@ def build_db(cast_db=None, refs=None, faces_kv=(), model=None):
                 imgs += [(os.path.basename(d), f) for f in fs[:16]]
     imgs += [tuple(kv.split('=', 1)) for kv in faces_kv]
     if not imgs: return None
-    return C.enroll(imgs, C.Faces(), C.Embedder(model or C.MODEL))
+    return C.enroll(imgs, C.Faces(), emb or C.Embedder(model or C.MODEL))
 
 
 def identify(db, emb, img, f, preset=None):
@@ -192,14 +192,14 @@ def mouth_clear(img, f):
 
 
 # ---------------------------------------------------------------------------------------------------- triage
-def triage(video, vocal=None, offset=0.0, db=None, targets=(), samples=6, model=None, detected=None, preset=None):
+def triage(video, vocal=None, offset=0.0, db=None, targets=(), samples=6, model=None, detected=None, preset=None, emb=None):
     """detected: a detect_shots() result to reuse (shots, fps, (W, H), (dh, dp)); preset: cast family names."""
     from ..core import cast as C
     shots, fps, (W, H), (dh, dp) = detected if detected is not None else detect_shots(video)
     shots = [dict(s) for s in shots]
     n = shots[-1]['f1'] + 1 if shots else 0
     faces = C.Faces()
-    emb = C.Embedder(model or C.MODEL) if db is not None else None
+    emb = (emb or C.Embedder(model or C.MODEL)) if db is not None else None
     act = vad(vocal, n, fps, offset)[0] if vocal else None
     want = set(targets) if targets else (set(db['name'].tolist()) if db is not None else set())
     for s in shots:
@@ -459,6 +459,7 @@ def main(argv=None):
     sp = ap.add_subparsers(dest='cmd', required=True)
     t = sp.add_parser('triage', help='which shots are fit to redub')
     t.add_argument('--preset', help='cast preset (presets.py): family names for near-identical extras')
+    t.add_argument('--device', default='cpu', help='identity embedder device (cpu = the ONNX model; cuda / cuda:N = torch)')
     t.add_argument('--video', required=True)
     t.add_argument('--vocal', help='the vocal / dialogue stem: voice-activity per shot')
     t.add_argument('--offset', type=float, default=0.0, help='video time = audio time + offset (s)')
@@ -481,8 +482,10 @@ def main(argv=None):
     a = ap.parse_args(argv)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     if a.cmd == 'triage':
+        from ..core import cast as C
         db = build_db(a.cast_db, a.refs, a.face, a.model)
-        meta, shots = triage(a.video, a.vocal, a.offset, db, a.target, a.samples, a.model, preset=a.preset)
+        meta, shots = triage(a.video, a.vocal, a.offset, db, a.target, a.samples, a.model, preset=a.preset,
+                             emb=C.make_embedder(a.model, a.device) if a.device != 'cpu' else None)
         if a.truth_cuts:
             tc = json.load(open(a.truth_cuts))
             tr = [int(round(c['start'] * meta['fps'])) for c in tc['cut']][1:]
