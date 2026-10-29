@@ -124,3 +124,21 @@ def test_project_backend_setting(pack, tmp_path):
     assert p.backend == 'comfy_cloud' and N.execute(**kw).args[0].backend == 'local'
     assert N.fingerprint_inputs(**kw, backend='comfy_cloud') != N.fingerprint_inputs(**kw, backend='local')
     assert p.cache_key() == N.execute(**kw).args[0].cache_key()                     # analysis is shared across backends
+
+
+def test_cloud_free_tier_refusal_in_plain_words(pack, tmp_path):
+    G = pack.generate
+
+    class Forbidden(Exception):
+        pass
+
+    class Client:
+        def __init__(self, api_key): pass
+        workflows = type('W', (), {'from_json': staticmethod(lambda g: type('WF', (), {'set_input': lambda *a: None})())})()
+
+        def run(self, wf): raise Forbidden('403: API key authentication is not available for free tier accounts')
+
+        def close(self): pass
+    with pytest.raises(G.GenerationError, match='paid Comfy Cloud plan') as e:
+        G.run_cloud({'out': {'class_type': 'X', 'inputs': {}}}, 'out', None, str(tmp_path), 'sk-secret', client_factory=Client)
+    assert 'sk-secret' not in str(e.value)

@@ -118,24 +118,47 @@ def run_cloud(graph, out_node='out', uploads=None, out_dir='.', api_key=None, cl
         client_factory = Comfy
     c = client_factory(api_key=key)
     try:
-        wf = c.workflows.from_json(graph)
-        for nid, n in graph.items():
-            for field, v in n['inputs'].items():
-                if isinstance(v, str) and v.startswith('@'):
-                    path = (uploads or {}).get(v[1:])
-                    if path is None: raise GenerationError(f'no file for {v}')
-                    wf.set_input(nid, field, c.assets.from_file(path))
-        job = c.run(wf)
-        os.makedirs(out_dir, exist_ok=True)
-        paths = []
-        for o in job.get_outputs(out_node):
-            dst = os.path.join(out_dir, os.path.basename(o.name))
-            o.to_file(dst)
-            paths.append(dst)
-        if not paths: raise GenerationError('Comfy Cloud returned no output')
-        return paths
+        return _run_cloud_job(c, graph, out_node, uploads, out_dir)
+    except GenerationError:
+        raise
+    except Exception as e:                                              # the SDK's errors, in plain words (never the key)
+        raise GenerationError(cloud_error_message(e)) from None
     finally:
         c.close()
+
+
+PAID_PLAN = ('Comfy Cloud refused the run: running workflows with an API key needs a paid Comfy Cloud plan (free-tier '
+             'accounts cannot use API keys). Upgrade your Comfy Cloud plan, or set the project backend to local.')
+
+
+def cloud_error_message(e):
+    name, msg = type(e).__name__, str(e)
+    low = msg.lower()
+    if 'free tier' in low or 'free-tier' in low or name == 'Forbidden': return PAID_PLAN
+    if name in ('Unauthorized', 'MissingApiKey') or 'unauthorized' in low:
+        return 'Comfy Cloud did not accept the comfy.org API key: sign in again in ComfyUI, or check COMFY_API_KEY.'
+    if name == 'QueueFull': return 'Comfy Cloud is busy (queue full): try again in a few minutes, or use the local backend.'
+    if name == 'JobFailed': return f'the generator failed on Comfy Cloud: {msg[:300]}'
+    return f'Comfy Cloud error ({name}): {msg[:300]}'
+
+
+def _run_cloud_job(c, graph, out_node, uploads, out_dir):
+    wf = c.workflows.from_json(graph)
+    for nid, n in graph.items():
+        for field, v in n['inputs'].items():
+            if isinstance(v, str) and v.startswith('@'):
+                path = (uploads or {}).get(v[1:])
+                if path is None: raise GenerationError(f'no file for {v}')
+                wf.set_input(nid, field, c.assets.from_file(path))
+    job = c.run(wf)
+    os.makedirs(out_dir, exist_ok=True)
+    paths = []
+    for o in job.get_outputs(out_node):
+        dst = os.path.join(out_dir, os.path.basename(o.name))
+        o.to_file(dst)
+        paths.append(dst)
+    if not paths: raise GenerationError('Comfy Cloud returned no output')
+    return paths
 
 
 async def run(graph, backend='local', uploads=None, out_dir='.', api_key=None, out_node='out'):

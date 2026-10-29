@@ -152,6 +152,8 @@ slots and Lip Kit building. They run there through the Comfy Python SDK (`pip in
 - **Sign-in:** your comfy.org account, the same sign-in as ComfyUI's API nodes. If that isn't available, LSDub uses
   the `COMFY_API_KEY` environment variable. The key is never logged or saved.
 - **What runs where:** the dub and QA always run locally.
+- **Plan:** API-key runs need a **paid Comfy Cloud plan**; free-tier accounts are refused, and LSDub says so in
+  plain words.
 - **Cost:** cloud runs use your Comfy credits. Local is the default, and the example workflows use local.
 
 ## Built on and learned from
