@@ -427,6 +427,7 @@ class LSDubDub(io.ComfyNode):
             st = project.shot(sid, k)
             if shots_todo(project, k, [sid], forced):
                 try:
+                    if os.path.exists(st.path('gate.json')): os.remove(st.path('gate.json'))   # never a stale gate
                     render, info = cls.run_shot(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast, st,
                                                 vocalisations)
                     reason = '' if info.get('pass') else (f"sync gate failed: measured corr {info.get('corr')} "
@@ -440,7 +441,8 @@ class LSDubDub(io.ComfyNode):
             r = d.get('render') if d.get('render') and os.path.exists(d.get('render')) else ''
             ok = bool(d.get('pass'))
             res[str(sid)] = {'f0': s['f0'], 'f1': s['f1'], 'render': r, 'pass': ok, 'corr': d.get('corr'),
-                             'reason': d.get('reason') or d.get('error') or '', 'gate': st.path('gate.json'), 'key': k,
+                             'reason': d.get('reason') or d.get('error') or '', 'gate': '' if d.get('error') or not os.path.exists(st.path('gate.json'))
+                             else st.path('gate.json'), 'key': k,
                              'result': file_hash(r) if r else 'none',
                              'used': 'render' if r and (ok or on_fail == 'render') else 'source'}
             if pbar: pbar.update(1)
@@ -555,7 +557,7 @@ class LSDubContinuity(io.ComfyNode):
         for sid, v in render.shots.items():
             v = dict(v)
             if v.get('render') and (not want or int(sid) in want):
-                d = os.path.dirname(v['gate'])
+                d = os.path.dirname(v.get('gate') or v['render'])
                 st = project.stage('shots/_continuity', stage_key('LSDubContinuity', {'z': z}, [v['key'], v['result']]))
                 out = st.path('render.mp4')
                 if not st.is_done():

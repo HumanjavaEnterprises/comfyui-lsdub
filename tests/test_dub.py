@@ -163,3 +163,26 @@ def test_occluders_use_only_the_sam2_package():
     src = open(os.path.join(root, 'lsdub_engine', 'core', 'occluders.py')).read()
     assert 'sys.path' not in src and 'custom_nodes' not in src and 'segment-anything' not in src
     assert 'from sam2.build_sam import build_sam2_video_predictor' in src
+
+
+def test_a_failed_rerun_drops_the_stale_gate(pack, tmp_path, monkeypatch):
+    M = pack.nodes_mouth
+    state = {'raise': False}
+
+    def run_shot(cls, project, source, s, song, align, kit, tw, masks, cast, st, vocalisations='skip'):
+        if state['raise']: raise RuntimeError('no face found')
+        open(st.path('gate.json'), 'w').write('{"pass": true}')
+        r = st.path('render.mp4')
+        open(r, 'w').write('x')
+        return r, {'pass': True, 'corr': 0.9}
+    monkeypatch.setattr(M.LSDubDub, 'run_shot', classmethod(run_shot))
+    monkeypatch.setattr(M, 'assemble', lambda source, renders, out, fps, crf=18, audio='source', song=None, offset=0.0:
+                        open(out, 'w').write('cut') and [])
+    p, src, shots, song, al, kit = _setup(pack, tmp_path)
+    r = _dub(pack, p, src, shots, song, al, kit, only_shots='1')
+    assert r.shots['1']['gate'].endswith('gate.json') and os.path.exists(r.shots['1']['gate'])
+    state['raise'] = True
+    pf, *_ = _setup(pack, tmp_path, force='1')
+    r = _dub(pack, pf, src, shots, song, al, kit, only_shots='1')
+    assert r.shots['1']['gate'] == '' and 'no face found' in r.shots['1']['reason']
+    assert not any(f == 'gate.json' for _, _, fs in os.walk(tmp_path / 'cut' / 'shots') for f in fs)
