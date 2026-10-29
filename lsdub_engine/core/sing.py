@@ -60,10 +60,10 @@ def dyn_target(dyn_csv, n, t0, fps):
 
 
 # ---------------------------------------------------------------------------------------------------- singer
-def singer_box(take, char, db_path, model=None):
+def singer_box(take, char, db_path, model=None, preset=None):
     """`lsdub cast` on the take: the --char track with the largest median face -> its median det box (x0,y0,x1,y1)."""
     from . import cast as C
-    r = C.scan_video(take, C.load_db(db_path), model or C.MODEL)
+    r = C.scan_video(take, C.load_db(db_path), model or C.MODEL, preset=preset)
     T = [t for t in r['tracks'] if t['character'] == char]
     if not T: raise SystemExit(f"sing: no '{char}' track in {take} (found {sorted({t['character'] for t in r['tracks']})})")
     t = max(T, key=lambda t: t['face_px_med'] * t['n'])
@@ -83,7 +83,7 @@ def mic_near_lips(crop, face_px, thr=0.08):
 
 # ---------------------------------------------------------------------------------------------------- run
 def run(take, align, vocal, t0, out, work, paint_args=(), char=None, db=None, box=None, face_target=512.0, fps_mult=2,
-        snap=True, a2f=None, report=None, lead=None, word_close=None, auto=False):
+        snap=True, a2f=None, report=None, lead=None, word_close=None, auto=False, preset=None):
     os.makedirs(work, exist_ok=True)
     if not a2f: print('sing: no --a2f-csv: the standard recipe drives the jaw with Audio2Face jawOpen (better silences)', file=sys.stderr)
     lead = (SNAP['lead'] if snap else 0.1) if lead is None else lead
@@ -93,7 +93,7 @@ def run(take, align, vocal, t0, out, work, paint_args=(), char=None, db=None, bo
     m = max(1, int(fps_mult)) if snap else 1
     info = {'take': take, 't0': t0, 'frames': n, 'fps': fps, 'face_target': face_target, 'fps_mult': m, 'snap': snap}
     if char and db:
-        box, t = singer_box(take, char, db)
+        box, t = singer_box(take, char, db, preset=preset)
         info['cast'] = {'char': char, 'confidence': t['confidence'], 'face_px_med': t['face_px_med'], 'box': box}
     # 4a. tracks: the audio opening (sung_dyn) and the viseme track at the internal rate
     dyn = os.path.join(work, 'dyn.csv')
@@ -125,7 +125,7 @@ def run(take, align, vocal, t0, out, work, paint_args=(), char=None, db=None, bo
         open(os.path.join(work, 'gpu_occluders.sh'), 'w').write(
             '#!/usr/bin/env bash\n# lsdub sing: a mic sits near the lips on this crop. Occluder masks need a GPU (Florence-2 + SAM 2).\n'
             '# Run this on a GPU, then re-run the same `sing` (it picks up occ.npz).\n'
-            f'{sys.executable} -m lsdub_engine.cli occluders --video {crop} --out {occ} --phrase microphone --review {occ[:-4]}_review.mp4\n')
+            f'python -m lsdub_engine.cli occluders --video {crop} --out {occ} --phrase microphone --review {occ[:-4]}_review.mp4\n')
         info['gpu_todo'] = os.path.join(work, 'gpu_occluders.sh')
     # 5. the measured gate on the delivered pixels
     info.update(gate(out, R, target, vocal, align, t0, fps, work=work))
@@ -210,6 +210,7 @@ def main(argv=None):
     ap.add_argument('--t0', type=float, required=True, help='song time of the take\'s first frame')
     ap.add_argument('--out', required=True)
     ap.add_argument('--work', required=True)
+    ap.add_argument('--preset', help='cast preset (presets.py), e.g. landing')
     ap.add_argument('--char')
     ap.add_argument('--cast-db')
     ap.add_argument('--box')
@@ -225,7 +226,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     info = run(a.take, a.align, a.vocal, a.t0, a.out, a.work, extra, a.char, a.cast_db,
                [float(v) for v in a.box.split(',')] if a.box else None, a.face_target, a.fps_mult, a.snap, a.a2f_csv, a.json,
-               lead=a.lead, word_close=a.word_close, auto=a.auto)
+               lead=a.lead, word_close=a.word_close, auto=a.auto, preset=a.preset)
     return 0 if info['pass'] else 1
 
 

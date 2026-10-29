@@ -7,8 +7,8 @@ import sys
 
 
 def call(main, argv, quiet=False, name=None):
-    """main(argv) in-process. quiet drops its stdout (stderr stays). A non-zero return / SystemExit raises RuntimeError,
-    like the old subprocess check=True."""
+    """main(argv) in-process. quiet drops its stdout (stderr stays). A non-zero return / SystemExit raises RuntimeError
+    (a failed step stops the caller)."""
     argv = [str(a) for a in argv]
     sink = io.StringIO() if quiet else None
     try:

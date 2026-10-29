@@ -250,13 +250,13 @@ def family(name, preset=None):
     return P.get(preset).families.get(name) or re.sub(r'_\d+$', '', name)
 
 
-def decide(scores, thr=0.45, margin=0.03, min_conf=0.5):
+def decide(scores, thr=0.45, margin=0.03, min_conf=0.5, preset=None):
     """-> (character | 'unknown', confidence 0..1, runner-up). The margin is taken against the best identity OUTSIDE
     the winner's family: the three Pleiadians (and the seven greys) are near-identical by design, so a close
     within-family runner-up does not make the face unknown; the family is reported alongside."""
     r = sorted(scores.items(), key=lambda kv: -kv[1])
     best, s1 = r[0]
-    other = [kv for kv in r[1:] if family(kv[0]) != family(best)]
+    other = [kv for kv in r[1:] if family(kv[0], preset) != family(best, preset)]
     s2 = other[0][1] if other else 0.0
     conf = float(np.clip((s1 - thr) / 0.15, 0, 1) * np.clip((s1 - s2) / (2 * margin), 0, 1))
     if s1 < thr or s1 - s2 < margin or conf < min_conf:
@@ -330,7 +330,7 @@ def read_frames(video):
     return F, cap.get(cv2.CAP_PROP_FPS) or 25.0
 
 
-def scan_video(video, db, model=MODEL, stride=2, min_len=4, min_px=40, thr=0.45, margin=0.03, w_col=0.3):
+def scan_video(video, db, model=MODEL, stride=2, min_len=4, min_px=40, thr=0.45, margin=0.03, w_col=0.3, preset=None):
     F, fps = read_frames(video)
     faces, emb = Faces(), Embedder(model)
     per = [[f for f in faces(fr) if f['face_h'] >= min_px * fr.shape[0] / 1080.0] for fr in F]
@@ -346,7 +346,7 @@ def scan_video(video, db, model=MODEL, stride=2, min_len=4, min_px=40, thr=0.45,
         CH = [colour_sig(c) for c in crops]
         CB = [colour_sig(body_crop(F[i], f['det_box'])) for i, f in samp]
         sc = score_track(db, E, CH, CB, w_col=w_col, EF=EF)
-        who, conf, runner = decide(sc, thr, margin)
+        who, conf, runner = decide(sc, thr, margin, preset=preset)
         frames = []
         for i, f in t:
             occ, share = mouth_occluded(F[i], f['lm']) if f['lm'] is not None else (None, None)
@@ -354,7 +354,7 @@ def scan_video(video, db, model=MODEL, stride=2, min_len=4, min_px=40, thr=0.45,
             frames.append({'f': i, 'box': [round(v, 1) for v in f['box']], 'face_px': round(f['face_px1080'], 1),
                            'yaw': round(f['yaw'], 1), 'pitch': round(f['pitch'], 1), 'mouth_occluded': occ,
                            'occ_share': share, 'landmarks': f['lm'] is not None, 'dub_safe': bool(safe)})
-        out.append({'character': who, 'family': family(who) if who != 'unknown' else None, 'confidence': conf, 'runner_up': runner,
+        out.append({'character': who, 'family': family(who, preset) if who != 'unknown' else None, 'confidence': conf, 'runner_up': runner,
                     'scores': {k: round(v, 3) for k, v in sorted(sc.items(), key=lambda kv: -kv[1])},
                     'f0': t[0][0], 'f1': t[-1][0], 'n': len(t),
                     'face_px_med': round(float(np.median([x['face_px'] for x in frames])), 1),
@@ -609,6 +609,7 @@ def main(argv=None):
     r_.add_argument('--sheet')
     r_.add_argument('--tracks-sheet')
     s = sp.add_parser('scan')
+    s.add_argument('--preset', help='cast preset (presets.py): family names for near-identical extras')
     s.add_argument('--db', required=True)
     g = s.add_mutually_exclusive_group(required=True)
     g.add_argument('--video', action='append')
@@ -661,7 +662,7 @@ def main(argv=None):
         return 0
     if a.cmd == 'scan':
         vids = a.video or sorted(glob.glob(os.path.join(a.clips, '[0-9]*.mp4')))
-        kw = {'stride': a.stride, 'thr': a.thr, 'margin': a.margin, 'w_col': a.w_col}
+        kw = {'stride': a.stride, 'thr': a.thr, 'margin': a.margin, 'w_col': a.w_col, 'preset': a.preset}
         jobs = [(v, a.db, a.model, kw) for v in vids]
         if a.jobs > 1 and len(jobs) > 1:
             import multiprocessing as mp
