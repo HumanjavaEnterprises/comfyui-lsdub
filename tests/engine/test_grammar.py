@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """lsdub grammar: tiers, hook matching, script ownership/inheritance, the per-cut verdicts and fixes (synthetic, no models)."""
 from lsdub_engine.core import grammar as G
 from lsdub_engine import presets as P

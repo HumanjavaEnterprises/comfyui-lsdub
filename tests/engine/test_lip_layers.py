@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v4 layering (lip_layers.py + the warp hooks): size cap, mouth scale, lip erase, lip colour lock. Synthetic, CPU only."""
 import numpy as np, cv2
 

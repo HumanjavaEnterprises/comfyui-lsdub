@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """lsdub medium (tier-2): the crop is a similarity, the nose-to-chin mask is feathered and exactly zero outside, the
 composite keeps every outside pixel bit-for-bit, and colour match / regrain behave (synthetic, no models)."""
 import numpy as np

@@ -12,12 +12,12 @@
           (cut, character, frame span, words, dub_safe) = exactly where the singing gets animated
   hook    DRY RUN: print the lsdub visemes / paint / continuity commands for every dub-safe plan span (runs nothing)
 
-  lsdub cast enroll --root characters --char red_nova --char sky_lux --char alcyone --char merope --char maia \\
-                    --out cast_db.npz [--add red_nova=shot_frame.png]
-  lsdub cast scan   --db cast_db.npz --clips stills/seg_v3 --out cast.json --sheet cast_sheet.jpg [--review dir]
-  lsdub cast plan   --cast cast.json --cut storyboard_v3/cut.json --align align_full_best.json \\
-                    --script storyboard_v3/SCRIPT.md --song-offset 12 --out dub_plan.json --md dub_plan.md
-  lsdub cast hook   --plan dub_plan.json --clips stills/seg_v3 --audio lead_dry.wav --work stage/castdub
+  lsdub cast enroll --root characters --char singer_a --char singer_b --char extra_1 \\
+                    --out cast_db.npz [--add singer_a=shot_frame.png]
+  lsdub cast scan   --db cast_db.npz --clips clips --out cast.json --sheet cast_sheet.jpg [--review dir]
+  lsdub cast plan   --cast cast.json --cut cut.json --align align.json \\
+                    --script SCRIPT.md --song-offset 12 --out dub_plan.json --md dub_plan.md
+  lsdub cast hook   --plan dub_plan.json --clips clips --audio lead.wav --work castdub
 
 Models (all commercially permissive): MediaPipe Face Landmarker (Apache-2.0) for faces, landmarks and head pose;
 DINOv2 ViT-B/14 (facebook/dinov2-base, Apache-2.0 code AND weights) as the embedder, run on CPU through OpenCV's DNN
@@ -252,7 +252,7 @@ def family(name, preset=None):
 
 def decide(scores, thr=0.45, margin=0.03, min_conf=0.5, preset=None):
     """-> (character | 'unknown', confidence 0..1, runner-up). The margin is taken against the best identity OUTSIDE
-    the winner's family: the three Pleiadians (and the seven greys) are near-identical by design, so a close
+    the winner's family: near-identical extras (a preset's families) are alike by design, so a close
     within-family runner-up does not make the face unknown; the family is reported alongside."""
     r = sorted(scores.items(), key=lambda kv: -kv[1])
     best, s1 = r[0]
@@ -476,7 +476,7 @@ def sing_re(names):
 
 
 def script_singers(text, preset=None):
-    """Shooting-script beat tables -> {cut index: set of singers} from the 'Story beat' cell ('Red sings', 'Sky leans
+    """Shooting-script beat tables -> {cut index: set of singers} from the 'Story beat' cell ('Alice sings', 'Bob leans
     across the podium singing', 'The duo sing'). Cuts without a sung mention are absent."""
     pre = P.get(preset)
     names = {k.lower(): v for k, v in pre.names.items()}

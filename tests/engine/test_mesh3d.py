@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """--mouth-render mesh3d: the library mouth is a 3D mesh projected by the rigid head pose (CPU, synthetic only).
 
 A frontal library mouth turned by a pure yaw must foreshorten like a real one: on a flat lip line the projected

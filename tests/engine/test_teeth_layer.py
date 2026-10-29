@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v5 rigid teeth (teeth_layer.py + --warp-teeth rigid): teeth are bone. Synthetic, CPU only."""
 import numpy as np, cv2
 from scipy.spatial.transform import Rotation as Rot

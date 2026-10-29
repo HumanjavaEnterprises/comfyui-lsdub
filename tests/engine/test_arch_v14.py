@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v14 teeth cleanup (mouth_layers): Part 1 = supersample + area-correct minification of the arch atlas (--warp-arch-mipmap, a
 trilinear INTER_AREA mip pyramid sampled per column-quad). Part 3 = the enamel material pass (--warp-arch-enamel). Both opt-in;
 the v13 defaults are bit for bit. Synthetic, CPU only."""

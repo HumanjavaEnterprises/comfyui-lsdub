@@ -13,13 +13,13 @@ big enough for the kind of line it is (research: "Sync the singers by shot size"
           held note (the tail of a word held >= --held s), breath, instrumental -> anything (wides belong here)
   plus    a sung word where a NON-singer face is the largest face (> half of its frames that have a face) is flagged,
           and one whose singer's mouth is not visible (cast: no landmarks / mouth_occluded) on most of its frames.
-          Delegates and greys are named by family (pleiadian, grey). A word is judged against ITS singer.
+          Near-identical extras are named by the preset's family names. A word is judged against ITS singer.
 
 Ownership reuses `lsdub cast plan`'s script parser (script_singers); a '(cont.)' cut with no singer of its own inherits
 the last singers of the same song section. The cast scan may be one long video (the delivery cut) or one clip per cut.
 
-  lsdub grammar --cast cast_v3_2.json --cut storyboard_v3/cut.json --align align_full_best.json \\
-                --script storyboard_v3/SCRIPT.md --song-offset 12 --out grammar.json --md grammar.md
+  lsdub grammar --cast cast.json --cut cut.json --align align.json \\
+                --script SCRIPT.md --song-offset 12 --out grammar.json --md grammar.md
 """
 import argparse, json, os, re, sys
 import cv2, numpy as np
@@ -28,7 +28,7 @@ from .cast import script_singers, words_in, family
 from .. import presets as P
 
 CU_PX, MED_PX, WIDE_PX = 240.0, 120.0, 25.0   # the CU line is a parameter (--cu-px); 240 delivered px by default:
-WARP_GATE_1080 = 300.0                        # QA: 06C / 11C / SNG_sky_final at 252-280 native are clean CUs. The
+WARP_GATE_1080 = 300.0                        # QA: test close-ups at 252-280 native are clean CUs. The
                                               # warp's own dub-safe gate stays 300 px on the 1080 basis (cast.SAFE_PX)
 ORDER = {'none': 0, 'wide': 1, 'medium': 2, 'cu': 3}
 NEED = {'hook': 'cu', 'solo': 'cu', 'verse': 'medium', 'held': 'none'}
@@ -56,14 +56,14 @@ def hook_words(words, hooks=()):
 
 
 def _first(lyric):
-    """first sung word of a script Lyric cell ('"Pleiadians don't dance..."' -> 'pleiadians'; '(cont.)' -> '')."""
+    """first sung word of a script Lyric cell ('"Fly me away..."' -> 'fly'; '(cont.)' -> '')."""
     m = re.search(r'["\u201c]\s*\**([A-Za-z\'\u2019]+)', lyric or '')
     return _norm(m.group(1)) if m else ''
 
 
 def script_beats(text, preset=None):
     """-> {cut: {'singers': set, 'solo': bool, 'section': str}} for every beat row. Singers come from cast.script_singers;
-    solo = a bold '**Red sings**' / '**Sky sings**' beat (the exposed, SING-tagged lines)."""
+    solo = a bold '**<Name> sings**' beat (the exposed, SING-tagged lines)."""
     names = P.get(preset).names
     solo_rx = re.compile(r'\*\*\s*(' + '|'.join(re.escape(k) for k in names) + r')\s+sings', re.I) if names else SOLO_RE
     sing = script_singers(text, preset)
@@ -107,8 +107,8 @@ def owners(beats, n_cuts, singers=()):
     return out
 
 
-MIC_SHARE = 0.10   # chrome share of the lip zone above which the mouth counts as behind a mic (v3_2: clear CUs <= 0.06,
-                   # cut 19 Red with the mic at her lips 0.12-0.22)
+MIC_SHARE = 0.10   # chrome share of the lip zone above which the mouth counts as behind a mic (test cut: clear CUs <= 0.06,
+                   # a singer with the mic at the lips 0.12-0.22)
 
 
 def mic_share(img, box):
@@ -173,7 +173,7 @@ def word_class(w, gi, hooks, solo, held_s):
 
 
 def name(ch, preset=None):
-    """Report label: a family (the three near-identical Pleiadian delegates, the greys) is named by family, so one
+    """Report label: a family (near-identical extras, from the preset) is named by family, so one
     character never carries two names across cuts."""
     f = family(ch, preset)
     return f if f != ch else ch

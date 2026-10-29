@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v7 layered mouth compositor (mouth_layers.py, --warp-compose layers). Synthetic, CPU only."""
 import numpy as np, cv2
 from scipy.spatial.transform import Rotation as Rot

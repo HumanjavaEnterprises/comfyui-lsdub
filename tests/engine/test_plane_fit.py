@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """plane-fit: the 3D similarity recovers a head rotation, and the arc metrics see a flat (unrotated) mouth."""
 import numpy as np
 

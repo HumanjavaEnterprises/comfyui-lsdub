@@ -10,7 +10,8 @@ def _nodes(pack):
 
 def test_entrypoint_lists_nodes(pack):
     ids = [n.define_schema().node_id for n in _nodes(pack)]
-    assert {'LSDubProject', 'LSDubLyricsSlot', 'LSDubVocalSplit', 'LSDubLeadVocal'} <= set(ids)
+    assert {'LSDubProject', 'LSDubLyricsSlot', 'LSDubVocalSplit', 'LSDubLeadVocal', 'LSDubSongSlot', 'LSDubAlign',
+            'LSDubVideoSlot', 'LSDubShotSplit', 'LSDubCast', 'LSDubTriage'} <= set(ids)
     assert len(ids) == len(set(ids))
 
 

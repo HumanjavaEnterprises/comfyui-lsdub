@@ -132,14 +132,14 @@ def build_db(cast_db=None, refs=None, faces_kv=(), model=None):
     return C.enroll(imgs, C.Faces(), C.Embedder(model or C.MODEL))
 
 
-def identify(db, emb, img, f):
+def identify(db, emb, img, f, preset=None):
     """one face -> (name | 'unknown', confidence, best score) from a single head + face crop."""
     from ..core import cast as C
     hc = C.head_crop(img, f['det_box'])
     E = emb([hc])
     EF = emb([C.face_crop(img, f['det_box'])])
     sc = C.score_track(db, E, [C.colour_sig(hc)], [C.colour_sig(C.body_crop(img, f['det_box']))], EF=EF)
-    who, conf, _ = C.decide(sc)
+    who, conf, _ = C.decide(sc, preset=preset)
     return who, conf, float(max(sc.values())), sc
 
 
@@ -192,9 +192,11 @@ def mouth_clear(img, f):
 
 
 # ---------------------------------------------------------------------------------------------------- triage
-def triage(video, vocal=None, offset=0.0, db=None, targets=(), samples=6, model=None):
+def triage(video, vocal=None, offset=0.0, db=None, targets=(), samples=6, model=None, detected=None, preset=None):
+    """detected: a detect_shots() result to reuse (shots, fps, (W, H), (dh, dp)); preset: cast family names."""
     from ..core import cast as C
-    shots, fps, (W, H), (dh, dp) = detect_shots(video)
+    shots, fps, (W, H), (dh, dp) = detected if detected is not None else detect_shots(video)
+    shots = [dict(s) for s in shots]
     n = shots[-1]['f1'] + 1 if shots else 0
     faces = C.Faces()
     emb = C.Embedder(model or C.MODEL) if db is not None else None
@@ -214,7 +216,7 @@ def triage(video, vocal=None, offset=0.0, db=None, targets=(), samples=6, model=
             tgt = None
             others = []
             for f in fs:
-                who, conf, best, _ = identify(db, emb, img, f) if db is not None else ('face', 1.0, 1.0, None)
+                who, conf, best, _ = identify(db, emb, img, f, preset) if db is not None else ('face', 1.0, 1.0, None)
                 f['who'] = who
                 f['conf'] = conf
                 if (not want or who in want) and (tgt is None or f['face_h'] > tgt['face_h']): tgt = f
@@ -233,7 +235,7 @@ def triage(video, vocal=None, offset=0.0, db=None, targets=(), samples=6, model=
         s['present'] = round(len(T) / len(per), 3) if per else 0.0
         if T:
             tg = [p['target'] for p in T]
-            s.update(target=max(set(f['who'] for f in tg), key=[f['who'] for f in tg].count),
+            s.update(target=max(sorted(set(f['who'] for f in tg)), key=[f['who'] for f in tg].count),   # a tie -> the first name, every run
                      px1080=round(float(np.median([f['face_px1080'] for f in tg])), 1), px=round(float(np.median([f['face_h'] for f in tg])), 1),
                      yaw=round(float(np.median([f['yaw'] for f in tg])), 1),
                      mouth_visible=round(float(np.mean([p['clear'] for p in T])), 3),
@@ -456,6 +458,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog='lsdub qa')
     sp = ap.add_subparsers(dest='cmd', required=True)
     t = sp.add_parser('triage', help='which shots are fit to redub')
+    t.add_argument('--preset', help='cast preset (presets.py): family names for near-identical extras')
     t.add_argument('--video', required=True)
     t.add_argument('--vocal', help='the vocal / dialogue stem: voice-activity per shot')
     t.add_argument('--offset', type=float, default=0.0, help='video time = audio time + offset (s)')
@@ -479,7 +482,7 @@ def main(argv=None):
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     if a.cmd == 'triage':
         db = build_db(a.cast_db, a.refs, a.face, a.model)
-        meta, shots = triage(a.video, a.vocal, a.offset, db, a.target, a.samples, a.model)
+        meta, shots = triage(a.video, a.vocal, a.offset, db, a.target, a.samples, a.model, preset=a.preset)
         if a.truth_cuts:
             tc = json.load(open(a.truth_cuts))
             tr = [int(round(c['start'] * meta['fps'])) for c in tc['cut']][1:]

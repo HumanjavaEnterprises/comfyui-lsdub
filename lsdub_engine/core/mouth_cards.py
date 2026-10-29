@@ -15,7 +15,7 @@ detailed card atlas of every mouth shape. The overlay can then draw the face's o
 
   python -m lsdub_engine.core.mouth_cards <kit-dir> [--tile 512] [--order sil,PP,...]
 """
-import os, json, sys, argparse
+import os, json, argparse
 import numpy as np, cv2
 
 SHAPES = ['sil', 'PP', 'FF', 'TH', 'DD', 'SS', 'CH', 'RR', 'aa', 'E', 'ih', 'oh', 'ou']
@@ -67,7 +67,7 @@ def card(lm, tile, scale, centre, label=None, ss=3):
 def build(kit, tile=512, order=None, ss=3):
     order = order or SHAPES
     lms = {v: np.load(os.path.join(kit, f'{v}_lm.npy')) for v in order if os.path.exists(os.path.join(kit, f'{v}_lm.npy'))}
-    if not lms: sys.exit(f'no <viseme>_lm.npy in {kit}')
+    if not lms: raise FileNotFoundError(f'no <viseme>_lm.npy in {kit}')
     # ONE global scale + mouth centre, so the cards are comparable (you SEE aa/oh open, sil/PP closed)
     allpts = np.concatenate([np.concatenate(_lips(l)) for l in lms.values()])
     cen = allpts.mean(0)

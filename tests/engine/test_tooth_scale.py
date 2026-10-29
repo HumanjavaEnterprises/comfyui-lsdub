@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v13 tooth-scale ruler (audits/tooth_scale.py): the visible tooth span, the both-spans filter and ratio, the upper teeth
 count, the plate's interdental lines and central widths, the acceptance lines, the CLI. Synthetic, CPU only."""
 import json, os, sys

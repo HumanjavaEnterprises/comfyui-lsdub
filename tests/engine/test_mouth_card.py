@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v12 the mouth card as a toggle: `lsdub paint --annotate` / mouth_paint.paint(show_mouth_card=True) writes the annotated
 video + the lyric check NEXT TO the clean output and never changes it (md5 with and without the toggle, through the CLI's
 watermark too); the card draws the weak mark and the heard: line from the track's word facts (never on a skipped

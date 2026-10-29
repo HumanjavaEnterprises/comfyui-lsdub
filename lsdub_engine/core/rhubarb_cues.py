@@ -12,7 +12,7 @@ Output JSON (song time): {t0, t1, cues: [{start, end, shape, vis}]}. Rhubarb's 9
 set (lsdub visemes) as a best representative; the reverse map (VIS2RH) is what the agreement uses, since
 Rhubarb's set is the coarser one. viseme_track.py --rhubarb uses this file as a closure cross-check or a full fallback.
 """
-import argparse, json, os, subprocess, tempfile
+import argparse, json, os, tempfile
 from ..io import ff
 import numpy as np
 
@@ -33,7 +33,7 @@ def run(a):
                         '-ar', '16000', f'{d}/a.wav'], check=True)
         txt = open(a.dialog).read() if os.path.exists(a.dialog) else a.dialog
         open(f'{d}/dialog.txt', 'w').write(' '.join(txt.split()))       # one line: Rhubarb glues words across newlines
-        subprocess.run([a.rhubarb, '-q', '-f', 'json', '--extendedShapes', 'GHX', '-d', f'{d}/dialog.txt', '-o', f'{d}/r.json',
+        ff.tool([a.rhubarb, '-q', '-f', 'json', '--extendedShapes', 'GHX', '-d', f'{d}/dialog.txt', '-o', f'{d}/r.json',
                         f'{d}/a.wav'], check=True)
         r = json.load(open(f'{d}/r.json'))
     cues = [{'start': round(c['start'] + a.t0, 3), 'end': round(c['end'] + a.t0, 3), 'shape': c['value'], 'vis': RH2VIS[c['value']]}

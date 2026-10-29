@@ -84,11 +84,11 @@ def _hf(img):
 
 BLUE_D, BLUE_SOFT, BLUE_BG = 12, 6, 8
 # A ghost pixel: clearly blue (B - R > 12), OR faintly blue AND blue over green (B - R > 6 and B - G > 8: a true
-# blue-grey, BGR ~155,143,142 on sky shot B). Cool-lit teeth / a chrome mic are neutral or cyan (B - G 1-7) and only
-# count when clearly blue. (reco14: B - R > 6 alone flagged 11C's teeth and reverted good warp frames; B - R > 12 alone
+# blue-grey, BGR ~155,143,142 on a test shot). Cool-lit teeth / a chrome mic are neutral or cyan (B - G 1-7) and only
+# count when clearly blue. (reco14: B - R > 6 alone flagged a test cut's teeth and reverted good warp frames; B - R > 12 alone
 # lost shot B f91, whose ghost sits entirely at B - R 7-10.)
 DESYNC_FRAC = 0.25   # |take gap - planned egap| above this x the plan's p5-p95 range: the take is off the plan there
-                     # and is no re-make candidate (calibrated on 11C only; on sky shot B it holds on 68% of frames)
+                     # and is no re-make candidate (calibrated on one test cut; on a test shot it holds on 68% of frames)
 BLUE_FLOOR = 12   # more ghost px than this in the paint region = a ghosted frame (check and the fix_alt fallback)
 
 
@@ -103,7 +103,7 @@ def ghost_mask(t, r, m):
 
 
 def blue_px(t, r, m):
-    """ghost px count: a lip / teeth layer ghost (sky B f79-81, f91-94) or a warped-in prop (a mic over the lips).
+    """ghost px count: a lip / teeth layer ghost (seen on a test shot) or a warped-in prop (a mic over the lips).
     Skin, lips and the cavity have R >= B. Teeth may sit a few levels blue under cool light, so a faintly blue px
     (B - R 7-12) counts only when it is also clearly bluer than green (blue-grey); see ghost_mask."""
     return int(ghost_mask(t, r, m).sum())
@@ -284,7 +284,7 @@ def lipzone_ghost(t, r, m, frac=LIP_ZONE):
 def squeeze_with_ghost(sq, T, R, M, floor=BLUE_FLOOR):
     """A squeeze run (take open, plan shut) is only a reason to put the take back when the render SHOWS the squeeze
     ghost somewhere in that run: ghost px in the lip zone over `floor`. Without it, the shut mouth is the sync the
-    audio asks for (v3_4 cuts 19 / 29: the bare squeeze rule reverted exactly the sung closures, paint 0.96 -> cont
+    audio asks for (two test cuts: the bare squeeze rule reverted exactly the sung closures, paint 0.96 -> cont
     0.09). -> (kept squeeze mask, per-frame lip-zone ghost px)."""
     n = len(sq)
     lz = np.array([lipzone_ghost(T[i], R[i], M[i] > 0) if sq[i] else 0 for i in range(n)])
@@ -304,7 +304,7 @@ def squeeze_with_ghost(sq, T, R, M, floor=BLUE_FLOOR):
 def squeeze_frames(warp_json, n, open_frac=0.4, keep=0.35):
     """from the paint's warp json: frames where the take's mouth is open (gap > open_frac x its range) and the plan shuts
     it to < keep x that. An open mouth (teeth showing) squeezed shut by the warp drags the teeth into the lip line: a
-    grey ghost lip (sky B f78-95). Those frames are better with the take's own mouth."""
+    grey ghost lip (seen on a test shot). Those frames are better with the take's own mouth."""
     J = json.load(open(warp_json))
     W = J['frames'][:n]
     hi = J['range']['g_hi']
@@ -337,7 +337,7 @@ def fix_alt(T, R, A, flag, M, ease=2, feather=5, take_frames=None, blue_floor=BL
                 if 0 <= j < n: w[j] = max(w[j], 1 - d / (ease + 1))
     for t in list(src):                                             # kept frames stay ours, and so do the unflagged frames
         for j in range(max(0, t - ease), min(n, t + ease + 1)):     # beside them: easing a different mouth in between two
-            if not flag[j]: w[j] = 0.0                              # of our own frames only ghosts (11C f14)
+            if not flag[j]: w[j] = 0.0                              # of our own frames only ghosts (seen on a test cut)
     for t in np.where(w > 0)[0]:
         ok = alt_ok(t)
         S = A[t] if ok else T[t]

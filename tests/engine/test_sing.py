@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """lsdub sing + snap: frame picking keeps closures and peaks, the mic check, and the snap metrics (synthetic, no models)."""
 import numpy as np
 

@@ -25,7 +25,7 @@ Component values:
   sync      clip((corr_pm1 - 0.2) / 0.6)            corr 0.2 -> 0, 0.8 -> 1 (corr_pm1 = best within +-1 frame)
   silence   1 - clip((open_in_silence - 0.15) / 0.4)
   snap      mean of: closure_hit, 1 - clip((rise_ms - 40) / 160)   (whichever are measurable)
-  travel    clip((p95 - p5 of the opening - 0.04) / 0.10): how far the mouth moves (catches a held gape: v3_4 cut 21)
+  travel    clip((p95 - p5 of the opening - 0.04) / 0.10): how far the mouth moves (catches a held gape)
   tier      the singer's tier vs the line's need: met 1, one tier short 0.6, two 0.3, none 0.1
   mouth     the singer's mouth-visible share (cast landmarks, no occlusion, no mic at the lips)
   canon     clip((similarity - 0.45) / 0.25) of the singer's face, or else the largest face >= 80 px; an 'unknown'
@@ -36,7 +36,7 @@ CLASSES: PERF (sung, singer medium or closer, mouth visible >= 50%): scored, a m
   flicker   1 - clip(pops / 3)
   sharpness clip(face Laplacian variance / the film's median)
 
-  lsdub scorecard --video film.mp4 --cuts cut.json --vocal lead_dry.wav --offset 12 --align align.json
+  lsdub scorecard --video film.mp4 --cuts cut.json --vocal lead.wav --offset 12 --align align.json
                   [--script SCRIPT.md] [--cast cast.json] [--compare old.mp4 --compare-cast old_cast.json]
                   --out dir/name
 """

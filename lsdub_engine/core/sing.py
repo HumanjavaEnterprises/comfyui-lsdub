@@ -19,8 +19,8 @@ enough ... not quite snappy enough"; the per-shot face / lip deep dive is a stan
               frame bit-exact; then the MEASURED gate: rendered-mouth corr vs the audio opening >= 0.5 and
               open-in-silence <= 0.35, plus snap numbers (rise_ms, closure_hit) -> --json
 
-  lsdub sing --take take.mp4 --align align.json --vocal lead_dry.wav --t0 64.3 --out sung.mp4 --work dir
-             [--char red_nova --cast-db cast_db.npz | --box x0,y0,x1,y1] [--face-target 512] [--fps-mult 2]
+  lsdub sing --take take.mp4 --align align.json --vocal lead.wav --t0 64.3 --out sung.mp4 --work dir
+             [--char singer_a --cast-db cast_db.npz | --box x0,y0,x1,y1] [--face-target 512] [--fps-mult 2]
              [--no-snap] [--a2f-csv a2f.csv] [--json gate.json] -- <lsdub paint flags (the face's registry flags, --lib)>
 """
 import argparse, csv, json, os, sys

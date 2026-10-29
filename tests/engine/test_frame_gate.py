@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v9 per-frame gate, the CHECKER (lsdub/audits/frame_gate.py): synthetic sequences, CPU only, no MediaPipe (the
 landmarks are given). A smooth sequence passes; an injected one-frame jump, a warp fold, a ghost lip, a lip colour
 flicker, a held input track and a sloshing lip texture are each flagged with their own cause."""

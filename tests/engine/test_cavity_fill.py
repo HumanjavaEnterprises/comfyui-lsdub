@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v17 --warp-cavity fill: tongue + lower row painted in the opening; nothing on a near-closed mouth."""
 import types
 import numpy as np

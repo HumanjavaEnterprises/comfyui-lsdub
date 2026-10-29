@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """Smoke test for mouth_paint_cutout logic (no cv2/mediapipe needed).
 
 Injects a cv2 shim before importing mouth_paint_cutout, then tests the core

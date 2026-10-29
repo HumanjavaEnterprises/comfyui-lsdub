@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """pin: the painted lower face must move with the real skin, never swim (CPU, synthetic only)."""
 import numpy as np
 import cv2

@@ -10,7 +10,7 @@ One video to judge timing by eye AND by numbers, per frame:
   card     the mouth-shape card (lsdub annotate) in a side column: the word, the viseme, its openness, the next 1 s
   numbers  corr(MEASURED rendered opening, audio target) and the best lag (primary); plan corr (warp egap) secondary, printed and written on the first frame's panel
 
-  lsdub sync-qa --video film.mp4 --cuts cut.json --vocal lead_dry.wav --offset 12 [--align align.json] [--cast cast.json]
+  lsdub sync-qa --video film.mp4 --cuts cut.json --vocal lead.wav --offset 12 [--align align.json] [--cast cast.json]
                 [--json r.json] [--md r.md]      DELIVERED-FILM mode: every sung cut's singer mouth vs the vocal (measured)
   lsdub sync-qa --take take.mp4 --render out.mp4 --warp-json out_warp.json --dyn dyn.csv --t0 6.17 --audio out_av.mp4
                 [--track track.json] [--out qa.mp4] [--half] [--roi y0,y1,x0,x1] [--fps 36]

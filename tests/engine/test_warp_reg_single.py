@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v12 --warp-reg single (mouth_layers.LayerCompositor.plan_single): ONE reference for the mouth's interior -- the upper arch on
 the skull pose only, the lower arch + tongue on the skull pose + one low-passed hinge angle, the tongue a slow function of
 it, no pins, no per-frame exposure kick, gum guards; the default (v11) placement untouched. Synthetic, CPU only."""

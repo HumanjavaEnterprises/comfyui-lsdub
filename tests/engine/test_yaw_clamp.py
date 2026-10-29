@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v12 --warp-yaw-clamp (mouth_warp.YawClamp / face_region) on a synthetic turned face, CPU only: the take's face ends at a
 hair line just past its far mouth corner (the face mesh's own outline ends inside the cheek, as on mv30 NC); a wider planned
 mouth whose far corner crosses onto the hair is clamped back inside, and a plan that stays inside is returned untouched."""

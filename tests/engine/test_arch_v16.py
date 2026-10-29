@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v16 / v16.1 teeth (mouth_layers): the lower arch as the dim, half-hidden, soft-bottomed sibling of the uppers, not their
 mirror (--warp-lower-real). Opt-in; the v15 lowers are bit for bit when off. v16.1: the lower-teeth atlas is built v15-BRIGHT
 and the shadow is applied PER FRAME, gated by the take's own lower display -- so a bright smile row is not dragged down by a

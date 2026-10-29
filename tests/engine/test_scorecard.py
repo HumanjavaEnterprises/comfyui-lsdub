@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """lsdub scorecard: motion / pops, the components, the weighted score + its reason, compare deltas, outputs (synthetic)."""
 import json
 import numpy as np
@@ -13,7 +15,7 @@ def test_motion_and_pops():
 
 def test_score_weights_and_reason():
     row = {'sung': True, 'corr': 0.9, 'corr_pm1': 0.9, 'open_in_silence': 0.1, 'rise_ms': 40, 'closure_hit': 1.0,
-           'need': 'cu', 'tier': 'cu', 'mouth_visible': 1.0, 'canon_char': 'red_nova', 'canon_sim': 0.8, 'canon_px': 300,
+           'need': 'cu', 'tier': 'cu', 'mouth_visible': 1.0, 'canon_char': 'singer_a', 'canon_sim': 0.8, 'canon_px': 300,
            'motion': 2.0, 'pops': 0, 'sharpness': 100.0}
     c = SC.components(row, 100.0)
     s, worst = SC.shot_score(c, True)
@@ -76,12 +78,12 @@ def test_compare_matches_by_time_overlap(capsys):
 def test_canon_uses_the_singer_or_a_big_face():
     cast = {'results': [{'tracks': [
         {'character': 'unknown', 'scores': {}, 'frames': [{'f': 1, 'face_px': 60, 'box': [0, 0, 1, 1]}]},          # a small extra, no scores
-        {'character': 'sky_lux', 'scores': {'sky_lux': 0.8}, 'frames': [{'f': 1, 'face_px': 40, 'box': [0, 0, 1, 1]}]}]}]}
-    best, count, ns = SC.canon(cast, 0, 3, {'sky_lux'})
-    assert best[0] == 'sky_lux' and best[1] == 0.8 and count >= 0
+        {'character': 'singer_b', 'scores': {'singer_b': 0.8}, 'frames': [{'f': 1, 'face_px': 40, 'box': [0, 0, 1, 1]}]}]}]}
+    best, count, ns = SC.canon(cast, 0, 3, {'singer_b'})
+    assert best[0] == 'singer_b' and best[1] == 0.8 and count >= 0
     best, _, _ = SC.canon(cast, 0, 3, set())
     assert best is None                                                  # nobody >= 80 px and no singer: no canon check
-    row = {'sung': False, 'canon_char': 'red_nova', 'canon_sim': float('nan'), 'canon_px': 200, 'motion': 1.0, 'pops': 0}
+    row = {'sung': False, 'canon_char': 'singer_a', 'canon_sim': float('nan'), 'canon_px': 200, 'motion': 1.0, 'pops': 0}
     assert 'canon' not in SC.components(row, None)                     # a NaN similarity is skipped, not a crash
 
 

@@ -25,7 +25,8 @@ class Preset:
 
 NEUTRAL = Preset()
 
-# the Sky / Red landing cut (the demo project): two singers, three hook lines, Pleiadian delegates and greys as extras
+# landing: the Pleiadians Don't Dance demo (original characters and song) -- two singers (Red, Sky), three hook
+# lines, Pleiadian delegates and greys as extras, and Red's mouth-kit settings. The example workflows use it.
 LANDING = Preset(
     singers=('red_nova', 'sky_lux'),
     hooks=("pleiadians don't dance", "don't they try", "why don't they try"),

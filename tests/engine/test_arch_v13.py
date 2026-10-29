@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v13 teeth scale (mouth_layers ANTHRO / anthro_map / synth_slots / the corridor): --warp-arch-layout anthro puts the plate's
 crowns on the anthropometric slots (per the 63 mm IOD = the face's inter-pupil distance); --warp-arch-corridor K fades the
 plates into the cavity at the corners of the planned opening; both opt-in, the defaults untouched. Synthetic, CPU only."""

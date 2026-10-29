@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """--lip-ref: lock every painted mouth's lip colour (Lab a/b) to one reference swatch; lightness follows the take."""
 import numpy as np
 import cv2

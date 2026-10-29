@@ -59,6 +59,11 @@ class LSDubProjectNode(io.ComfyNode):
         return io.NodeOutput(cls.build(name, root, mode, fps, song_offset, preset, seed, force_shots).ensure())
 
 
+def norm_lyrics(text):
+    """one form for the key and the file: LF line ends, stripped, one trailing newline."""
+    return (text or '').replace('\r\n', '\n').strip() + '\n'
+
+
 class LSDubLyricsSlot(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -76,7 +81,7 @@ class LSDubLyricsSlot(io.ComfyNode):
 
     @classmethod
     def fingerprint_inputs(cls, project, text):
-        return stage_key('LSDubLyricsSlot', {'text': text}, [project.cache_key()])
+        return stage_key('LSDubLyricsSlot', {'text': norm_lyrics(text)}, [project.cache_key()])
 
     @classmethod
     def validate_inputs(cls, text=None, **kw):
@@ -85,7 +90,7 @@ class LSDubLyricsSlot(io.ComfyNode):
 
     @classmethod
     def execute(cls, project, text):
-        text = text.replace('\r\n', '\n').strip() + '\n'
+        text = norm_lyrics(text)
         key = stage_key('LSDubLyricsSlot', {'text': text}, [project.cache_key()])
         st = project.stage('slots/lyrics', key)
         path = st.path('lyrics.txt')

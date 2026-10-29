@@ -34,6 +34,7 @@ class Source(_Record):
     n_frames: int = 0
     wh: tuple = (0, 0)
     still: bool = False
+    name: str = ''
 
 
 @dataclass
@@ -70,6 +71,7 @@ class Shots(_Record):
     shots: list = field(default_factory=list)
     hash: str = ''
     sheet: str = ''
+    features: str = ''
 
 
 @dataclass

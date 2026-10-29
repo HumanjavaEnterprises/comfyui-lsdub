@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """lsdub qa: the shot detector (cut / fade / flash), the FIT verdict order, VAD, and the verify band (synthetic)."""
 import subprocess
 import numpy as np

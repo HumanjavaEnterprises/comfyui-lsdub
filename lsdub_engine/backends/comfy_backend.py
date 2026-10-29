@@ -123,12 +123,12 @@ def make_client(backend=None):
         base = os.environ.get("COMFY_BASE_URL", CLOUD_URL)
         label = f"cloud ({base})"
 
-        os.environ["COMFY_BASE_URL"] = base
-
         def run(path, out_node_id, out_dir=".", upload_paths=None, **subs):
             from comfy_sdk import Comfy
 
-            c = Comfy(api_key=key)
+            import inspect
+            kw = {'base_url': base} if 'base_url' in inspect.signature(Comfy).parameters else {}
+            c = Comfy(api_key=key, **kw)   # never writes os.environ: this runs inside the ComfyUI process
             try:
                 wf_path = _resolve_wf_path(path)
                 with open(wf_path) as f:

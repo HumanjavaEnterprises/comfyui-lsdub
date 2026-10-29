@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v10a `lsdub annotate` (lsdub/audits/viseme_overlay.py), CPU only, no MediaPipe (--no-mediapipe; the face boxes come
 from a keep-out JSON): every viseme class has its own glyph; the card shows the word between its neighbours, a skipped
 vocalisation struck through; the FACE RULE: lower-right, else lower-left, else a band below the picture for that clip

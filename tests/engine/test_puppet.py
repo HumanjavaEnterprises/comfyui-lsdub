@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """Pytest: puppet-mode jaw-hinge timing. Skips cleanly if cv2 isn't installed in the test env."""
 import os, sys
 import numpy as np

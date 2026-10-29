@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """lsdub cast: tracking, identity decision, colour vote, script parsing, the dub plan and the dry-run hook (synthetic,
 no models)."""
 import numpy as np
@@ -26,13 +28,13 @@ def test_runs_bridge_single_gaps():
 
 
 def test_decide_margin_unknown_and_family():
-    assert C.decide({'red_nova': 0.9, 'sky_lux': 0.6})[0] == 'red_nova'
-    assert C.decide({'red_nova': 0.40, 'sky_lux': 0.30})[0] == 'unknown'           # under the threshold
-    assert C.decide({'red_nova': 0.66, 'sky_lux': 0.65})[0] == 'unknown'           # no margin
+    assert C.decide({'singer_a': 0.9, 'singer_b': 0.6})[0] == 'singer_a'
+    assert C.decide({'singer_a': 0.40, 'singer_b': 0.30})[0] == 'unknown'           # under the threshold
+    assert C.decide({'singer_a': 0.66, 'singer_b': 0.65})[0] == 'unknown'           # no margin
     # near-identical Pleiadians: the margin is taken against the best OTHER family
     who, conf, runner = C.decide({'alcyone': 0.77, 'maia': 0.76, 'merope': 0.75, 'grey_1': 0.58}, preset='landing')
     assert who == 'alcyone' and runner == 'grey_1' and conf > 0.5
-    assert C.family('maia', 'landing') == 'pleiadian' and C.family('grey_5', 'landing') == 'grey' and C.family('red_nova', 'landing') == 'red_nova'
+    assert C.family('maia', 'landing') == 'pleiadian' and C.family('grey_5', 'landing') == 'grey' and C.family('singer_a') == 'singer_a'
 
 
 def test_colour_signature_separates_palettes():
@@ -50,11 +52,11 @@ def test_score_track_prefers_the_matching_identity():
     e_r, e_s = rng.randn(1536), rng.randn(1536)
     n = lambda v: (v / np.linalg.norm(v)).astype(np.float32)
     sig = C.colour_sig(np.full((8, 8, 3), (30, 60, 200), np.uint8))
-    db = {'name': np.array(['red_nova', 'sky_lux']), 'emb': np.stack([n(e_r), n(e_s)]), 'emb_f': np.stack([n(e_r), n(e_s)]),
+    db = {'name': np.array(['singer_a', 'singer_b']), 'emb': np.stack([n(e_r), n(e_s)]), 'emb_f': np.stack([n(e_r), n(e_s)]),
           'col_h': np.stack([sig, sig]), 'col_b': np.stack([sig, sig])}
     E = np.stack([n(e_r + 0.3 * rng.randn(1536))])
     sc = C.score_track(db, E, [sig], [sig], EF=E)
-    assert sc['red_nova'] > sc['sky_lux'] + 0.2
+    assert sc['singer_a'] > sc['singer_b'] + 0.2
 
 
 def test_mouth_occluded_flags_a_grey_bar_over_the_lips():

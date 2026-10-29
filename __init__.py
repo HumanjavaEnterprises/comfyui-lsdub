@@ -8,13 +8,13 @@ if __package__:   # loaded as a package (ComfyUI, tests/conftest.py); pytest's b
     import folder_paths
     from comfy_api.v0_0_2 import ComfyExtension, io
 
-    from . import nodes_project, nodes_vocal
+    from . import nodes_audio, nodes_project, nodes_video, nodes_vocal
 
     folder_paths.add_model_folder_path('lsdub', os.path.join(folder_paths.models_dir, 'lsdub'))
 
     class LSDubExtension(ComfyExtension):
         async def get_node_list(self) -> list[type[io.ComfyNode]]:
-            return [*nodes_project.NODES, *nodes_vocal.NODES]
+            return [*nodes_project.NODES, *nodes_audio.NODES, *nodes_vocal.NODES, *nodes_video.NODES]
 
     async def comfy_entrypoint() -> LSDubExtension:
         return LSDubExtension()

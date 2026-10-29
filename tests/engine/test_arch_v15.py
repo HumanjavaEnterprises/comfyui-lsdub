@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v15 teeth (mouth_layers): Feature 1 = pink gingiva above / below the crowns with a scalloped gum line (--warp-arch-gums),
 Feature 2 = the tongue covering the lower crowns at mid-open (--warp-tongue-cover). Both opt-in; the v14 defaults are bit for
 bit. Synthetic, CPU only, our own classical graphics."""

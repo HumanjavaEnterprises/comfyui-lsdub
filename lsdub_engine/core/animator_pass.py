@@ -22,7 +22,7 @@ Rules applied (numbers from the doc):
  10  global gain G (close-up 0.6) on everything but closers; open cap (close-up 0.75)
 Rule 9 (chin/cheek coupling) is applied by the renderers (mouth_paint clean plate, hybrid_nudge chin follow).
 
-  lsdub animate --align align.json --audio lead_dry.wav --t0 8.04 --frames 200 \
+  lsdub animate --align align.json --audio lead.wav --t0 8.04 --frames 200 \
       --out vis_anim.json [--shot close|medium|wide] [--json-report r.json]
 """
 import argparse, json

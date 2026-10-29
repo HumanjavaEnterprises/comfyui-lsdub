@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """lsdub sync-qa: the lag sign of tracking() and the plan-vs-pixels verdict (synthetic, no models)."""
 import numpy as np
 

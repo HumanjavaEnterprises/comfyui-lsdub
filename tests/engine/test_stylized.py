@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """Tests for the classical-animation stylized mouth rules (docs/MOUTH-ANIMATION-INSIGHTS.md)."""
 from lsdub_engine import stylized as st
 

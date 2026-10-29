@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v12 pixel registration ruler (lsdub/audits/layer_reg.py --pix): template-tracked upper / lower incisal patches and the
 nose-base reference in the skull-stabilised crop, velocities in IOD / frame; jitter, the windowed wander (W = 4 / 8),
 the lower arch split along / across the hinge arc. Synthetic, CPU only."""

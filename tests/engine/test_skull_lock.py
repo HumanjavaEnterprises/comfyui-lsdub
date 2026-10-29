@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """Skull lock + face constraints: the mouth stays on the skull (one midline, mouth line parallel to the pupils, lips in
 order), measured against the character's own take, never against a canon target."""
 import numpy as np

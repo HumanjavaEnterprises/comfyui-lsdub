@@ -14,16 +14,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BANNED = re.compile('|'.join(['latent' + 'sync', 'wav2' + 'lip', 'sad' + 'talker', 'muse' + 'talk', 'insight' + 'face',
                               'arc' + 'face', 'ante' + 'lope', 'code' + 'former', 'gfp' + 'gan', '/ho' + 'me/', 'gpu' + 'host']), re.I)
 SKIP_DIRS = {'.git', '__pycache__', '.ruff_cache', '.pytest_cache'}
-# subprocess outside io/ff.py: opt-in CLI tools that are not on a node path (an external aligner / lip-cue tool, a
-# second interpreter for speech-to-text); each is named here so a new one fails the test
-SUBPROCESS_OK = {os.path.join('lsdub_engine', 'io', 'ff.py'), os.path.join('lsdub_engine', 'core', 'lyric_align.py'),
-                 os.path.join('lsdub_engine', 'core', 'rhubarb_cues.py')}
+# every external process goes through io/ff.py (ffmpeg/ffprobe, the opt-in aligners, a validated interpreter)
+SUBPROCESS_OK = {os.path.join('lsdub_engine', 'io', 'ff.py')}
 
 
 def _files(exts=('.py', '.md', '.json', '.txt', '.toml', '.cff', '.yaml', '.yml', '')):
     for d, ds, fs in os.walk(ROOT):
         ds[:] = [x for x in ds if x not in SKIP_DIRS]
         for f in fs:
+            if f in SKIP_DIRS: continue                                    # a worktree's .git is a FILE
             if os.path.splitext(f)[1] in exts: yield os.path.join(d, f)
 
 

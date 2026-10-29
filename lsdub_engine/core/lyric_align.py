@@ -20,7 +20,7 @@ Three stages:
       [--textgrid out.TextGrid] [--extra-dict "zyxx=Z IH K S"]
 All times in the output are SOURCE-AUDIO (song/stem) time.
 """
-import argparse, difflib, json, os, re, subprocess, sys, tempfile
+import argparse, difflib, json, os, re, sys, tempfile
 from ..io import ff
 import numpy as np
 
@@ -197,7 +197,8 @@ def mfa_batch(pcm, t0, segs, extra, mfa_dir=MFA_DIR, beam=100, retry_beam=400, j
                 f.setframerate(16000)
                 f.writeframes(x.tobytes())
             open(f'{d}/c/s/seg{k:02d}.lab', 'w').write(' '.join(w['w'] for w in ws))
-        r = subprocess.run(['mfa', 'align', f'{d}/c', f'{d}/dict.txt', 'english_us_arpa', f'{d}/o', '--clean', '--single_speaker',
+        mfa = f'{mfa_dir}/env/bin/mfa' if os.path.exists(f'{mfa_dir}/env/bin/mfa') else 'mfa'
+        r = ff.tool([mfa, 'align', f'{d}/c', f'{d}/dict.txt', 'english_us_arpa', f'{d}/o', '--clean', '--single_speaker',
                             '--beam', str(beam), '--retry_beam', str(retry_beam), '-j', str(jobs), '--output_format', 'json'],
                            env=env, capture_output=True, text=True)
         if r.returncode:
@@ -381,7 +382,7 @@ def main(argv=None):
     if not os.path.exists(sj) and not a.whisper_python:
         json.dump(stt(a.audio, a.t0, a.t1, a.whisper_model, a.prompt), open(sj, 'w'), indent=1)
     if not os.path.exists(sj):
-        subprocess.run([a.whisper_python, '-m', 'lsdub_engine.core.lyric_align', '--stt-only', '--audio', a.audio, '--lyrics', a.lyrics,
+        ff.python(a.whisper_python, 'lsdub_engine.core.lyric_align', ['--stt-only', '--audio', a.audio, '--lyrics', a.lyrics,
                         '--t0', str(a.t0), '--t1', str(a.t1), '--out', a.out, '--stt-json', sj, '--whisper-model', a.whisper_model,
                         '--prompt', a.prompt], check=True)
     whisper = json.load(open(sj))

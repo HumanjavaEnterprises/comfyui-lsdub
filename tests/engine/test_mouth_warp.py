@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """--mode warp (warp, don't paste): synthetic, CPU only. The dense warp must carry the take's own lip pixels to the
 target landmarks (within 1 px) and leave every pixel beyond the falloff ring bit-identical."""
 import numpy as np, cv2

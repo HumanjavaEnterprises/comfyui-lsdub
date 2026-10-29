@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v8 polish of the layered mouth (mouth_layers.py): the chin pin split + projected onto the jaw hinge's arc, the
 modelled tongue's near-closed constraint, modelled side teeth, multi-frame harvest, the lip-aware ghost check, flags.
 Synthetic, CPU only."""

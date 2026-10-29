@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """--anchors strict: the painted mouth is placed by the SKULL, never by the take's own mouth (CPU, synthetic only).
 
 A rigid head moves (yaw/roll/translation/scale) while the take's mouth opens and closes; with ANCH/TPS the cheeks, alar
