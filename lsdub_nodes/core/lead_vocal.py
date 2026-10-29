@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """lead_vocal.py — keep the LEAD singer, drop the backing lines (melody-guided harmonic mask).
 
 The vocal stem from vocal_split still holds every voice: lead, harmonies, ad-libs, doubles. The mouth must move

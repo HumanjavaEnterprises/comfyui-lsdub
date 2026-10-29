@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use LSDub or code from it, please cite it and link the repository."
+title: "LSDub for ComfyUI"
+authors:
+  - name: "Humanjava Enterprises"
+  - family-names: "Evans"
+    given-names: "Vergel"
+license: Apache-2.0
+repository-code: "https://github.com/HumanjavaEnterprises/comfyui-lsdub"
+url: "https://lsdub.vidbnch.app"

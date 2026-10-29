@@ -1,7 +1,7 @@
 [project]
 name = "lsdub"
 description = "LSDub — open-weights lip-sync for music videos: match the lip-sync to the audio without re-rendering the whole shot. 0.0.1 = the vocal stage (lead-vocal isolation)."
-version = "0.0.2"
+version = "0.0.3"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """Vocal nodes. AUDIO is ComfyUI's {"waveform": (B, C, N), "sample_rate": int}."""
 import os
 import torch

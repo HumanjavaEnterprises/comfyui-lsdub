@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """vocal_split.py — ML vocal separation (Mel-Band RoFormer) for the lead-vocal drive.
 
 The mouth must follow the LEAD singer only. A DSP centre-extract leaves backing harmonies and reverb in the

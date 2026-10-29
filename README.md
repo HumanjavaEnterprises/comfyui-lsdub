@@ -17,3 +17,9 @@ Apache-2.0.
 
 - Comfy Registry: https://registry.comfy.org/publishers/vveerrgg/nodes/lsdub (`comfy node install lsdub`)
 - Project page: https://lsdub.vidbnch.app
+
+## License and attribution
+
+Apache-2.0. If you use this code in your project, keep the `NOTICE` file with it, keep the copyright headers,
+note what you changed, and credit LSDub with a link to this repository. To cite it, use `CITATION.cff`
+(GitHub's "Cite this repository" button).
