@@ -58,7 +58,10 @@ def stt(audio, t0, t1, model='large-v3', prompt='', device='cpu', device_index=0
         except (RuntimeError, ValueError) as e:                       # no usable GPU runtime: the CPU path
             print(f'stt: {device} unavailable ({e}); using the CPU', file=sys.stderr)
             m = WhisperModel(model, device='cpu', compute_type='int8', download_root=download_root)
-        segs, _ = m.transcribe(p, word_timestamps=True, language='en', vad_filter=False, initial_prompt=prompt or None)
+        import numpy as np
+        raw = ff.run(['ffmpeg', '-v', 'error', '-i', p, '-ac', '1', '-ar', '16000', '-f', 'f32le', '-'], capture_output=True, check=True).stdout
+        pcm16 = np.frombuffer(raw, np.float32)          # decoded here, not by faster-whisper (its PyAV call varies by version)
+        segs, _ = m.transcribe(pcm16, word_timestamps=True, language='en', vad_filter=False, initial_prompt=prompt or None)
         return [{'w': w.word.strip(), 'start': round(w.start + t0, 3), 'end': round(w.end + t0, 3), 'p': round(w.probability, 3)}
                 for s in segs for w in s.words]
 

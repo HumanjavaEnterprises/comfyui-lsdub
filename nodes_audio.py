@@ -29,6 +29,8 @@ class LSDubSongSlot(io.ComfyNode):
             inputs=[
                 T.LSDubProject.Input('project', tooltip='The LSDub project.'),
                 io.Audio.Input('audio', optional=True, tooltip='The finished song (the mix). Takes priority over tags.'),
+                io.Audio.Input('vocal', optional=True, tooltip='Optional: the dry lead vocal of the same song (same start). '
+                                                               'The mouth follows it more cleanly than the mix.'),
                 io.String.Input('tags', multiline=True, default='',
                                 tooltip='Style tags to generate a song (genre, mood, instruments, voice). Ignored when '
                                         'audio is connected.'),
@@ -49,12 +51,13 @@ class LSDubSongSlot(io.ComfyNode):
                          [project.cache_key()])
 
     @classmethod
-    def fingerprint_inputs(cls, project, audio=None, tags='', lyrics=None, seconds=60.0, bpm=120, keyscale='C major'):
+    def fingerprint_inputs(cls, project, audio=None, tags='', lyrics=None, seconds=60.0, bpm=120, keyscale='C major', vocal=None):
         if audio is None: return cls._gen_key(project, tags, lyrics, seconds, bpm, keyscale)
-        return stage_key('LSDubSongSlot', {'audio': media.audio_hash(audio)}, [project.cache_key()])
+        return stage_key('LSDubSongSlot', {'audio': media.audio_hash(audio), 'vocal': media.audio_hash(vocal) if vocal is not None else ''},
+                         [project.cache_key()])
 
     @classmethod
-    async def execute(cls, project, audio=None, tags='', lyrics=None, seconds=60.0, bpm=120, keyscale='C major'):
+    async def execute(cls, project, audio=None, tags='', lyrics=None, seconds=60.0, bpm=120, keyscale='C major', vocal=None):
         if audio is None:
             if not (tags or '').strip():
                 raise ValueError('LSDub Song: connect a song to the "audio" input, or write style tags to generate one.')
@@ -68,12 +71,15 @@ class LSDubSongSlot(io.ComfyNode):
                 st.mark_done(True, generated=True, backend=project.backend)
             return io.NodeOutput(T.Song(mix=mix, hash=file_hash(mix), offset=project.song_offset), media.load_audio(mix))
         h = media.audio_hash(audio)
-        st = project.stage('slots/song', stage_key('LSDubSongSlot', {'audio': h}, [project.cache_key()]))
-        mix = st.path('mix.wav')
+        vh = media.audio_hash(vocal) if vocal is not None else ''
+        st = project.stage('slots/song', stage_key('LSDubSongSlot', {'audio': h, 'vocal': vh}, [project.cache_key()]))
+        mix, lead = st.path('mix.wav'), (st.path('lead.wav') if vocal is not None else '')
         if not st.is_done():
             media.write_audio(audio, mix)
+            if vocal is not None: media.write_audio(vocal, lead)
             st.mark_done(True, sample_rate=int(audio['sample_rate']))
-        return io.NodeOutput(T.Song(mix=mix, hash=h, offset=project.song_offset), audio)
+        return io.NodeOutput(T.Song(mix=mix, lead=lead, hash=h + vh[:8], hashes={'lead': vh} if vh else {},
+                                    offset=project.song_offset), audio)
 
 
 def lyric_check_md(align, vis_skip=None):

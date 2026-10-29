@@ -96,8 +96,9 @@ def main(argv=None):
         print(DRY)
         return 0
     if cmd == "fetch-models":
-        from ._models import fetch_face_landmarker
+        from ._models import fetch_face_landmarker, fetch_yunet
         print("face landmarker ->", fetch_face_landmarker())
+        print("face detector ->", fetch_yunet())
         print("Rhubarb / MFA / ComfyUI models are installed separately: see docs/INSTALL.md")
         return 0
     if cmd == "verify-watermark":

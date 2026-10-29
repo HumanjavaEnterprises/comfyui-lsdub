@@ -32,6 +32,16 @@ def _kit_flags(project, identity):
     return f
 
 
+def _resolve_dir(d):
+    """a kit folder: absolute, or relative to ComfyUI's input folder (where the demo assets are unzipped)."""
+    if os.path.isabs(d): return d
+    try:
+        import folder_paths
+        return os.path.join(folder_paths.get_input_directory(), d)
+    except ImportError:
+        return os.path.abspath(d)
+
+
 class LSDubBuildLipKit(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -78,6 +88,7 @@ class LSDubBuildLipKit(io.ComfyNode):
 
     @classmethod
     def fingerprint_inputs(cls, project, identity, kit_dir, source=None, shots=None, shot_id=-1, keep='', seeds=3):
+        kit_dir = _resolve_dir(kit_dir) if kit_dir else kit_dir
         if kit_dir: return stage_key('LSDubBuildLipKit', {'id': identity, 'dir': kit_dir,
                                                           'h': cls._hash(kit_dir) if os.path.isdir(kit_dir) else ''})
         return cls._build_key(project, identity, source, shots, shot_id, keep, seeds) if source is not None else 'none'
@@ -85,8 +96,11 @@ class LSDubBuildLipKit(io.ComfyNode):
     @classmethod
     async def execute(cls, project, identity, kit_dir, source=None, shots=None, shot_id=-1,
                       keep='person, same face shape, skin tone, hair, eyewear and makeup', seeds=3):
+        from . import devices as _dev
+        _dev.ensure_face_models()
         if not identity.strip(): raise ValueError('LSDub Lip Kit: set identity (the singer\'s cast name)')
         if kit_dir:
+            kit_dir = _resolve_dir(kit_dir)
             if not os.path.isdir(kit_dir): raise FileNotFoundError(f'LSDub Lip Kit: no folder {kit_dir}')
             return io.NodeOutput(T.Kit(dir=kit_dir, identity=identity.strip(), hash=cls._hash(kit_dir)))
         if source is None: raise ValueError('LSDub Lip Kit: set kit_dir, or connect a source to build a kit from')
@@ -311,7 +325,13 @@ class LSDubDub(io.ComfyNode):
     def _plan(cls, project, shots, kits, only):
         only = set(only)
         return [s for s in shots.shots if s.get('verdict') in DUB_VERDICTS and (not only or s['shot'] in only)
-                and s.get('target') in kits]
+                and cls._kit_for(s, kits)]
+
+    @staticmethod
+    def _kit_for(s, kits):
+        """the shot's singer's kit; with ONE kit and no cast names (triage without a cast), that kit for every shot."""
+        if s.get('target') in kits: return kits[s['target']]
+        return next(iter(kits.values())) if len(kits) == 1 else None
 
     @classmethod
     def _shot_key(cls, project, source, s, song, align, kit, tweaks, masks, cast):
@@ -327,7 +347,7 @@ class LSDubDub(io.ComfyNode):
         kits = {k.identity: k for k in (kit, kit_2, kit_3) if k is not None}
         tw = tweaks or DEFAULT_TWEAKS
         plan = cls._plan(project, shots, kits, parse_force_shots(only_shots))
-        return {s['shot']: cls._shot_key(project, source, s, song, align, kits[s['target']], tw, masks, cast) for s in plan}, plan, kits, tw
+        return {s['shot']: cls._shot_key(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast) for s in plan}, plan, kits, tw
 
     @classmethod
     def fingerprint_inputs(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None,
@@ -379,6 +399,8 @@ class LSDubDub(io.ComfyNode):
     @classmethod
     def execute(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None, cast=None,
                 only_shots='', quality=18, on_fail='source', audio='source'):
+        from . import devices as _dev
+        _dev.ensure_face_models()
         from .project import take_force
         if project.mode == 'test_learn':                              # analyse only: the cut is the source
             return io.NodeOutput(T.Render(shots={}, cut=source.path, hash=source.hash), cls._video(source.path))
@@ -395,7 +417,7 @@ class LSDubDub(io.ComfyNode):
             st = project.shot(sid, k)
             if shots_todo(project, k, [sid], forced):
                 try:
-                    render, info = cls.run_shot(project, source, s, song, align, kits[s['target']], tw, masks, cast, st)
+                    render, info = cls.run_shot(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast, st)
                     reason = '' if info.get('pass') else (f"sync gate failed: measured corr {info.get('corr')} "
                                                            f"(open in silence {info.get('open_in_silence')})")
                     st.mark_done(bool(info.get('pass')), corr=info.get('corr'), auto=(info.get('auto') or {}).get('winner'),

@@ -11,6 +11,8 @@ if __package__:   # loaded as a package (ComfyUI, tests/conftest.py); pytest's b
     from . import nodes_audio, nodes_mouth, nodes_project, nodes_qa, nodes_video, nodes_vocal
 
     folder_paths.add_model_folder_path('lsdub', os.path.join(folder_paths.models_dir, 'lsdub'))
+    from .lsdub_engine import _models
+    if not os.environ.get('LIPS_CACHE'): _models.set_cache(os.path.join(folder_paths.models_dir, 'lsdub'))   # config only
 
     class LSDubExtension(ComfyExtension):
         async def get_node_list(self) -> list[type[io.ComfyNode]]:

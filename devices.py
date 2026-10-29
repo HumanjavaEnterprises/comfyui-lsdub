@@ -50,3 +50,11 @@ def whisper_device():
     dev = torch_device()
     if getattr(dev, 'type', str(dev)).startswith('cuda'): return 'cuda', (dev.index or 0)
     return 'cpu', 0
+
+
+def ensure_face_models():
+    """the small face models (MediaPipe Face Landmarker, YuNet) in models/lsdub: downloaded once, checksum-verified,
+    the first time a face node runs (never at startup)."""
+    from .lsdub_engine import _models
+    _models.fetch_face_landmarker()
+    _models.fetch_yunet()

@@ -32,7 +32,7 @@ from .face_scan import euler
 from .._models import face_landmarker_path, CACHE
 from .. import presets as P
 
-MODEL = os.environ.get('LIPS_CAST_MODEL', os.path.join(CACHE, 'dinov2_base_cast.onnx'))
+MODEL = os.environ.get('LIPS_CAST_MODEL', os.path.join(CACHE, 'dinov2_base_cast.onnx'))   # the CLI's ONNX embedder
 MEAN, STD = np.array([0.485, 0.456, 0.406], np.float32), np.array([0.229, 0.224, 0.225], np.float32)
 LIPS = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185]
 CHEEKS = [50, 280, 205, 425, 118, 347]
@@ -43,7 +43,7 @@ VARIANTS = re.compile(r'_(egirl|office)$')
 
 
 # ---------------------------------------------------------------------------------------------------- faces
-YUNET = os.environ.get('LIPS_YUNET', os.path.join(CACHE, 'face_detection_yunet_2023mar.onnx'))
+YUNET = None   # resolved when a detector is made (_models.yunet_path), so the pack can point the cache at models/lsdub
 
 
 class Faces:
@@ -55,7 +55,8 @@ class Faces:
         import mediapipe as mp
         from mediapipe.tasks.python import vision, BaseOptions
         self.mp, self.min_box, self.det_thr = mp, min_box, det_thr
-        self.det = cv2.FaceDetectorYN.create(YUNET, '', (320, 320), det_thr, 0.3, 500)
+        from .._models import yunet_path
+        self.det = cv2.FaceDetectorYN.create(YUNET or yunet_path(), '', (320, 320), det_thr, 0.3, 500)
         self.l = vision.FaceLandmarker.create_from_options(vision.FaceLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=face_landmarker_path()), running_mode=vision.RunningMode.IMAGE,
             num_faces=2, output_facial_transformation_matrixes=True,

@@ -100,7 +100,10 @@ install_stubs(_TMP)
 
 @pytest.fixture(scope='session')
 def pack():
-    return load_pack()
+    p = load_pack()
+    import importlib
+    importlib.import_module(p.__name__ + '.devices').ensure_face_models = lambda: None    # no downloads in tests
+    return p
 
 
 @pytest.fixture(scope="session")

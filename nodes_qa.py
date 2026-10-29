@@ -56,6 +56,8 @@ class LSDubVerify(io.ComfyNode):
 
     @classmethod
     def execute(cls, project, source, render, shots, song, align):
+        from . import devices as _dev
+        _dev.ensure_face_models()
         from .lsdub_engine.audits import qa
         st = project.stage('qa/verify', cls._key(project, source, render, shots, song, align))
         out = st.path('verify')
@@ -102,6 +104,8 @@ class LSDubScorecard(io.ComfyNode):
 
     @classmethod
     def execute(cls, project, source, shots, song, align, render=None):
+        from . import devices as _dev
+        _dev.ensure_face_models()
         from .lsdub_engine.audits import scorecard as SC
         st = project.stage('qa/scorecard', cls._key(project, source, shots, song, align, render))
         out = st.path('scorecard')
@@ -150,6 +154,8 @@ class LSDubSyncQA(io.ComfyNode):
 
     @classmethod
     def execute(cls, project, source, shots, song, align, render=None, shot_ids=''):
+        from . import devices as _dev
+        _dev.ensure_face_models()
         from .lsdub_engine.audits import sync_qa as Q, sync_strip as SS
         from .lsdub_engine._inproc import call
         from .nodes_mouth import LSDubDub, extract_shot

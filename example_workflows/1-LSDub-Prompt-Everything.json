@@ -1,0 +1,1386 @@
+{
+ "last_node_id": 19,
+ "last_link_id": 42,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "LSDubProject",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    340,
+    294
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "links": [
+      1,
+      3,
+      5,
+      6,
+      8,
+      9,
+      12,
+      20,
+      21,
+      27,
+      34,
+      39
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubProject"
+   },
+   "widgets_values": [
+    "lsdub-demo-run",
+    "",
+    "run",
+    25.0,
+    0.0,
+    "landing",
+    0,
+    "local",
+    ""
+   ],
+   "color": "#335",
+   "title": "LSDub Project"
+  },
+  {
+   "id": 2,
+   "type": "LoadImage",
+   "pos": [
+    0,
+    250
+   ],
+   "size": [
+    300,
+    120
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      2
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "MASK",
+     "type": "MASK",
+     "links": [],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "widgets_values": [
+    "lsdub_demo_landing_still.png",
+    "image"
+   ]
+  },
+  {
+   "id": 3,
+   "type": "LSDubStillSlot",
+   "pos": [
+    400,
+    -300
+   ],
+   "size": [
+    340,
+    164
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 1
+    },
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "link": 2
+    },
+    {
+     "name": "ref",
+     "type": "IMAGE",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      4
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubStillSlot"
+   },
+   "widgets_values": [
+    "the same singer on a small club stage, a deep red velvet curtain behind her, warm spotlight"
+   ],
+   "color": "#253",
+   "title": "LSDub Still"
+  },
+  {
+   "id": 4,
+   "type": "LSDubVideoSlot",
+   "pos": [
+    400,
+    0
+   ],
+   "size": [
+    340,
+    216
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 3
+    },
+    {
+     "name": "video",
+     "type": "VIDEO",
+     "link": null
+    },
+    {
+     "name": "still",
+     "type": "IMAGE",
+     "link": 4
+    }
+   ],
+   "outputs": [
+    {
+     "name": "source",
+     "type": "LSDUB_SOURCE",
+     "links": [
+      7,
+      13,
+      22,
+      28,
+      41
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "video",
+     "type": "VIDEO",
+     "links": [],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubVideoSlot"
+   },
+   "widgets_values": [
+    "she sings into a chrome microphone, gentle camera push in, stage light",
+    "blurry, distorted face, extra fingers",
+    5.0
+   ],
+   "color": "#253",
+   "title": "LSDub Video"
+  },
+  {
+   "id": 5,
+   "type": "LSDubSongSlot",
+   "pos": [
+    400,
+    450
+   ],
+   "size": [
+    340,
+    268
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 5
+    },
+    {
+     "name": "audio",
+     "type": "AUDIO",
+     "link": null
+    },
+    {
+     "name": "vocal",
+     "type": "AUDIO",
+     "link": null
+    },
+    {
+     "name": "lyrics",
+     "type": "LSDUB_LYRICS",
+     "link": 19
+    }
+   ],
+   "outputs": [
+    {
+     "name": "song",
+     "type": "LSDUB_SONG",
+     "links": [
+      10,
+      15,
+      24,
+      31
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "audio",
+     "type": "AUDIO",
+     "links": [],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubSongSlot"
+   },
+   "widgets_values": [
+    "dreamy synthpop, female vocal, 100 bpm, warm analog synths",
+    6.0,
+    100,
+    "A minor"
+   ],
+   "color": "#523",
+   "title": "LSDub Song"
+  },
+  {
+   "id": 6,
+   "type": "LSDubShotSplit",
+   "pos": [
+    800,
+    0
+   ],
+   "size": [
+    340,
+    112
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 6
+    },
+    {
+     "name": "source",
+     "type": "LSDUB_SOURCE",
+     "link": 7
+    }
+   ],
+   "outputs": [
+    {
+     "name": "shots",
+     "type": "LSDUB_SHOTS",
+     "links": [
+      14,
+      42
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "sheet",
+     "type": "IMAGE",
+     "links": [],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubShotSplit"
+   },
+   "widgets_values": [],
+   "color": "#253",
+   "title": "LSDub Shot Split"
+  },
+  {
+   "id": 7,
+   "type": "LSDubLyricsSlot",
+   "pos": [
+    400,
+    700
+   ],
+   "size": [
+    340,
+    112
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 8
+    }
+   ],
+   "outputs": [
+    {
+     "name": "lyrics",
+     "type": "LSDUB_LYRICS",
+     "links": [
+      11,
+      19
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubLyricsSlot"
+   },
+   "widgets_values": [
+    "Pleiadians bending space and time\nFour hundred light-years far away\nAlways so serious, never dance a day"
+   ],
+   "color": "#523",
+   "title": "LSDub Lyrics"
+  },
+  {
+   "id": 8,
+   "type": "LSDubAlign",
+   "pos": [
+    800,
+    700
+   ],
+   "size": [
+    340,
+    242
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 9
+    },
+    {
+     "name": "song",
+     "type": "LSDUB_SONG",
+     "link": 10
+    },
+    {
+     "name": "lyrics",
+     "type": "LSDUB_LYRICS",
+     "link": 11
+    },
+    {
+     "name": "vocal",
+     "type": "AUDIO",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "name": "align",
+     "type": "LSDUB_ALIGN",
+     "links": [
+      25,
+      32
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "lyric_check",
+     "type": "STRING",
+     "links": [
+      18
+     ],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubAlign"
+   },
+   "widgets_values": [
+    "",
+    "large-v3",
+    ""
+   ],
+   "color": "#523",
+   "title": "LSDub Align"
+  },
+  {
+   "id": 9,
+   "type": "LSDubTriage",
+   "pos": [
+    1200,
+    0
+   ],
+   "size": [
+    340,
+    216
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 12
+    },
+    {
+     "name": "source",
+     "type": "LSDUB_SOURCE",
+     "link": 13
+    },
+    {
+     "name": "shots",
+     "type": "LSDUB_SHOTS",
+     "link": 14
+    },
+    {
+     "name": "song",
+     "type": "LSDUB_SONG",
+     "link": 15
+    },
+    {
+     "name": "cast",
+     "type": "LSDUB_CAST",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "name": "shots",
+     "type": "LSDUB_SHOTS",
+     "links": [
+      23,
+      30,
+      35
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "sheet",
+     "type": "IMAGE",
+     "links": [
+      17
+     ],
+     "slot_index": 1
+    },
+    {
+     "name": "report",
+     "type": "STRING",
+     "links": [
+      16
+     ],
+     "slot_index": 2
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubTriage"
+   },
+   "widgets_values": [
+    6
+   ],
+   "color": "#253",
+   "title": "LSDub Triage"
+  },
+  {
+   "id": 10,
+   "type": "PreviewAny",
+   "pos": [
+    1600,
+    0
+   ],
+   "size": [
+    300,
+    120
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 16
+    }
+   ],
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "widgets_values": [
+    null,
+    null,
+    false
+   ]
+  },
+  {
+   "id": 11,
+   "type": "PreviewImage",
+   "pos": [
+    1600,
+    300
+   ],
+   "size": [
+    300,
+    120
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "images",
+     "type": "IMAGE",
+     "link": 17
+    }
+   ],
+   "outputs": [],
+   "properties": {
+    "Node name for S&R": "PreviewImage"
+   },
+   "widgets_values": []
+  },
+  {
+   "id": 12,
+   "type": "PreviewAny",
+   "pos": [
+    1200,
+    700
+   ],
+   "size": [
+    300,
+    120
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 18
+    }
+   ],
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "widgets_values": [
+    null,
+    null,
+    false
+   ]
+  },
+  {
+   "id": 13,
+   "type": "LSDubBuildLipKit",
+   "pos": [
+    1200,
+    1000
+   ],
+   "size": [
+    340,
+    268
+   ],
+   "flags": {},
+   "order": 13,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 20
+    },
+    {
+     "name": "source",
+     "type": "LSDUB_SOURCE",
+     "link": 41
+    },
+    {
+     "name": "shots",
+     "type": "LSDUB_SHOTS",
+     "link": 42
+    }
+   ],
+   "outputs": [
+    {
+     "name": "kit",
+     "type": "LSDUB_KIT",
+     "links": [
+      26
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubBuildLipKit"
+   },
+   "widgets_values": [
+    "singer",
+    "",
+    0,
+    "person, same face shape, skin tone, hair, eyewear and makeup",
+    3
+   ],
+   "color": "#532",
+   "title": "LSDub Lip Kit"
+  },
+  {
+   "id": 14,
+   "type": "LSDubDub",
+   "pos": [
+    1600,
+    700
+   ],
+   "size": [
+    340,
+    450
+   ],
+   "flags": {},
+   "order": 14,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 21
+    },
+    {
+     "name": "source",
+     "type": "LSDUB_SOURCE",
+     "link": 22
+    },
+    {
+     "name": "shots",
+     "type": "LSDUB_SHOTS",
+     "link": 23
+    },
+    {
+     "name": "song",
+     "type": "LSDUB_SONG",
+     "link": 24
+    },
+    {
+     "name": "align",
+     "type": "LSDUB_ALIGN",
+     "link": 25
+    },
+    {
+     "name": "kit",
+     "type": "LSDUB_KIT",
+     "link": 26
+    },
+    {
+     "name": "kit_2",
+     "type": "LSDUB_KIT",
+     "link": null
+    },
+    {
+     "name": "kit_3",
+     "type": "LSDUB_KIT",
+     "link": null
+    },
+    {
+     "name": "tweaks",
+     "type": "LSDUB_TWEAKS",
+     "link": null
+    },
+    {
+     "name": "masks",
+     "type": "LSDUB_MASKS",
+     "link": null
+    },
+    {
+     "name": "cast",
+     "type": "LSDUB_CAST",
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "name": "render",
+     "type": "LSDUB_RENDER",
+     "links": [
+      29,
+      37,
+      40
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "video",
+     "type": "VIDEO",
+     "links": [],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubDub"
+   },
+   "widgets_values": [
+    "",
+    18,
+    "source",
+    "song"
+   ],
+   "color": "#532",
+   "title": "LSDub Dub"
+  },
+  {
+   "id": 15,
+   "type": "LSDubVerify",
+   "pos": [
+    2000,
+    700
+   ],
+   "size": [
+    340,
+    216
+   ],
+   "flags": {},
+   "order": 15,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 27
+    },
+    {
+     "name": "source",
+     "type": "LSDUB_SOURCE",
+     "link": 28
+    },
+    {
+     "name": "render",
+     "type": "LSDUB_RENDER",
+     "link": 29
+    },
+    {
+     "name": "shots",
+     "type": "LSDUB_SHOTS",
+     "link": 30
+    },
+    {
+     "name": "song",
+     "type": "LSDUB_SONG",
+     "link": 31
+    },
+    {
+     "name": "align",
+     "type": "LSDUB_ALIGN",
+     "link": 32
+    }
+   ],
+   "outputs": [
+    {
+     "name": "report",
+     "type": "LSDUB_REPORT",
+     "links": [
+      36
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "md",
+     "type": "STRING",
+     "links": [
+      33
+     ],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubVerify"
+   },
+   "widgets_values": [],
+   "color": "#255",
+   "title": "LSDub Verify"
+  },
+  {
+   "id": 16,
+   "type": "PreviewAny",
+   "pos": [
+    2400,
+    700
+   ],
+   "size": [
+    300,
+    120
+   ],
+   "flags": {},
+   "order": 16,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 33
+    }
+   ],
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "widgets_values": [
+    null,
+    null,
+    false
+   ]
+  },
+  {
+   "id": 17,
+   "type": "LSDubFixIt",
+   "pos": [
+    2000,
+    1000
+   ],
+   "size": [
+    340,
+    216
+   ],
+   "flags": {},
+   "order": 17,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 34
+    },
+    {
+     "name": "shots",
+     "type": "LSDUB_SHOTS",
+     "link": 35
+    },
+    {
+     "name": "report",
+     "type": "LSDUB_REPORT",
+     "link": 36
+    },
+    {
+     "name": "sync",
+     "type": "LSDUB_REPORT",
+     "link": null
+    },
+    {
+     "name": "render",
+     "type": "LSDUB_RENDER",
+     "link": 37
+    }
+   ],
+   "outputs": [
+    {
+     "name": "md",
+     "type": "STRING",
+     "links": [
+      38
+     ],
+     "slot_index": 0
+    },
+    {
+     "name": "force_shots",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubFixIt"
+   },
+   "widgets_values": [
+    0.5
+   ],
+   "color": "#255",
+   "title": "LSDub Fix It"
+  },
+  {
+   "id": 18,
+   "type": "PreviewAny",
+   "pos": [
+    2400,
+    1000
+   ],
+   "size": [
+    300,
+    120
+   ],
+   "flags": {},
+   "order": 18,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "source",
+     "type": "*",
+     "link": 38
+    }
+   ],
+   "outputs": [
+    {
+     "name": "STRING",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "widgets_values": [
+    null,
+    null,
+    false
+   ]
+  },
+  {
+   "id": 19,
+   "type": "LSDubSaveCut",
+   "pos": [
+    2000,
+    1300
+   ],
+   "size": [
+    340,
+    164
+   ],
+   "flags": {},
+   "order": 19,
+   "mode": 0,
+   "inputs": [
+    {
+     "name": "project",
+     "type": "LSDUB_PROJECT",
+     "link": 39
+    },
+    {
+     "name": "render",
+     "type": "LSDUB_RENDER",
+     "link": 40
+    }
+   ],
+   "outputs": [
+    {
+     "name": "video",
+     "type": "VIDEO",
+     "links": [],
+     "slot_index": 0
+    },
+    {
+     "name": "path",
+     "type": "STRING",
+     "links": [],
+     "slot_index": 1
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubSaveCut"
+   },
+   "widgets_values": [
+    true,
+    18
+   ],
+   "color": "#255",
+   "title": "LSDub Save Cut"
+  }
+ ],
+ "links": [
+  [
+   1,
+   1,
+   0,
+   3,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   2,
+   2,
+   0,
+   3,
+   1,
+   "IMAGE"
+  ],
+  [
+   3,
+   1,
+   0,
+   4,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   4,
+   3,
+   0,
+   4,
+   2,
+   "IMAGE"
+  ],
+  [
+   5,
+   1,
+   0,
+   5,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   6,
+   1,
+   0,
+   6,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   7,
+   4,
+   0,
+   6,
+   1,
+   "LSDUB_SOURCE"
+  ],
+  [
+   8,
+   1,
+   0,
+   7,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   9,
+   1,
+   0,
+   8,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   10,
+   5,
+   0,
+   8,
+   1,
+   "LSDUB_SONG"
+  ],
+  [
+   11,
+   7,
+   0,
+   8,
+   2,
+   "LSDUB_LYRICS"
+  ],
+  [
+   12,
+   1,
+   0,
+   9,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   13,
+   4,
+   0,
+   9,
+   1,
+   "LSDUB_SOURCE"
+  ],
+  [
+   14,
+   6,
+   0,
+   9,
+   2,
+   "LSDUB_SHOTS"
+  ],
+  [
+   15,
+   5,
+   0,
+   9,
+   3,
+   "LSDUB_SONG"
+  ],
+  [
+   16,
+   9,
+   2,
+   10,
+   0,
+   "STRING"
+  ],
+  [
+   17,
+   9,
+   1,
+   11,
+   0,
+   "IMAGE"
+  ],
+  [
+   18,
+   8,
+   1,
+   12,
+   0,
+   "STRING"
+  ],
+  [
+   19,
+   7,
+   0,
+   5,
+   3,
+   "LSDUB_LYRICS"
+  ],
+  [
+   20,
+   1,
+   0,
+   13,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   21,
+   1,
+   0,
+   14,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   22,
+   4,
+   0,
+   14,
+   1,
+   "LSDUB_SOURCE"
+  ],
+  [
+   23,
+   9,
+   0,
+   14,
+   2,
+   "LSDUB_SHOTS"
+  ],
+  [
+   24,
+   5,
+   0,
+   14,
+   3,
+   "LSDUB_SONG"
+  ],
+  [
+   25,
+   8,
+   0,
+   14,
+   4,
+   "LSDUB_ALIGN"
+  ],
+  [
+   26,
+   13,
+   0,
+   14,
+   5,
+   "LSDUB_KIT"
+  ],
+  [
+   27,
+   1,
+   0,
+   15,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   28,
+   4,
+   0,
+   15,
+   1,
+   "LSDUB_SOURCE"
+  ],
+  [
+   29,
+   14,
+   0,
+   15,
+   2,
+   "LSDUB_RENDER"
+  ],
+  [
+   30,
+   9,
+   0,
+   15,
+   3,
+   "LSDUB_SHOTS"
+  ],
+  [
+   31,
+   5,
+   0,
+   15,
+   4,
+   "LSDUB_SONG"
+  ],
+  [
+   32,
+   8,
+   0,
+   15,
+   5,
+   "LSDUB_ALIGN"
+  ],
+  [
+   33,
+   15,
+   1,
+   16,
+   0,
+   "STRING"
+  ],
+  [
+   34,
+   1,
+   0,
+   17,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   35,
+   9,
+   0,
+   17,
+   1,
+   "LSDUB_SHOTS"
+  ],
+  [
+   36,
+   15,
+   0,
+   17,
+   2,
+   "LSDUB_REPORT"
+  ],
+  [
+   37,
+   14,
+   0,
+   17,
+   4,
+   "LSDUB_RENDER"
+  ],
+  [
+   38,
+   17,
+   0,
+   18,
+   0,
+   "STRING"
+  ],
+  [
+   39,
+   1,
+   0,
+   19,
+   0,
+   "LSDUB_PROJECT"
+  ],
+  [
+   40,
+   14,
+   0,
+   19,
+   1,
+   "LSDUB_RENDER"
+  ],
+  [
+   41,
+   4,
+   0,
+   13,
+   1,
+   "LSDUB_SOURCE"
+  ],
+  [
+   42,
+   6,
+   0,
+   13,
+   2,
+   "LSDUB_SHOTS"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {
+  "ds": {
+   "scale": 0.6,
+   "offset": [
+    0,
+    0
+   ]
+  },
+  "info": {
+   "name": "LSDub 1: Prompt Everything"
+  }
+ },
+ "version": 0.4
+}

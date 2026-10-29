@@ -1,0 +1,18 @@
+name: Publish to the Comfy Registry
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.repository == 'HumanjavaEnterprises/comfyui-lsdub'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5
+      - uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9   # main, 2026-10
+        env:
+          COMFY_NODE_CHANGELOG: "See CHANGELOG.md"
+        with:
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}   # set this secret in the repo settings
+          skip_checkout: 'true'

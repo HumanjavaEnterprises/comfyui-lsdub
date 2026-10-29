@@ -1,9 +1,14 @@
 [project]
 name = "lsdub"
-description = "LSDub — open-weights lip-sync for music videos: match the lip-sync to the audio without re-rendering the whole shot. 0.0.1 = the vocal stage (lead-vocal isolation)."
-version = "0.0.3"
-license = { text = "Apache-2.0" }
+description = "Lip-sync for music videos in ComfyUI: dub the singers' mouths to the song, shot by shot, with QA. Every input is a slot (bring a clip and song, or generate them with LTX-2.5, Qwen-Image-Edit and ACE-Step); vocal split, lyric alignment, lip kits, sync QA."
+version = "0.1.0"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
+readme = "README.md"
+classifiers = [
+  "Operating System :: OS Independent",
+  "Environment :: GPU :: NVIDIA CUDA",
+]
 dependencies = [
   "numpy>=1.24",
   "opencv-python-headless>=4.8",
@@ -19,12 +24,27 @@ dependencies = [
 [project.optional-dependencies]
 cloud = ["comfy-sdk>=0.5"]   # opt-in Comfy Cloud backend for the generator slots
 occluders = ["sam2>=1.1", "hydra-core>=1.3", "iopath"]   # LSDub Occluders (SAM 2.1 video masks; Florence-2 via transformers)
+dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.urls]
 Repository = "https://github.com/HumanjavaEnterprises/comfyui-lsdub"
-Documentation = "https://lsdub.vidbnch.app"
+Documentation = "https://github.com/HumanjavaEnterprises/comfyui-lsdub#readme"
+Issues = "https://github.com/HumanjavaEnterprises/comfyui-lsdub/issues"
+"Bug Tracker" = "https://github.com/HumanjavaEnterprises/comfyui-lsdub/issues"
+Homepage = "https://lsdub.vidbnch.app"
 
 [tool.comfy]
 PublisherId = "vveerrgg"
 DisplayName = "LSDub"
+Icon = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/main/assets/icon.png"
+Banner = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/main/assets/banner.png"
+requires-comfyui = ">=0.34.0"
+includes = []
 
+[tool.ruff]
+target-version = "py310"
+line-length = 140
+extend-exclude = ["dist"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

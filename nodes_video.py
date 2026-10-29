@@ -240,6 +240,8 @@ class LSDubCast(io.ComfyNode):
 
     @classmethod
     def execute(cls, project, source, shots, singer_refs=None, names='', cast_db='', refs_dir=''):
+        from . import devices as _dev
+        _dev.ensure_face_models()
         import numpy as np
         from .lsdub_engine.audits import qa
         from .lsdub_engine.core import cast as C
@@ -308,6 +310,8 @@ class LSDubTriage(io.ComfyNode):
 
     @classmethod
     def execute(cls, project, source, shots, song=None, cast=None, samples=6):
+        from . import devices as _dev
+        _dev.ensure_face_models()
         from .lsdub_engine.audits import qa
         from .lsdub_engine.core import cast as C
         st = project.stage('video/triage', cls._key(project, source, shots, song, cast, samples))
