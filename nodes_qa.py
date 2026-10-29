@@ -263,21 +263,23 @@ class LSDubSaveCut(io.ComfyNode):
                 T.LSDubRender.Input('render', tooltip='The dub (its assembled cut).'),
                 io.Boolean.Input('watermark', default=True, tooltip='Mark the file as AI-edited (invisible watermark + '
                                                                     'metadata tag). Keep it on when you publish.'),
+                io.Int.Input('quality', default=18, min=10, max=30, optional=True,
+                             tooltip='Quality of the watermarked file (x264 CRF): lower = better and bigger.'),
             ],
             outputs=[io.Video.Output(display_name='video', tooltip='The saved cut.'),
                      io.String.Output(display_name='path', tooltip='Where it was saved.')],
         )
 
     @classmethod
-    def execute(cls, project, render, watermark=True):
+    def execute(cls, project, render, watermark=True, quality=18):
         from .lsdub_engine import watermark as WM
         from .nodes_mouth import LSDubDub
         os.makedirs(os.path.join(project.dir, 'final'), exist_ok=True)
-        out = os.path.join(project.dir, 'final', f"{stage_key('LSDubSaveCut', {'wm': watermark}, [render.hash])}.mp4")
+        out = os.path.join(project.dir, 'final', f"{stage_key('LSDubSaveCut', {'wm': watermark, 'q': quality}, [render.hash])}.mp4")
         if not os.path.exists(out):
             tmp = out + '.part.mp4'
             shutil.copyfile(render.cut, tmp)
-            if watermark: WM.apply_inplace(tmp)
+            if watermark: WM.apply_inplace(tmp, crf=int(quality))
             os.replace(tmp, out)
         return io.NodeOutput(LSDubDub._video(out), out)
 
