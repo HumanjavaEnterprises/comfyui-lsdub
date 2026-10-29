@@ -175,6 +175,7 @@ class LSDubTweaks(io.ComfyNode):
 DEFAULT_TWEAKS = T.Tweaks(flags=dict(lead=0.06, word_close=0.06, face_target=512.0, snap=True, auto=True, continuity=True))
 ON_FAIL = ('source', 'render')
 AUDIO = ('source', 'song')
+VOCALISATIONS = ('skip', 'rest', 'mouth')
 
 
 def _log(msg):
@@ -316,6 +317,10 @@ class LSDubDub(io.ComfyNode):
                 io.Combo.Input('audio', options=list(AUDIO), default='source', optional=True,
                                tooltip='Sound of the cut: source = the video\'s own track (a music video that already '
                                        'carries the song); song = the song file at the project\'s song_offset.'),
+                io.Combo.Input('vocalisations', options=list(VOCALISATIONS), default='skip', optional=True,
+                               tooltip='Sung sounds that are not words (ooh, da da, scat): skip = keep the video\'s own mouth '
+                                       'there; rest = close the mouth; mouth = sing them like words (best for a scat chorus '
+                                       'or a generated performance).'),
             ],
             outputs=[T.LSDubRender.Output(display_name='render', tooltip='Per-shot results (pass / fail and why), gates and '
                                                                          'the assembled cut.'),
@@ -335,26 +340,28 @@ class LSDubDub(io.ComfyNode):
         return next(iter(kits.values())) if len(kits) == 1 else None
 
     @classmethod
-    def _shot_key(cls, project, source, s, song, align, kit, tweaks, masks, cast):
+    def _shot_key(cls, project, source, s, song, align, kit, tweaks, masks, cast, vocalisations='skip'):
         occ = (masks.shots or {}).get(str(s['shot'])) if masks else None
+        extra = {} if vocalisations == 'skip' else {'vocalisations': vocalisations}      # skip = the keys before the option
         return stage_key('LSDubDub/shot', {'f': [s['f0'], s['f1']], 'start': s['start'], 'target': s.get('target'),
-                                           'box': s.get('box'), 'occ': file_hash(occ) if occ and os.path.exists(occ) else ''},
+                                           'box': s.get('box'), 'occ': file_hash(occ) if occ and os.path.exists(occ) else '', **extra},
                          [project.cache_key(), source.hash, song.cache_key(), align.hash, kit.hash, tweaks.cache_key(),
                           cast.cache_key() if cast else ''])
 
     @classmethod
-    def _keys(cls, project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots):
+    def _keys(cls, project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots, vocalisations='skip'):
         from .project import parse_force_shots
         kits = {k.identity: k for k in (kit, kit_2, kit_3) if k is not None}
         tw = tweaks or DEFAULT_TWEAKS
         plan = cls._plan(project, shots, kits, parse_force_shots(only_shots))
-        return {s['shot']: cls._shot_key(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast) for s in plan}, plan, kits, tw
+        return {s['shot']: cls._shot_key(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast, vocalisations)
+                for s in plan}, plan, kits, tw
 
     @classmethod
     def fingerprint_inputs(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None,
-                           cast=None, only_shots='', quality=18, on_fail='source', audio='source'):
+                           cast=None, only_shots='', quality=18, on_fail='source', audio='source', vocalisations='skip'):
         if project.mode == 'test_learn': return stage_key('LSDubDub', {'mode': 'test_learn'}, [source.hash])
-        keys = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots)[0]
+        keys = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots, vocalisations)[0]
         return stage_key('LSDubDub', {'shots': keys, 'force': list(project.force_shots), 'crf': quality, 'fail': on_fail, 'audio': audio})
 
     @classmethod
@@ -374,7 +381,7 @@ class LSDubDub(io.ComfyNode):
         return occ, None
 
     @classmethod
-    def run_shot(cls, project, source, s, song, align, kit, tw, masks, cast, st):
+    def run_shot(cls, project, source, s, song, align, kit, tw, masks, cast, st, vocalisations='skip'):
         from .lsdub_engine.core import sing as SING, continuity as CONT
         work = st.path('work')
         os.makedirs(work, exist_ok=True)
@@ -382,7 +389,8 @@ class LSDubDub(io.ComfyNode):
         occ, note = cls._mask_for(masks, s, tw, s['f1'] - s['f0'] + 1)
         if occ: shutil.copyfile(occ, os.path.join(work, 'occ.npz'))
         f = tw.flags
-        pa = ['--lib', kit.dir, *_kit_flags(project, kit.identity), *SING_EXTRA, *tw.settings.split()]
+        pa = ['--lib', kit.dir, *_kit_flags(project, kit.identity), *SING_EXTRA, *tw.settings.split(),
+              '--vocalisations', vocalisations]
         info = SING.run(take, align.align, song.lead or song.vocal or song.mix, s['start'] - project.song_offset,
                         st.path('sung.mp4'), work, pa, char=s['target'] if cast else None, db=cast.db if cast else None,
                         box=None if cast else s.get('box'), face_target=float(f.get('face_target', 512.0)),
@@ -399,13 +407,14 @@ class LSDubDub(io.ComfyNode):
 
     @classmethod
     def execute(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None, cast=None,
-                only_shots='', quality=18, on_fail='source', audio='source'):
+                only_shots='', quality=18, on_fail='source', audio='source', vocalisations='skip'):
         from . import devices as _dev
         _dev.ensure_face_models()
         from .project import take_force
         if project.mode == 'test_learn':                              # analyse only: the cut is the source
             return io.NodeOutput(T.Render(shots={}, cut=source.path, hash=source.hash), cls._video(source.path))
-        keys, plan, kits, tw = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots)
+        keys, plan, kits, tw = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots,
+                                         vocalisations)
         forced = take_force(project, 'dub')
         try:
             import comfy.utils
@@ -418,7 +427,8 @@ class LSDubDub(io.ComfyNode):
             st = project.shot(sid, k)
             if shots_todo(project, k, [sid], forced):
                 try:
-                    render, info = cls.run_shot(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast, st)
+                    render, info = cls.run_shot(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast, st,
+                                                vocalisations)
                     reason = '' if info.get('pass') else (f"sync gate failed: measured corr {info.get('corr')} "
                                                            f"(open in silence {info.get('open_in_silence')})")
                     st.mark_done(bool(info.get('pass')), corr=info.get('corr'), auto=(info.get('auto') or {}).get('winner'),

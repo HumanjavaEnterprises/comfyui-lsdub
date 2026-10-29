@@ -651,7 +651,7 @@
    ],
    "size": [
     340,
-    450
+    476
    ],
    "flags": {},
    "order": 13,
@@ -738,7 +738,8 @@
     "",
     18,
     "source",
-    "song"
+    "song",
+    "mouth"
    ],
    "color": "#532",
    "title": "LSDub Dub"

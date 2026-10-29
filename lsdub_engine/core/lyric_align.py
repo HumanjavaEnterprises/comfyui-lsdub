@@ -57,6 +57,156 @@ def spread_lyrics(tokens, env, t0, hop_s=0.01, floor_db=-35.0):
              'heard': '', 'src': 'lyric', 'align': 'spread'} for i, w in enumerate(tokens)]
 
 
+GAP_CLOSE = 0.12                     # s: an unvoiced gap this long inside a word closes the mouth
+SIL_DB = 20 * np.log10(0.02)          # dBFS: the sync gate's silence level (audits.snap.SIL_RMS)
+HOLD_MAX = 0.8                        # s: the longest held-note stretch given to the word before a voiced gap
+FILL_MIN = 0.3                        # s: an uncovered voiced stretch this long gets words (an unheard line, or 'da')
+FILL_SYL = 0.3                        # s per filled vocalisation syllable
+LOW_MATCH = 0.5                       # lyric match ratio below which speech-to-text timing is not trusted
+
+
+def voiced_thr(env, floor_db=35.0):
+    """voiced = within floor_db of the window peak, and never below the sync gate's silence level."""
+    return max(float(env.max()) - floor_db, SIL_DB) if len(env) else SIL_DB
+
+
+def voiced_runs(env, thr, t0, lo, hi, gap=GAP_CLOSE, hop_s=0.01):
+    """the voiced stretches in [lo, hi) (source time), unvoiced gaps shorter than `gap` bridged -> [(start, end)]."""
+    i0 = max(0, int(round((lo - t0) / hop_s)))
+    i1 = min(len(env), int(round((hi - t0) / hop_s)))
+    idx = np.flatnonzero(env[i0:i1] > thr) if i1 > i0 else np.array([], int)
+    if not len(idx): return []
+    runs, s, prev = [], idx[0], idx[0]
+    for j in idx[1:]:
+        if (j - prev - 1) * hop_s >= gap - 1e-9:
+            runs.append((s, prev + 1))
+            s = j
+        prev = j
+    runs.append((s, prev + 1))
+    return [(t0 + (i0 + a) * hop_s, t0 + (i0 + b) * hop_s) for a, b in runs]
+
+
+def warp_to_runs(items, runs):
+    """items [(label, weight)] laid end to end over the voiced runs joined (the gaps hold nothing) -> [(label, start, end)];
+    an item that crosses a gap is cut in two, so the mouth closes over the gap."""
+    total = sum(e - s for s, e in runs)
+    W = float(sum(w for _, w in items))
+    if total <= 0 or W <= 0: return []
+    out, pos = [], 0.0
+    for lab, w in items:
+        a, b = pos, pos + total * w / W
+        pos = b
+        acc = 0.0
+        for s, e in runs:
+            lo, hi = max(a, acc), min(b, acc + e - s)
+            if hi - lo > 1e-6: out.append((lab, s + lo - acc, s + hi - acc))
+            acc += e - s
+    return out
+
+
+def phone_weight(p):
+    return 4.0 if p.rstrip('012') in VOWELS else 1.0
+
+
+def spread_voiced(w, phones, env, thr, t0, gap=GAP_CLOSE):
+    """the fallback spread, clipped to the voice: phones (vowels 4x) over the word's voiced frames only; an unvoiced gap
+    of `gap` s or more inside the word holds no phone (the mouth closes there). A word with no voiced frame: plain spread."""
+    runs = voiced_runs(env, thr, t0, w['start'], w['end'], gap)
+    if not runs: return spread(w, phones)
+    pcs = warp_to_runs([(i, phone_weight(p)) for i, p in enumerate(phones)], runs)
+    return [{'p': phones[i], 'start': float(a), 'end': float(b)} for i, a, b in pcs]
+
+
+def syllables(word):
+    return max(1, len(re.findall(r'[aeiouy]+', word)))
+
+
+def place_lyrics(lines, env, t0, thr, lo=None, hi=None):
+    """no usable speech-to-text timing: the lyric lines laid over the voiced stretches of [lo, hi) in order, each word
+    weighted by its syllables; nothing lands in an unvoiced gap. -> whisper-like word dicts (align 'voiced-place')."""
+    lo = t0 if lo is None else lo
+    hi = t0 + len(env) / 100 if hi is None else hi
+    toks = [w for ln in lines for w in ln]
+    runs = voiced_runs(env, thr, t0, lo, hi)
+    if not toks or not runs: return []
+    pcs = warp_to_runs([(i, syllables(w)) for i, w in enumerate(toks)], runs)
+    out = {}
+    for i, a, b in pcs:
+        o = out.setdefault(i, {'w': toks[i], 'start': a, 'end': b, 'p': 0.0, 'heard': '', 'src': 'lyric', 'align': 'voiced-place'})
+        o['end'] = b
+    return [out[i] for i in sorted(out)]
+
+
+def lyric_lines(path):
+    """the lyric sheet as lines of normalised tokens (section headers and empty lines dropped)."""
+    out = []
+    for line in open(path):
+        line = line.strip()
+        if not line or line.startswith('['): continue
+        t = [n for n in (norm(w) for w in re.split(r"[\s\-]+", line)) if n]
+        if t: out.append(t)
+    return out
+
+
+def unheard_lines(lines, words):
+    """lyric lines none of whose words were aligned -> [(line index, tokens, lo, hi)]: lo / hi = the end of the last
+    heard word of an earlier line and the start of the first heard word of a later line (None = open)."""
+    flat = [(li, w) for li, ln in enumerate(lines) for w in ln]
+    sm = difflib.SequenceMatcher(None, [w for _, w in flat], [w['w'] for w in words], autojunk=False)
+    got = {}
+    for a, b, n in sm.get_matching_blocks():
+        for k in range(n): got[a + k] = words[b + k]
+    heard = {}
+    for k, (li, _) in enumerate(flat):
+        if k in got: heard.setdefault(li, []).append(got[k])
+    out = []
+    for li, ln in enumerate(lines):
+        if li in heard: continue
+        before = [w['end'] for j in heard if j < li for w in heard[j]]
+        after = [w['start'] for j in heard if j > li for w in heard[j]]
+        out.append((li, ln, max(before) if before else None, min(after) if after else None))
+    return out
+
+
+def fill_voiced(final, lines, env, thr, t0, t1, extra=None, min_len=FILL_MIN, syl=FILL_SYL):
+    """singing that no word covers: an unheard lyric line goes in the longest uncovered voiced stretch between its
+    neighbours; any other uncovered stretch of min_len s or more is a vocalisation ('da' per syl s, src 'vocalisation').
+    Returns the added words (align 'voiced-fill'), phones clipped to the voice."""
+    extra = extra or {}
+
+    def free():
+        cov = sorted((w['start'], w['end']) for w in final)
+        pcs = []
+        for s, e in voiced_runs(env, thr, t0, t0, t1):
+            cur = s
+            for a, b in cov:
+                if b <= cur or a >= e: continue
+                if a - cur >= min_len: pcs.append((cur, a))
+                cur = max(cur, b)
+            if e - cur >= min_len: pcs.append((cur, e))
+        return pcs
+
+    added = []
+    for li, toks, lo, hi in unheard_lines(lines, final) if lines else []:
+        c = [(s, e) for s, e in free() if (lo is None or s >= lo - 1e-6) and (hi is None or e <= hi + 1e-6)]
+        if not c: continue
+        s, e = max(c, key=lambda r: r[1] - r[0])
+        for w in place_lyrics([toks], env, t0, thr, s, e):
+            w.update(align='voiced-fill', p_whisper=0.0, phones=spread_voiced(w, dict_phones(None, w['w'], extra), env, thr, t0))
+            final.append(w)
+            added.append(w)
+    for s, e in free():
+        k = max(1, int(round((e - s) / syl)))
+        for i in range(k):
+            w = {'w': 'da', 'start': s + i * (e - s) / k, 'end': s + (i + 1) * (e - s) / k, 'p': 0.0, 'heard': '',
+                 'src': 'vocalisation', 'align': 'voiced-fill', 'p_whisper': 0.0}
+            w['phones'] = spread_voiced(w, ['D', 'AH'], env, thr, t0)
+            final.append(w)
+            added.append(w)
+    final.sort(key=lambda w: w['start'])
+    return added
+
+
 def stt(audio, t0, t1, model='large-v3', prompt='', device='cpu', device_index=0, download_root=None):
     from faster_whisper import WhisperModel
     with tempfile.TemporaryDirectory() as d:
@@ -138,17 +288,51 @@ def pron(d, w, extra):
         s = make_g2p('eng', 'eng-arpabet')(w).output_string.strip()
         if s: return s
     except Exception: pass
-    raise RuntimeError(f'no pronunciation for {w!r}; pass --extra-dict "{w}=P H O N E S"')
+    print(f'align: no pronunciation for {w!r}; reading it off the spelling (add a pronunciation for a better one)', file=sys.stderr)
+    return ' '.join(letter_phones(w))
+
+
+_DIGRAPH = {'ch': ['CH'], 'sh': ['SH'], 'th': ['TH'], 'ph': ['F'], 'ng': ['NG'], 'ck': ['K'], 'wh': ['W'], 'qu': ['K', 'W']}
+_CONS = {'b': 'B', 'c': 'K', 'd': 'D', 'f': 'F', 'g': 'G', 'h': 'HH', 'j': 'JH', 'k': 'K', 'l': 'L', 'm': 'M', 'n': 'N',
+         'p': 'P', 'q': 'K', 'r': 'R', 's': 'S', 't': 'T', 'v': 'V', 'w': 'W', 'x': 'K S', 'z': 'Z'}
+_VGROUP = {'ee': 'IY', 'ea': 'IY', 'ie': 'IY', 'oo': 'UW', 'ou': 'AW', 'ow': 'OW', 'ai': 'EY', 'ay': 'EY', 'ei': 'EY',
+           'ey': 'EY', 'oa': 'OW', 'oi': 'OY', 'oy': 'OY', 'au': 'AO', 'aw': 'AO'}
+_V1 = {'a': 'AE', 'e': 'EH', 'i': 'IH', 'o': 'AA', 'u': 'AH', 'y': 'IY'}
+
+
+def letter_phones(w):
+    """last resort for a word no dictionary or g2p knows: phones read off the spelling (a rough but mouth-shaped guess:
+    the closures and vowels land where the letters put them)."""
+    w = re.sub(r"[^a-z]", '', w.lower())
+    out, i = [], 0
+    while i < len(w):
+        two = w[i:i + 2]
+        if two in _DIGRAPH:
+            out += _DIGRAPH[two]
+            i += 2
+        elif w[i] in 'aeiouy' and not (w[i] == 'y' and i == 0):
+            j = i
+            while j < len(w) and w[j] in 'aeiouy': j += 1
+            g = w[i:j]
+            if g == 'e' and j == len(w) and out: pass                    # a silent final e
+            elif g in _VGROUP: out.append(_VGROUP[g])
+            elif len(g) >= 2 and g[0] in 'ei' and g[1] in 'aou': out += [_V1['i'].replace('IH', 'IY'), _V1.get(g[1], 'AH')]
+            else: out.append(_V1[g[0]])
+            i = j
+        else:
+            if w[i] in _CONS and not (out and w[i] == w[i - 1]): out += _CONS[w[i]].split()
+            i += 1
+    return out or ['AH']
 
 
 def dict_phones(d, w, extra):
     if w in extra: return extra[w].split()
-    from g2p import make_g2p
     try:
+        from g2p import make_g2p
         s = make_g2p('eng', 'eng-arpabet')(w).output_string.split()
         if s: return s
     except Exception: pass
-    return ['AH']
+    return letter_phones(w)
 
 
 def sphinx_phrase(pcm, words, extra, off):
@@ -412,9 +596,13 @@ def main(argv=None):
     pcm = load_pcm(a.audio, a.t0, a.t1)
     env = envelope(pcm)
     thr = env.max() - 35
-    if not words:                                                       # speech-to-text heard no words (e.g. a short or
-        words = spread_lyrics(lyric_tokens(a.lyrics), env, a.t0)         # heavily produced vocal): the lyrics, spread over
-        notes.append('speech-to-text heard no words: lyrics spread evenly over the voiced span (low confidence)')
+    vthr = voiced_thr(env)
+    lines = lyric_lines(a.lyrics)
+    if not words or ratio < LOW_MATCH:                                  # speech-to-text heard nothing, or not the lyrics
+        words = place_lyrics(lines, env, a.t0, vthr)                    # (a scat chorus, a heavy mix): the lyric sheet over
+        notes.append(f'lyric match {ratio} < {LOW_MATCH}: speech-to-text timing not used; the lyrics were placed over '   # the
+                     'the voiced stretches (low confidence)')                                                            # voice
+        if not words: words = spread_lyrics(lyric_tokens(a.lyrics), env, a.t0)
         if not words: raise RuntimeError('align: no lyrics and no sung words heard')
     snap(words, env, env.max() - a.snap_db, a.t0)
     phrases, cur = [], [words[0]]
@@ -464,8 +652,9 @@ def main(argv=None):
             else:
                 for w in ph:
                     ps = dict_phones(None, w['w'], extra)
-                    final.append({'w': w['w'], 'start': w['start'], 'end': w['end'], 'src': w['src'], 'heard': w['heard'],
-                                  'p_whisper': w['p'], 'align': 'whisper+spread', 'phones': spread(w, ps), 'idx': w['idx']})
+                    ph_ = spread_voiced(w, ps, env, vthr, a.t0)
+                    final.append({'w': w['w'], 'start': ph_[0]['start'], 'end': ph_[-1]['end'], 'src': w['src'], 'heard': w['heard'],
+                                  'p_whisper': w['p'], 'align': 'whisper+spread', 'phones': ph_, 'idx': w['idx']})
                 report.append({'phrase': ' '.join(w['w'] for w in ph), 'method': 'fallback', 'why': why})
         return final, report
 
@@ -553,15 +742,36 @@ def main(argv=None):
     for prev, w in zip(final, final[1:]):   # a voiced gap between words = a held note: stretch the earlier word's last vowel
         g0, g1 = int((prev['end'] - a.t0) * 100), int((w['start'] - a.t0) * 100)
         if g1 - g0 >= 5 and v[g0:g1].mean() > 0.7:
-            d = w['start'] - prev['end']
+            run = voiced_runs(env, vthr, a.t0, prev['end'], w['start'])   # up to the first unvoiced gap, at most HOLD_MAX
+            if not run or run[0][0] > prev['end'] + 0.03: continue
+            d = min(run[0][1], prev['end'] + HOLD_MAX) - prev['end']
+            if d < 0.03: continue
             ph = prev['phones']
             k = max([i for i, p in enumerate(ph) if p['p'].rstrip('012') in VOWELS] or [len(ph) - 1])
             ph[k]['end'] += d
             for p in ph[k + 1:]:
                 p['start'] += d
                 p['end'] += d
-            prev['end'] = w['start']
+            prev['end'] += d
             prev['held_s'] = round(d, 3)
+    if final and final[-1]['end'] < a.t1:   # the last word's held note, to the same limits
+        w = final[-1]
+        run = voiced_runs(env, vthr, a.t0, w['end'], a.t1)
+        if run and run[0][0] <= w['end'] + 0.03:
+            d = min(run[0][1], w['end'] + HOLD_MAX) - w['end']
+            if d >= 0.03:
+                ph = w['phones']
+                k = max([i for i, p in enumerate(ph) if p['p'].rstrip('012') in VOWELS] or [len(ph) - 1])
+                ph[k]['end'] += d
+                for p in ph[k + 1:]:
+                    p['start'] += d
+                    p['end'] += d
+                w['end'] += d
+                w['held_s'] = round(d, 3)
+    fills = fill_voiced(final, lines, env, vthr, a.t0, a.t1, extra)   # singing no word covers: unheard lines, then 'da'
+    if fills:
+        notes.append(f"{len(fills)} word(s) placed in voiced stretches no aligned word covered: "
+                     + ' '.join(w['w'] for w in fills[:24]) + (' ...' if len(fills) > 24 else ''))
     for w in final:
         w['start'], w['end'] = round(w['start'], 3), round(w['end'], 3)
         for p in w['phones']:

@@ -3,6 +3,7 @@
 """AUDIO lane: the song slot and the lyric alignment (word timings -> viseme track, vocalisations skipped)."""
 import json
 import os
+import sys
 
 from comfy_api.v0_0_2 import io
 
@@ -15,6 +16,27 @@ from .project import file_hash, stage_key, text_hash
 GENERATION_LATER = ('{node}: generating from a prompt arrives in a later LSDub release. For now connect a finished '
                     '{what} to the "{port}" input.')
 WHISPER_MODELS = ['large-v3', 'medium', 'small', 'base']
+MATCH_WARN, MATCH_FAIL = 0.5, 0.2      # lyric match ratio: below WARN the lyrics are placed on the voice; below FAIL, an error
+
+
+def lyric_prompt(path, limit=600):
+    """the lyric sheet as a speech-to-text prompt (section headers dropped): the recogniser hears sung words it would
+    otherwise turn into other words (a chorus of names, invented words)."""
+    lines = [ln.strip() for ln in open(path, encoding='utf-8') if ln.strip() and not ln.strip().startswith('[')]
+    return ' '.join(ln if ln[-1] in '.,!?;:' else ln + '.' for ln in lines)[:limit]
+
+
+def check_match(ratio, given):
+    """the lyric match ratio of an alignment against a given lyric sheet -> a warning string, '' or raises."""
+    if not given or ratio is None: return ''
+    if ratio < MATCH_FAIL:
+        raise RuntimeError(f'LSDub Align: the lyrics match what is sung for only {ratio:.2f} of the words (below {MATCH_FAIL}). '
+                           'Check that the lyrics belong to this song and are in order, or leave the lyrics out to use '
+                           'what speech-to-text hears.')
+    if ratio < MATCH_WARN:
+        return (f'lyric match {ratio:.2f} is below {MATCH_WARN}: the lyrics were placed over the voiced stretches, '
+                'not timed by speech-to-text. Check the lyric check.')
+    return ''
 
 
 class LSDubSongSlot(io.ComfyNode):
@@ -82,7 +104,7 @@ class LSDubSongSlot(io.ComfyNode):
                                     offset=project.song_offset), audio)
 
 
-def lyric_check_md(align, vis_skip=None):
+def lyric_check_md(align, vis_skip=None, warn=''):
     """the alignment as a reviewable sheet: match ratio, the words the aligner is least sure of, the skipped spans."""
     from .lsdub_engine.core import lyric_check as LC
     A = json.load(open(align))
@@ -90,6 +112,7 @@ def lyric_check_md(align, vis_skip=None):
     weak = sorted(((*LC.confidence(r), r) for r in rows), key=lambda x: x[0])
     L = ['# LSDub lyric check', '',
          f"{len(rows)} words aligned; lyric match {A.get('lyric_match_ratio')}; aligner {A.get('aligner')}.", '',
+         *([f'**Warning:** {warn}', ''] if warn else []),
          '## Least certain words', '', '| t (s) | sung | heard | lyric | timing | confidence | why |', '|---|---|---|---|---|---|---|']
     for c, why, r in weak[:20]:
         if c >= LC.WEAK_BELOW: break
@@ -139,7 +162,7 @@ class LSDubAlign(io.ComfyNode):
         vh = media.audio_hash(vocal) if vocal is not None else (song.hashes.get('lead') or song.hash or file_hash(cls._vocal(song, None)))
         tj = file_hash(transcript_json) if transcript_json else ''
         return stage_key('LSDubAlign', {'vocal': vh, 'lyrics': lyrics.hash if lyrics else 'transcript', 'pron': text_hash(pronunciations.strip()),
-                                        'stt': stt_model, 'transcript': tj, 'which': 'given' if vocal is not None else
+                                        'stt': stt_model, 'transcript': tj, 'v': 2, 'which': 'given' if vocal is not None else
                                         ('lead' if song.lead else 'vocal' if song.vocal else 'mix')}, [project.cache_key()])
 
     @classmethod
@@ -173,15 +196,18 @@ class LSDubAlign(io.ComfyNode):
             argv = ['--audio', voc, '--lyrics', lyr, '--t0', '0', '--t1', f'{dur:.3f}', '--out', align,
                     '--stt-json', stt, '--aligner', 'sphinx', '--whisper-python', '', '--whisper-model', stt_model,
                     '--device', wd, '--device-index', str(wi), '--whisper-dir', devices.models_dir('whisper')]
+            if lyrics is not None: argv += ['--prompt', lyric_prompt(lyr)]
             for ln in pronunciations.splitlines():
                 if '=' in ln: argv += ['--extra-dict', ln.strip()]
             call(LA.main, argv, quiet=True, name='align')
+            warn = check_match(json.load(open(align)).get('lyric_match_ratio'), lyrics is not None)
+            if warn: print(f'[LSDub] {warn}', file=sys.stderr)
             devices.free()
             call(VT.main, ['--align', align, '--t0', '0', '--frames', str(int(dur * project.fps)), '--fps', str(project.fps),
                            '--audio', voc, '--out', vis], quiet=True, name='visemes')
             call(VO.main, ['skip', '--track', vis, '--out', vis_skip, '--lyrics', lyr, '--align', align], quiet=True,
                  name='vocalisations')
-            with open(md, 'w') as f: f.write(lyric_check_md(align, vis_skip))
+            with open(md, 'w') as f: f.write(lyric_check_md(align, vis_skip, warn))
             st.mark_done(True, vocal=voc, seconds=round(dur, 3))
         return io.NodeOutput(T.Align(align=align, hash=file_hash(align), visemes=vis_skip), open(md).read())
 

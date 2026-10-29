@@ -27,7 +27,7 @@ def stubbed(pack, monkeypatch):
     M = pack.nodes_mouth
     log = {'runs': [], 'cuts': [], 'outcome': {}}
 
-    def run_shot(cls, project, source, s, song, align, kit, tw, masks, cast, st):
+    def run_shot(cls, project, source, s, song, align, kit, tw, masks, cast, st, vocalisations='skip'):
         log['runs'].append(s['shot'])
         mode = log['outcome'].get(s['shot'], 'pass')
         if mode == 'raise': raise RuntimeError('no face found')
