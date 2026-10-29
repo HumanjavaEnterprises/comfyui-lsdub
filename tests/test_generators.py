@@ -182,7 +182,7 @@ def _perf_setup(pack, tmp_path, monkeypatch, song_s, clip_frames=121):
     import shutil
     import subprocess
     clip = str(tmp_path / f'clip{clip_frames}.mp4')
-    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', f'testsrc=size=96x64:rate=25', '-frames:v', str(clip_frames),
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=96x64:rate=25', '-frames:v', str(clip_frames),
                     '-pix_fmt', 'yuv420p', clip], check=True)
     calls = []
 
