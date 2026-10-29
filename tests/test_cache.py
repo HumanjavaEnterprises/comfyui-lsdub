@@ -76,3 +76,8 @@ def test_project_node(pack, tmp_path):
     assert N.LSDubProjectNode.fingerprint_inputs(**{**kw, 'force_shots': ''}) != N.LSDubProjectNode.fingerprint_inputs(**kw)
     d = N.LSDubProjectNode.execute(**{**kw, 'root': ''}).args[0]
     assert d.root.endswith(os.path.join('output', 'lsdub'))
+
+
+def test_fingerprint_before_inputs_exist_is_quiet(pack):
+    for cls in (pack.nodes_audio.LSDubAlign, pack.nodes_video.LSDubTriage, pack.nodes_mouth.LSDubDub, pack.nodes_qa.LSDubVerify):
+        assert cls.fingerprint_inputs(project=None, song=None) == 'lsdub:pending'

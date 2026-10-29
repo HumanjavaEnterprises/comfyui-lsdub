@@ -251,3 +251,22 @@ def test_lead_vocal_engine_on_synthetic_audio():
     assert d['lead'].shape == (2, len(x)) and np.allclose(d['lead'] + d['backing'], np.stack([x, x]), atol=1e-5)
     d2 = lv.extract(np.stack([x, x]), share=0.99)                                       # a stricter share keeps less
     assert (d2['active'] > 0).sum() <= (act > 0).sum()
+
+
+def test_align_retries_once_without_the_prompt(pack, tmp_path, align_stubs, monkeypatch):
+    T = pack.lsdub_types
+    LA = _mod(pack, 'lsdub_engine.core.lyric_align')
+    lead = _wav(tmp_path / 'lead.wav')
+    lp = tmp_path / 'lyrics.txt'
+    lp.write_text('hello world\n')
+    first = LA.main
+    calls = []
+
+    def flaky(argv):                                                                # a bad transcript, then a good one
+        calls.append(list(argv))
+        align_stubs['ratio'] = 0.0 if len(calls) == 1 else 0.9
+        first(argv)
+    monkeypatch.setattr(LA, 'main', flaky)
+    rec, md = pack.nodes_audio.LSDubAlign.execute(_proj(pack, tmp_path), T.Song(mix=lead, lead=lead, hash='s'),
+                                                  T.Lyrics(path=str(lp), hash='l')).args
+    assert len(calls) == 2 and '--prompt' in calls[0] and '--prompt' not in calls[1] and 'lyric match 0.9' in md

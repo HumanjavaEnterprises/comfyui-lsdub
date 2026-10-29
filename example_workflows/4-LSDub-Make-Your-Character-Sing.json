@@ -1,13 +1,37 @@
 {
- "last_node_id": 18,
+ "last_node_id": 19,
  "last_link_id": 41,
  "nodes": [
+  {
+   "id": 19,
+   "type": "MarkdownNote",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    480,
+    400
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "properties": {},
+   "title": "Start here",
+   "widgets_values": [
+    "## LSDub 4: Make Your Character Sing\n**Does:** a song + a character image -> a video of the character singing it: vocal split, lead vocal, alignment, an LTX-2.5 performance as long as the song, a lip kit from it, the dub, Verify (the sync score) and the saved video with the song.\n\n**Needs:** a big GPU (or backend = comfy_cloud), the generator models and the Mel-Band RoFormer vocal checkpoint in models/audio_separation (README).\n\n**Time:** about 30-40 min on a 96 GB card for the 15 s demo song (\"About That Time\", an ACE-Step song of ours).\n\n**Change:** *Load Audio* (your song), *Load Image* (your character), *LSDub Performance* prompt, *LSDub Lyrics*."
+   ],
+   "color": "#432",
+   "bgcolor": "#653"
+  },
   {
    "id": 1,
    "type": "LSDubProject",
    "pos": [
     0,
-    0
+    420
    ],
    "size": [
     340,
@@ -48,8 +72,8 @@
     0.0,
     "none",
     0,
-    "local",
-    ""
+    "",
+    "local"
    ],
    "color": "#335",
    "title": "LSDub Project"
@@ -58,8 +82,8 @@
    "id": 2,
    "type": "LoadAudio",
    "pos": [
-    0,
-    500
+    520,
+    458
    ],
    "size": [
     300,
@@ -84,7 +108,7 @@
     "Node name for S&R": "LoadAudio"
    },
    "widgets_values": [
-    "lsdub_demo_landing_song_12s.wav",
+    "lsdub_demo_alr_song_15s.wav",
     null,
     null
    ]
@@ -93,8 +117,8 @@
    "id": 3,
    "type": "LSDubVocalSplit",
    "pos": [
-    400,
-    500
+    860,
+    458
    ],
    "size": [
     340,
@@ -140,8 +164,8 @@
    "id": 4,
    "type": "LSDubLeadVocal",
    "pos": [
-    800,
-    500
+    1240,
+    458
    ],
    "size": [
     340,
@@ -193,8 +217,8 @@
    "id": 5,
    "type": "LSDubSongSlot",
    "pos": [
-    1200,
-    500
+    1620,
+    458
    ],
    "size": [
     340,
@@ -261,8 +285,8 @@
    "id": 6,
    "type": "LoadImage",
    "pos": [
-    0,
-    250
+    520,
+    50
    ],
    "size": [
     300,
@@ -300,8 +324,8 @@
    "id": 7,
    "type": "LSDubPerformance",
    "pos": [
-    400,
-    0
+    860,
+    50
    ],
    "size": [
     340,
@@ -364,8 +388,8 @@
    "id": 8,
    "type": "LSDubShotSplit",
    "pos": [
-    800,
-    0
+    1240,
+    50
    ],
    "size": [
     340,
@@ -414,8 +438,8 @@
    "id": 9,
    "type": "LSDubLyricsSlot",
    "pos": [
-    1200,
-    800
+    2000,
+    458
    ],
    "size": [
     340,
@@ -445,7 +469,7 @@
     "Node name for S&R": "LSDubLyricsSlot"
    },
    "widgets_values": [
-    "Pleiadians don't dance\nPleiadians don't dance\nPleiadians don't dance\nWhy don't they try?"
+    "aged like rocks, still in the box\ntimeless on the shelf, winding my own clock\nit's, it's about that time\nhits, it's about that time\nthis is about that time"
    ],
    "color": "#523",
    "title": "LSDub Lyrics"
@@ -454,8 +478,8 @@
    "id": 10,
    "type": "LSDubAlign",
    "pos": [
-    1600,
-    800
+    2380,
+    458
    ],
    "size": [
     340,
@@ -518,8 +542,8 @@
    "id": 11,
    "type": "LSDubTriage",
    "pos": [
-    1200,
-    0
+    1620,
+    50
    ],
    "size": [
     340,
@@ -592,8 +616,8 @@
    "id": 12,
    "type": "LSDubBuildLipKit",
    "pos": [
-    1200,
-    1000
+    520,
+    866
    ],
    "size": [
     340,
@@ -646,8 +670,8 @@
    "id": 13,
    "type": "LSDubDub",
    "pos": [
-    1600,
-    700
+    900,
+    866
    ],
    "size": [
     340,
@@ -748,8 +772,8 @@
    "id": 14,
    "type": "LSDubVerify",
    "pos": [
-    2000,
-    700
+    520,
+    1482
    ],
    "size": [
     340,
@@ -819,8 +843,8 @@
    "id": 15,
    "type": "PreviewAny",
    "pos": [
-    2400,
-    700
+    900,
+    1482
    ],
    "size": [
     300,
@@ -851,14 +875,15 @@
     null,
     null,
     false
-   ]
+   ],
+   "title": "Verify (sync score)"
   },
   {
    "id": 16,
    "type": "LSDubFixIt",
    "pos": [
-    2000,
-    1000
+    1240,
+    1482
    ],
    "size": [
     340,
@@ -923,8 +948,8 @@
    "id": 17,
    "type": "PreviewAny",
    "pos": [
-    2400,
-    1000
+    1620,
+    1482
    ],
    "size": [
     300,
@@ -955,14 +980,15 @@
     null,
     null,
     false
-   ]
+   ],
+   "title": "Fix-it list"
   },
   {
    "id": 18,
    "type": "LSDubSaveCut",
    "pos": [
-    2000,
-    1300
+    1960,
+    1482
    ],
    "size": [
     340,
@@ -1338,7 +1364,56 @@
    "LSDUB_SHOTS"
   ]
  ],
- "groups": [],
+ "groups": [
+  {
+   "title": "VIDEO",
+   "bounding": [
+    500,
+    0,
+    1500,
+    348
+   ],
+   "color": "#3f789e",
+   "font_size": 28,
+   "flags": {}
+  },
+  {
+   "title": "AUDIO",
+   "bounding": [
+    500,
+    408,
+    2260,
+    348
+   ],
+   "color": "#8A8",
+   "font_size": 28,
+   "flags": {}
+  },
+  {
+   "title": "MOUTH",
+   "bounding": [
+    500,
+    816,
+    780,
+    556
+   ],
+   "color": "#b06634",
+   "font_size": 28,
+   "flags": {}
+  },
+  {
+   "title": "QA",
+   "bounding": [
+    500,
+    1432,
+    1840,
+    296
+   ],
+   "color": "#88A",
+   "font_size": 28,
+   "flags": {}
+  }
+ ],
  "config": {},
  "extra": {
   "ds": {

@@ -221,8 +221,17 @@ def stt(audio, t0, t1, model='large-v3', prompt='', device='cpu', device_index=0
         import numpy as np
         raw = ff.run(['ffmpeg', '-v', 'error', '-i', p, '-ac', '1', '-ar', '16000', '-f', 'f32le', '-'], capture_output=True, check=True).stdout
         pcm16 = np.frombuffer(raw, np.float32)          # decoded here, not by faster-whisper (its PyAV call varies by version)
-        segs, _ = m.transcribe(pcm16, word_timestamps=True, language='en', vad_filter=False, initial_prompt=prompt or None)
-        return [{'w': w.word.strip(), 'start': round(w.start + t0, 3), 'end': round(w.end + t0, 3), 'p': round(w.probability, 3)}
+        # 1 s of silence each side: a clip that starts mid-singing, prompted with the lyric sheet, otherwise makes the
+        # recogniser hallucinate a stock sentence ("I don't know what you're talking about") instead of the words
+        PAD = 1.0
+        pcm16 = np.concatenate([np.zeros(16000, np.float32), pcm16, np.zeros(16000, np.float32)])
+        # deterministic decoding: no temperature fallback (it samples, so the same vocal could transcribe differently
+        # from run to run) and no conditioning on earlier text (one misheard line no longer derails the rest)
+        segs, _ = m.transcribe(pcm16, word_timestamps=True, language='en', vad_filter=False, initial_prompt=prompt or None,
+                               temperature=0.0, condition_on_previous_text=False, beam_size=5)
+        dur = len(pcm16) / 16000.0 - 2 * PAD
+        clamp = lambda v: min(max(v - PAD, 0.0), dur)
+        return [{'w': w.word.strip(), 'start': round(clamp(w.start) + t0, 3), 'end': round(clamp(w.end) + t0, 3), 'p': round(w.probability, 3)}
                 for s in segs for w in s.words]
 
 

@@ -38,7 +38,7 @@ PublisherId = "vveerrgg"
 DisplayName = "LSDub"
 Icon = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/v0.1.0/assets/icon.png"
 Banner = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/v0.1.0/assets/banner.png"
-requires-comfyui = ">=0.3.50"
+requires-comfyui = ">=0.3.48"   # the first upstream tag with comfy_api.v0_0_2 (checked 2026-10-29); tested on 0.34
 includes = []
 
 [tool.ruff]

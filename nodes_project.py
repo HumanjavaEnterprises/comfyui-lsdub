@@ -37,12 +37,12 @@ class LSDubProjectNode(io.ComfyNode):
                                        'named character can sing.'),
                 io.Int.Input('seed', default=0, min=0, max=2 ** 31 - 1,
                              tooltip='Seed for the generator slots (video, still, song).'),
+                io.String.Input('force_shots', default='',
+                                tooltip='Shots to redo even if they passed, e.g. "21,23". Their earlier renders are kept.'),
                 io.Combo.Input('backend', options=['local', 'comfy_cloud'], default='local', optional=True,
                                tooltip='Where the generator slots (song, still, video, lip kit) run: local = this '
                                        'ComfyUI\'s GPU and models; comfy_cloud = Comfy Cloud, signed in with your comfy.org '
                                        'account (needs a paid Comfy Cloud plan; uses your credits). The dub and QA always run locally.'),
-                io.String.Input('force_shots', default='',
-                                tooltip='Shots to redo even if they passed, e.g. "21,23". Their earlier renders are kept.'),
             ],
             outputs=[T.LSDubProject.Output(display_name='project', tooltip='The project: pass it to every LSDub node.')],
         )

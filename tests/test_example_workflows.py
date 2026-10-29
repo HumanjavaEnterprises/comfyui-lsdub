@@ -55,8 +55,9 @@ def check_workflow(wf, S):
         n_lsdub += 1
         assert n['type'] in S, f"unknown node type {n['type']}"
         s = S[n['type']]
-        sockets = [p for p in s.inputs if p.io_type not in WIDGET]
-        widgets = [p for p in s.inputs if p.io_type in WIDGET]
+        ordered = [p for p in s.inputs if not p.optional] + [p for p in s.inputs if p.optional]   # the frontend's input_order
+        widgets = [p for p in ordered if p.io_type in WIDGET]
+        sockets = [p for p in ordered if p.io_type not in WIDGET]
         assert [(i['name'], i['type']) for i in n['inputs']] == [(p.id, p.io_type) for p in sockets], n['type']
         for i, p in zip(n['inputs'], sockets):
             if not p.optional: assert i['link'] is not None and i['link'] in links, f"{n['type']}.{p.id} is not linked"
@@ -89,6 +90,18 @@ def test_workflow_four_mouths_the_vocalisations(pack):
     wf = json.load(open([p for p in WORKFLOWS if '4-' in os.path.basename(p)][0]))
     S = schemas(pack)
     dub = next(n for n in wf['nodes'] if n['type'] == 'LSDubDub')
-    names = [p.id for p in S['LSDubDub'].inputs if p.io_type in WIDGET]
+    ins = S['LSDubDub'].inputs
+    names = [p.id for p in [q for q in ins if not q.optional] + [q for q in ins if q.optional] if p.io_type in WIDGET]
     assert dict(zip(names, dub['widgets_values']))['vocalisations'] == 'mouth'
     assert len(WORKFLOWS) == 4
+
+
+def test_project_widgets_in_ui_order(pack):
+    """the frontend fills widgets_values required-then-optional: backend must read 'local', force_shots ''."""
+    for f in WORKFLOWS:
+        wf = json.load(open(f))
+        n = next(x for x in wf['nodes'] if x['type'] == 'LSDubProject')
+        s = schemas(pack)['LSDubProject']
+        ordered = [p for p in s.inputs if not p.optional] + [p for p in s.inputs if p.optional]
+        vals = dict(zip([p.id for p in ordered if p.io_type in WIDGET], n['widgets_values']))
+        assert vals['backend'] == 'local' and vals['force_shots'] == '', (f, vals)

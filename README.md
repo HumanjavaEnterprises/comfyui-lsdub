@@ -15,6 +15,11 @@ and grades the result.
   measured sync and a fix-it list.
 - **Local by default.** Everything runs in your ComfyUI. Comfy Cloud is an opt-in setting for the generators.
 
+## Start here
+
+**Start with workflow 2** (CPU, about 10-15 min with the demo pack), **then workflow 3 on your own video.**
+Workflows 1 and 4 need a big GPU (or a paid Comfy Cloud plan) and the generator models.
+
 ## Install
 
 - **ComfyUI Manager:** search for **LSDub** and install it.
@@ -28,7 +33,7 @@ and grades the result.
   Use the Python that runs ComfyUI (its venv, or `python_embeded/python.exe` in the Windows portable build).
 
 **Requirements:**
-- ComfyUI 0.3.50 or newer (the V3 node API).
+- ComfyUI 0.3.48 or newer (the first release with the V3 node API `comfy_api.v0_0_2`); tested on 0.34.
 - Python 3.10 or newer.
 - `ffmpeg` on PATH.
 - The Python packages in `requirements.txt`: numpy, OpenCV, SciPy, MediaPipe, Pillow, faster-whisper,
@@ -40,7 +45,8 @@ and grades the result.
 
 **Demo assets** for the example workflows: `python custom_nodes/comfyui-lsdub/scripts/fetch_demo.py`. This downloads
 about 29 MB, checks its checksum, and installs into `ComfyUI/input/`. You get a 7.5 s clip, its song and dry lead
-vocal, the lyrics, a 12 s chorus, a start still and a lip kit. All are original synthetic characters and an original song.
+vocal, the lyrics and their transcript, a start still, a lip kit, and 15 s of "About That Time" (an ACE-Step song of ours)
+with its lyrics for workflow 4. All are original synthetic characters and original songs.
 If the download fails, get `lsdub-demo-0.1.0.zip` from the GitHub Releases page by hand and run
 `python scripts/fetch_demo.py --zip lsdub-demo-0.1.0.zip`.
 
@@ -54,19 +60,22 @@ Nothing is downloaded when ComfyUI starts.
 - **Disk:** about 120 GB for Prompt Everything (all the generators), about 3.5 GB for the other workflows (Whisper,
   DINOv2, the face models; plus 0.9 GB for the RoFormer in workflow 4).
 
-| used by | file | size | licence | folder |
-|---|---|---|---|---|
-| Song slot | [acestep_v1.5_xl_turbo_bf16.safetensors](https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files) | 9.3 GB | ACE-Step 1.5 licence (on its model card; v1 was Apache-2.0) | `diffusion_models` |
-| Song slot | ace_1.5_vae, qwen_0.6b_ace15, qwen_4b_ace15 (same repo) | 0.3 + 1.2 + 7.9 GB | as above (ACE-Step 1.5 files) | `vae`, `text_encoders` |
-| Still slot, Lip Kit | [qwen_image_edit_2511 (int8 or bf16)](https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI) | 20 GB | Apache-2.0 | `diffusion_models` |
-| Still slot, Lip Kit | qwen_2.5_vl_7b, qwen_image_vae, Qwen-Image-Edit-2511-Lightning-8steps lora | 16 + 0.2 + 0.8 GB | Apache-2.0 | `text_encoders`, `vae`, `loras` |
-| Video slot | [ltx-2.5-22b-distilled-transformer-bf16](https://huggingface.co/Lightricks) | 40 GB | LTX-2 Community License (revenue threshold; see its card) | `diffusion_models` |
-| Video slot | gemma4-12b-with-proj-ltx-2.5, ltx-2.5-video-vae, ltx-2.5-audio-vae | 25 + 1.4 + 0.3 GB | Gemma licence (text encoder; see its card); LTX-2 Community License (VAEs) | `text_encoders`, `vae` |
-| Vocal Split | [MelBandRoformer_kim_vocals.ckpt](https://huggingface.co/KimberleyJSN/melbandroformer) | 0.9 GB | MIT | `audio_separation` |
-| Align | Whisper large-v3 (faster-whisper / CTranslate2), downloaded on first use | 3 GB | MIT | `lsdub/whisper` |
-| Cast, Triage, Verify | DINOv2 base (facebook/dinov2-base), downloaded on first use | 0.3 GB | Apache-2.0 | `lsdub/dinov2` |
-| every face node | MediaPipe Face Landmarker + YuNet, downloaded on first use (checksummed) | 4 MB | Apache-2.0 / MIT | `lsdub` |
-| Occluders | Florence-2-large + SAM 2.1 base+, downloaded on first use | 1.6 GB | MIT / Apache-2.0 | `lsdub/occluders` |
+| used by | needed by workflows | file | size | licence | folder |
+|---|---|---|---|---|---|
+| Song slot | 1 | [acestep_v1.5_xl_turbo_bf16.safetensors](https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files) | 9.3 GB | MIT ([ACE-Step 1.5](https://huggingface.co/ACE-Step/Ace-Step1.5)) | `diffusion_models` |
+| Song slot | 1 | ace_1.5_vae, qwen_0.6b_ace15, qwen_4b_ace15 (same repo) | 0.3 + 1.2 + 7.9 GB | MIT (ACE-Step 1.5) | `vae`, `text_encoders` |
+| Still slot, Lip Kit | 1, 4 | [qwen_image_edit_2511 (int8 or bf16)](https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI) | 20 GB | Apache-2.0 | `diffusion_models` |
+| Still slot, Lip Kit | 1, 4 | qwen_2.5_vl_7b, qwen_image_vae, Qwen-Image-Edit-2511-Lightning-8steps lora | 16 + 0.2 + 0.8 GB | Apache-2.0 | `text_encoders`, `vae`, `loras` |
+| Video slot, Performance | 1, 4 | [ltx-2.5-22b-distilled-transformer-bf16](https://huggingface.co/Lightricks/LTX-2.5) | 40 GB | LTX-2.x Community License Agreement (see its card) | `diffusion_models` |
+| Video slot, Performance | 1, 4 | gemma4-12b-with-proj-ltx-2.5 (text encoder), ltx-2.5-video-vae, ltx-2.5-audio-vae | 25 + 1.4 + 0.3 GB | Apache-2.0 ([Gemma 4](https://huggingface.co/google/gemma-4-12B-it)); LTX-2.x Community License (VAEs) | `text_encoders`, `vae` |
+| Vocal Split | 4 | MelBandRoformer_kim_vocals.ckpt: download `MelBandRoformer.ckpt` from [KimberleyJSN/melbandroformer](https://huggingface.co/KimberleyJSN/melbandroformer) and save it under this name | 0.9 GB | MIT | `audio_separation` |
+| Align | all | Whisper large-v3 (faster-whisper / CTranslate2): **downloaded on first use (~3 GB)** | 3 GB | MIT | `lsdub/whisper` |
+| Cast, Triage, Verify | all | DINOv2 base (facebook/dinov2-base), downloaded on first use | 0.3 GB | Apache-2.0 | `lsdub/dinov2` |
+| every face node | all | MediaPipe Face Landmarker + YuNet, downloaded on first use (checksummed) | 4 MB | Apache-2.0 / MIT | `lsdub` |
+| Occluders | optional | Florence-2-large + SAM 2.1 base+, downloaded on first use | 1.6 GB | MIT / Apache-2.0 | `lsdub/occluders` |
+
+The first Align run downloads Whisper large-v3 (about 3 GB) with no progress bar in the UI; let it finish once.
+Workflows 2 and 3 ship the demo transcript (`lsdub_demo_landing_stt.json`), so their alignment is the same on every run.
 
 Rough GPU memory needs: ACE-Step about 12 GB, Qwen-Image-Edit (int8) about 24 GB, LTX-2.5 (bf16) about 70 GB.
 ComfyUI offloads to system RAM on smaller cards, which is slower.
@@ -200,11 +209,10 @@ slots and Lip Kit building. They run there through the Comfy Python SDK (`pip in
   phone-level forced alignment and pronunciations (BSD / MIT).
 - [Florence-2](https://huggingface.co/microsoft/Florence-2-large) and
   [SAM 2.1](https://github.com/facebookresearch/sam2): occluder grounding and video masks (MIT / Apache-2.0).
-- [LTX-2.5](https://github.com/Lightricks/LTX-Video): the Video slot generator (model licence on its card).
+- [LTX-2.5](https://github.com/Lightricks/LTX-Video): the Video slot generator (LTX-2.x Community License Agreement).
 - [Qwen-Image-Edit-2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511): the Still slot and the lip-kit mouth
   shapes (Apache-2.0).
-- [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5): the Song slot generator; it also made the demo song (see
-  its model card).
+- [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5): the Song slot generator; it also made the demo songs (MIT).
 - [Comfy Python SDK](https://github.com/Comfy-Org/comfy-python-sdk): the opt-in Comfy Cloud backend (MIT).
 
 ## Licence and responsible use

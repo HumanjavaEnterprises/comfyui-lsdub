@@ -1,13 +1,37 @@
 {
- "last_node_id": 20,
+ "last_node_id": 21,
  "last_link_id": 39,
  "nodes": [
+  {
+   "id": 21,
+   "type": "MarkdownNote",
+   "pos": [
+    0,
+    0
+   ],
+   "size": [
+    480,
+    400
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [],
+   "properties": {},
+   "title": "Start here",
+   "widgets_values": [
+    "## LSDub 2: BYO Clip and Song\n**Does:** dubs the singer's mouth in your clip to your song, shot by shot, then grades it (Verify, Fix It) and saves the cut.\n\n**Needs:** the demo pack (`scripts/fetch_demo.py`): clip, song, lead vocal, lyrics and a lip kit. CPU is fine.\n\n**Time:** about 10-15 min on CPU for the 7.5 s demo (about 7-8 min per dubbed shot); re-runs are cache hits.\n\n**Change for your video:** *Load Video*, *Load Audio* x2, *LSDub Lyrics*, and *LSDub Lip Kit* kit_dir (or build a kit with workflow 1/4)."
+   ],
+   "color": "#432",
+   "bgcolor": "#653"
+  },
   {
    "id": 1,
    "type": "LSDubProject",
    "pos": [
     0,
-    0
+    420
    ],
    "size": [
     340,
@@ -48,8 +72,8 @@
     0.0,
     "landing",
     0,
-    "local",
-    ""
+    "",
+    "local"
    ],
    "color": "#335",
    "title": "LSDub Project"
@@ -58,8 +82,8 @@
    "id": 2,
    "type": "LoadVideo",
    "pos": [
-    0,
-    250
+    520,
+    50
    ],
    "size": [
     300,
@@ -91,8 +115,8 @@
    "id": 3,
    "type": "LSDubVideoSlot",
    "pos": [
-    400,
-    0
+    860,
+    50
    ],
    "size": [
     340,
@@ -152,8 +176,8 @@
    "id": 4,
    "type": "LoadAudio",
    "pos": [
-    0,
-    500
+    520,
+    406
    ],
    "size": [
     300,
@@ -186,8 +210,8 @@
    "id": 5,
    "type": "LoadAudio",
    "pos": [
-    0,
-    650
+    860,
+    406
    ],
    "size": [
     300,
@@ -220,8 +244,8 @@
    "id": 6,
    "type": "LSDubSongSlot",
    "pos": [
-    400,
-    450
+    1200,
+    406
    ],
    "size": [
     340,
@@ -287,8 +311,8 @@
    "id": 7,
    "type": "LSDubShotSplit",
    "pos": [
-    800,
-    0
+    1240,
+    50
    ],
    "size": [
     340,
@@ -336,8 +360,8 @@
    "id": 8,
    "type": "LSDubLyricsSlot",
    "pos": [
-    400,
-    700
+    1580,
+    406
    ],
    "size": [
     340,
@@ -376,8 +400,8 @@
    "id": 9,
    "type": "LSDubAlign",
    "pos": [
-    800,
-    700
+    1960,
+    406
    ],
    "size": [
     340,
@@ -433,7 +457,7 @@
    "widgets_values": [
     "",
     "large-v3",
-    ""
+    "lsdub_demo_landing_stt.json"
    ],
    "color": "#523",
    "title": "LSDub Align"
@@ -442,8 +466,8 @@
    "id": 10,
    "type": "LSDubTriage",
    "pos": [
-    1200,
-    0
+    1620,
+    50
    ],
    "size": [
     340,
@@ -520,8 +544,8 @@
    "id": 11,
    "type": "PreviewAny",
    "pos": [
-    1600,
-    0
+    2000,
+    50
    ],
    "size": [
     300,
@@ -552,14 +576,15 @@
     null,
     null,
     false
-   ]
+   ],
+   "title": "Triage report"
   },
   {
    "id": 12,
    "type": "PreviewImage",
    "pos": [
-    1600,
-    300
+    2340,
+    50
    ],
    "size": [
     300,
@@ -579,14 +604,15 @@
    "properties": {
     "Node name for S&R": "PreviewImage"
    },
-   "widgets_values": []
+   "widgets_values": [],
+   "title": "Triage sheet"
   },
   {
    "id": 13,
    "type": "PreviewAny",
    "pos": [
-    1200,
-    700
+    2340,
+    406
    ],
    "size": [
     300,
@@ -617,14 +643,15 @@
     null,
     null,
     false
-   ]
+   ],
+   "title": "Lyric check"
   },
   {
    "id": 14,
    "type": "LSDubBuildLipKit",
    "pos": [
-    1200,
-    1000
+    520,
+    814
    ],
    "size": [
     340,
@@ -677,8 +704,8 @@
    "id": 15,
    "type": "LSDubDub",
    "pos": [
-    1600,
-    700
+    900,
+    814
    ],
    "size": [
     340,
@@ -779,8 +806,8 @@
    "id": 16,
    "type": "LSDubVerify",
    "pos": [
-    2000,
-    700
+    520,
+    1430
    ],
    "size": [
     340,
@@ -850,8 +877,8 @@
    "id": 17,
    "type": "PreviewAny",
    "pos": [
-    2400,
-    700
+    900,
+    1430
    ],
    "size": [
     300,
@@ -882,14 +909,15 @@
     null,
     null,
     false
-   ]
+   ],
+   "title": "Verify (sync score)"
   },
   {
    "id": 18,
    "type": "LSDubFixIt",
    "pos": [
-    2000,
-    1000
+    1240,
+    1430
    ],
    "size": [
     340,
@@ -954,8 +982,8 @@
    "id": 19,
    "type": "PreviewAny",
    "pos": [
-    2400,
-    1000
+    1620,
+    1430
    ],
    "size": [
     300,
@@ -986,14 +1014,15 @@
     null,
     null,
     false
-   ]
+   ],
+   "title": "Fix-it list"
   },
   {
    "id": 20,
    "type": "LSDubSaveCut",
    "pos": [
-    2000,
-    1300
+    1960,
+    1430
    ],
    "size": [
     340,
@@ -1353,7 +1382,56 @@
    "LSDUB_RENDER"
   ]
  ],
- "groups": [],
+ "groups": [
+  {
+   "title": "VIDEO",
+   "bounding": [
+    500,
+    0,
+    2180,
+    296
+   ],
+   "color": "#3f789e",
+   "font_size": 28,
+   "flags": {}
+  },
+  {
+   "title": "AUDIO",
+   "bounding": [
+    500,
+    356,
+    2180,
+    348
+   ],
+   "color": "#8A8",
+   "font_size": 28,
+   "flags": {}
+  },
+  {
+   "title": "MOUTH",
+   "bounding": [
+    500,
+    764,
+    780,
+    556
+   ],
+   "color": "#b06634",
+   "font_size": 28,
+   "flags": {}
+  },
+  {
+   "title": "QA",
+   "bounding": [
+    500,
+    1380,
+    1840,
+    296
+   ],
+   "color": "#88A",
+   "font_size": 28,
+   "flags": {}
+  }
+ ],
  "config": {},
  "extra": {
   "ds": {

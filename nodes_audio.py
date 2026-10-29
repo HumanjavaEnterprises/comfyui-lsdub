@@ -19,6 +19,17 @@ WHISPER_MODELS = ['large-v3', 'medium', 'small', 'base']
 MATCH_WARN, MATCH_FAIL = 0.5, 0.2      # lyric match ratio: below WARN the lyrics are placed on the voice; below FAIL, an error
 
 
+def _input_path(p):
+    """a file path: absolute, or relative to ComfyUI's input folder (where the demo transcript is unzipped)."""
+    if not p or os.path.isabs(p): return p
+    try:
+        import folder_paths
+        q = os.path.join(folder_paths.get_input_directory(), p)
+        return q if os.path.exists(q) else p
+    except ImportError:
+        return p
+
+
 def lyric_prompt(path, limit=600):
     """the lyric sheet as a speech-to-text prompt (section headers dropped): the recogniser hears sung words it would
     otherwise turn into other words (a chorus of names, invented words)."""
@@ -159,10 +170,11 @@ class LSDubAlign(io.ComfyNode):
 
     @classmethod
     def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json):
+        transcript_json = _input_path(transcript_json)
         vh = media.audio_hash(vocal) if vocal is not None else (song.hashes.get('lead') or song.hash or file_hash(cls._vocal(song, None)))
         tj = file_hash(transcript_json) if transcript_json else ''
         return stage_key('LSDubAlign', {'vocal': vh, 'lyrics': lyrics.hash if lyrics else 'transcript', 'pron': text_hash(pronunciations.strip()),
-                                        'stt': stt_model, 'transcript': tj, 'v': 2, 'which': 'given' if vocal is not None else
+                                        'stt': stt_model, 'transcript': tj, 'v': 3, 'which': 'given' if vocal is not None else
                                         ('lead' if song.lead else 'vocal' if song.vocal else 'mix')}, [project.cache_key()])
 
     @classmethod
@@ -172,6 +184,7 @@ class LSDubAlign(io.ComfyNode):
     @classmethod
     def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json=''):
         from .lsdub_engine.core import lyric_align as LA, viseme_track as VT, vocalisations as VO
+        transcript_json = _input_path(transcript_json)
         st = project.stage('audio/align', cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json))
         align, vis, vis_skip, md = st.path('align.json'), st.path('visemes.json'), st.path('visemes_skip.json'), st.path('lyric_check.md')
         if not st.is_done():
@@ -200,6 +213,13 @@ class LSDubAlign(io.ComfyNode):
             for ln in pronunciations.splitlines():
                 if '=' in ln: argv += ['--extra-dict', ln.strip()]
             call(LA.main, argv, quiet=True, name='align')
+            ratio = json.load(open(align)).get('lyric_match_ratio')
+            if lyrics is not None and not transcript_json and ratio is not None and ratio < MATCH_FAIL:
+                # one retry before giving up: a fresh transcript without the lyric prompt (an independent decode)
+                print(f'[LSDub] Align: lyric match {ratio:.2f}; retrying speech-to-text once', file=sys.stderr)
+                if os.path.exists(stt): os.replace(stt, stt + '.try1.json')
+                i = argv.index('--prompt')
+                call(LA.main, argv[:i] + argv[i + 2:], quiet=True, name='align')
             warn = check_match(json.load(open(align)).get('lyric_match_ratio'), lyrics is not None)
             if warn: print(f'[LSDub] {warn}', file=sys.stderr)
             devices.free()

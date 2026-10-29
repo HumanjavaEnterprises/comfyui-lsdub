@@ -16,6 +16,8 @@ import conftest  # noqa: E402  (installs the ComfyUI stubs, loads the pack)
 
 PACK = conftest.load_pack()
 WIDGET = {'STRING', 'INT', 'FLOAT', 'BOOLEAN', 'COMBO'}
+LANE_TITLE = {'video': 'VIDEO', 'audio': 'AUDIO', 'mouth': 'MOUTH', 'qa': 'QA'}
+GROUP_COLOUR = {'video': '#3f789e', 'audio': '#8A8', 'mouth': '#b06634', 'qa': '#88A'}
 LANE_COLOUR = {'LSDub': '#335', 'LSDub/video': '#253', 'LSDub/audio': '#523', 'LSDub/mouth': '#532', 'LSDub/qa': '#255'}
 CORE = {   # core nodes: (inputs [(name, type)], outputs [(name, type)], widgets builder)
     'LoadVideo': ([], [('VIDEO', 'VIDEO')], lambda w: [w['file'], 'image']),
@@ -26,6 +28,11 @@ CORE = {   # core nodes: (inputs [(name, type)], outputs [(name, type)], widgets
     'PreviewAudio': ([('audio', 'AUDIO')], [], lambda w: []),
     'SaveVideo': ([('video', 'VIDEO')], [], lambda w: [w.get('filename_prefix', 'video/LSDub'), 'mp4', 'auto']),
 }
+
+
+def ui_order(inputs):
+    """the frontend fills widgets_values in input_order: every required input, then every optional one."""
+    return [p for p in inputs if not p.optional] + [p for p in inputs if p.optional]
 
 
 def schema(node_id):
@@ -41,6 +48,7 @@ class WF:
         self.title, self.nodes, self.links, self.ids = title, [], [], {}
 
     def add(self, key, ntype, pos, **w):
+        title, lane = w.pop('_title', None), w.pop('_lane', None)
         nid = len(self.nodes) + 1
         if ntype in CORE:
             ins, outs, wb = CORE[ntype]
@@ -51,7 +59,7 @@ class WF:
         else:
             s = schema(ntype)
             ins, wv = [], []
-            for p in s.inputs:
+            for p in ui_order(s.inputs):
                 t = p.io_type
                 if t in WIDGET:
                     wv.append(w.get(p.id, p.kw.get('default', (p.kw.get('options') or [''])[0] if t == 'COMBO' else
@@ -66,12 +74,16 @@ class WF:
                     'color': LANE_COLOUR.get(s.category, '#333'), 'title': s.display_name}
         node['_api'] = dict(w)
         if ntype not in CORE:
-            names = [p.id for p in schema(ntype).inputs if p.io_type in WIDGET]
+            names = [p.id for p in ui_order(schema(ntype).inputs) if p.io_type in WIDGET]
             node['_api'] = dict(zip(names, node['widgets_values']))
         elif ntype == 'SaveVideo':
             node['_api'] = {'filename_prefix': w.get('filename_prefix', 'video/LSDub'), 'format': 'mp4', 'format.codec': 'auto'}
         elif ntype == 'PreviewAny':
             node['_api'] = {}
+        if title: node['title'] = title
+        cat = schema(ntype).category if ntype not in CORE else ''
+        node['_lane'] = lane or {'LSDub': 'project'}.get(cat, cat.split('/')[-1] if cat else
+                                                         {'LoadVideo': 'video', 'LoadImage': 'video', 'LoadAudio': 'audio'}.get(ntype, 'qa'))
         self.nodes.append(node)
         self.ids[key] = node
         return self
@@ -95,10 +107,40 @@ class WF:
         b['inputs'][i]['link'] = lid
         return self
 
+    def note(self, text):
+        self.note_text = text
+        return self
+
+    def layout(self):
+        """lanes as horizontal bands, left to right in the order the nodes were added; a group per lane."""
+        x0, gap = 520, 40
+        bands, y = {}, 0
+        groups = []
+        for lane in ('video', 'audio', 'mouth', 'qa'):
+            row = [n for n in self.nodes if n['_lane'] == lane]
+            if not row: continue
+            h = max(n['size'][1] for n in row) + 80
+            x = x0
+            for n in row:
+                n['pos'] = [x, y + 50]
+                x += n['size'][0] + gap
+            groups.append({'title': LANE_TITLE[lane], 'bounding': [x0 - 20, y, x - x0 + 20, h], 'color': GROUP_COLOUR[lane],
+                           'font_size': 28, 'flags': {}})
+            bands[lane] = y
+            y += h + 60
+        for n in self.nodes:
+            if n['_lane'] == 'project': n['pos'] = [0, 420]
+        return groups
+
     def json(self):
-        nodes = [{k: v for k, v in n.items() if k != '_api'} for n in self.nodes]
-        return {'last_node_id': len(self.nodes), 'last_link_id': len(self.links), 'nodes': nodes, 'links': self.links,
-                'groups': [], 'config': {}, 'extra': {'ds': {'scale': 0.6, 'offset': [0, 0]}, 'info': {'name': self.title}},
+        groups = self.layout()
+        nodes = [{k: v for k, v in n.items() if k not in ('_api', '_lane')} for n in self.nodes]
+        if getattr(self, 'note_text', None):
+            nodes.insert(0, {'id': len(self.nodes) + 1, 'type': 'MarkdownNote', 'pos': [0, 0], 'size': [480, 400], 'flags': {},
+                             'order': 0, 'mode': 0, 'inputs': [], 'outputs': [], 'properties': {}, 'title': 'Start here',
+                             'widgets_values': [self.note_text], 'color': '#432', 'bgcolor': '#653'})
+        return {'last_node_id': len(self.nodes) + 1, 'last_link_id': len(self.links), 'nodes': nodes, 'links': self.links,
+                'groups': groups, 'config': {}, 'extra': {'ds': {'scale': 0.6, 'offset': [0, 0]}, 'info': {'name': self.title}},
                 'version': 0.4}
 
 
@@ -111,18 +153,18 @@ def project(wf, mode):
                   backend='local')
 
 
-def analysis(wf, video_from_slot=True):
+def analysis(wf, demo_transcript=False):
     """shots, triage, lyrics, align (shared by every workflow)."""
     wf.add('shots', 'LSDubShotSplit', (800, 0)).link('project', 'project', 'shots', 'project').link('video', 'source', 'shots', 'source')
     wf.add('lyrics', 'LSDubLyricsSlot', (400, 700), text=LYRICS).link('project', 'project', 'lyrics', 'project')
-    wf.add('align', 'LSDubAlign', (800, 700))
+    wf.add('align', 'LSDubAlign', (800, 700), **({'transcript_json': DEMO + 'landing_stt.json'} if demo_transcript else {}))
     for s, o, i in (('project', 'project', 'project'), ('song', 'song', 'song'), ('lyrics', 'lyrics', 'lyrics')): wf.link(s, o, 'align', i)
     wf.add('triage', 'LSDubTriage', (1200, 0))
     for s, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('shots', 'shots', 'shots'), ('song', 'song', 'song')):
         wf.link(s, o, 'triage', i)
-    wf.add('triage_md', 'PreviewAny', (1600, 0)).link('triage', 'report', 'triage_md', 'source')
-    wf.add('triage_sheet', 'PreviewImage', (1600, 300)).link('triage', 'sheet', 'triage_sheet', 'images')
-    wf.add('lyric_md', 'PreviewAny', (1200, 700)).link('align', 'lyric_check', 'lyric_md', 'source')
+    wf.add('triage_md', 'PreviewAny', (1600, 0), _title='Triage report', _lane='video').link('triage', 'report', 'triage_md', 'source')
+    wf.add('triage_sheet', 'PreviewImage', (1600, 300), _title='Triage sheet', _lane='video').link('triage', 'sheet', 'triage_sheet', 'images')
+    wf.add('lyric_md', 'PreviewAny', (1200, 700), _title='Lyric check', _lane='audio').link('align', 'lyric_check', 'lyric_md', 'source')
 
 
 def byo_inputs(wf):
@@ -144,42 +186,45 @@ def dub_and_qa(wf, kit_kw, audio='source', vocalisations='skip'):
     for s, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('dub', 'render', 'render'), ('triage', 'shots', 'shots'),
                     ('song', 'song', 'song'), ('align', 'align', 'align')):
         wf.link(s, o, 'verify', i)
-    wf.add('verify_md', 'PreviewAny', (2400, 700)).link('verify', 'md', 'verify_md', 'source')
+    wf.add('verify_md', 'PreviewAny', (2400, 700), _title='Verify (sync score)', _lane='qa').link('verify', 'md', 'verify_md', 'source')
     wf.add('fixit', 'LSDubFixIt', (2000, 1000))
     for s, o, i in (('project', 'project', 'project'), ('triage', 'shots', 'shots'), ('verify', 'report', 'report'), ('dub', 'render', 'render')):
         wf.link(s, o, 'fixit', i)
-    wf.add('fixit_md', 'PreviewAny', (2400, 1000)).link('fixit', 'md', 'fixit_md', 'source')
+    wf.add('fixit_md', 'PreviewAny', (2400, 1000), _title='Fix-it list', _lane='qa').link('fixit', 'md', 'fixit_md', 'source')
     wf.add('save', 'LSDubSaveCut', (2000, 1300)).link('project', 'project', 'save', 'project').link('dub', 'render', 'save', 'render')
 
 
 def test_and_learn():
     wf = WF('LSDub 3: Test and Learn')
+    wf.note('## LSDub 3: Test and Learn\n**Does:** analyses a music video with no dub: shots, which can be dubbed (Triage), word timing (Align), measured lip sync (Sync QA) and a fix-it list.\n\n**Needs:** the demo pack (`python custom_nodes/comfyui-lsdub/scripts/fetch_demo.py`), or your own clip + song. CPU is fine.\n\n**Time:** about 1-3 min on the demo (first run also downloads ~3 GB of speech-to-text weights).\n\n**Change for your video:** *Load Video* (your clip), *Load Audio* x2 (the song, and its dry lead vocal if you have it), *LSDub Lyrics*. Keep *LSDub Project* mode = test_learn.')
     project(wf, 'test_learn')
     byo_inputs(wf)
-    analysis(wf)
+    analysis(wf, demo_transcript=True)
     wf.add('sync', 'LSDubSyncQA', (1600, 700))
     for s, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('triage', 'shots', 'shots'), ('song', 'song', 'song'),
                     ('align', 'align', 'align')):
         wf.link(s, o, 'sync', i)
-    wf.add('sync_card', 'SaveVideo', (2000, 450), filename_prefix='lsdub/sync_card').link('sync', 'card', 'sync_card', 'video')
-    wf.add('sync_md', 'PreviewAny', (2000, 700)).link('sync', 'md', 'sync_md', 'source')
+    wf.add('sync_card', 'SaveVideo', (2000, 450), _title='Sync QA card', _lane='qa', filename_prefix='lsdub/sync_card').link('sync', 'card', 'sync_card', 'video')
+    wf.add('sync_md', 'PreviewAny', (2000, 700), _title='Sync QA report', _lane='qa').link('sync', 'md', 'sync_md', 'source')
     wf.add('fixit', 'LSDubFixIt', (2000, 1000))
     for s, o, i in (('project', 'project', 'project'), ('triage', 'shots', 'shots'), ('sync', 'report', 'sync')): wf.link(s, o, 'fixit', i)
-    wf.add('fixit_md', 'PreviewAny', (2400, 1000)).link('fixit', 'md', 'fixit_md', 'source')
+    wf.add('fixit_md', 'PreviewAny', (2400, 1000), _title='Fix-it list', _lane='qa').link('fixit', 'md', 'fixit_md', 'source')
     return wf
 
 
 def byo():
     wf = WF('LSDub 2: BYO Clip and Song')
+    wf.note("## LSDub 2: BYO Clip and Song\n**Does:** dubs the singer's mouth in your clip to your song, shot by shot, then grades it (Verify, Fix It) and saves the cut.\n\n**Needs:** the demo pack (`scripts/fetch_demo.py`): clip, song, lead vocal, lyrics and a lip kit. CPU is fine.\n\n**Time:** about 10-15 min on CPU for the 7.5 s demo (about 7-8 min per dubbed shot); re-runs are cache hits.\n\n**Change for your video:** *Load Video*, *Load Audio* x2, *LSDub Lyrics*, and *LSDub Lip Kit* kit_dir (or build a kit with workflow 1/4).")
     project(wf, 'run')
     byo_inputs(wf)
-    analysis(wf)
+    analysis(wf, demo_transcript=True)
     dub_and_qa(wf, {'identity': 'red_nova', 'kit_dir': DEMO + 'kits/red_nova'})
     return wf
 
 
 def prompt_everything():
     wf = WF('LSDub 1: Prompt Everything')
+    wf.note('## LSDub 1: Prompt Everything\n**Does:** edits a still (Qwen-Image-Edit), animates it (LTX-2.5), generates a song (ACE-Step 1.5), builds a lip kit from the clip, dubs, grades and saves.\n\n**Needs:** a big GPU (LTX-2.5 needs ~70 GB, or set *LSDub Project* backend = comfy_cloud on a paid plan) and the generator models (README, Models).\n\n**Time:** about 10 min on a 96 GB card.\n\n**Change:** *Load Image* (your character), the *LSDub Still* and *LSDub Video* prompts, *LSDub Song* tags, *LSDub Lyrics*.')
     project(wf, 'run')
     wf.add('load_still', 'LoadImage', (0, 250), image=DEMO + 'landing_still.png')
     wf.add('still', 'LSDubStillSlot', (400, -300), edit_prompt='a close-up of the same singer, head and shoulders filling the frame, '
@@ -194,19 +239,21 @@ def prompt_everything():
     wf.link('project', 'project', 'song', 'project')
     analysis(wf)
     wf.link('lyrics', 'lyrics', 'song', 'lyrics')
-    dub_and_qa(wf, {'identity': 'singer', 'kit_dir': '', 'shot_id': 0}, audio='song', vocalisations='mouth')
+    dub_and_qa(wf, {'identity': 'singer', 'kit_dir': '', 'shot_id': 0}, audio='song', vocalisations='skip')
     wf.link('video', 'source', 'kit', 'source').link('shots', 'shots', 'kit', 'shots')
     return wf
 
 
-LYRICS_CHORUS = "Pleiadians don't dance\nPleiadians don't dance\nPleiadians don't dance\nWhy don't they try?"
+LYRICS_ALR = ("aged like rocks, still in the box\ntimeless on the shelf, winding my own clock\nit's, it's about that time\n"
+              "hits, it's about that time\nthis is about that time")
 
 
 def make_character_sing():
     wf = WF('LSDub 4: Make Your Character Sing')
+    wf.note('## LSDub 4: Make Your Character Sing\n**Does:** a song + a character image -> a video of the character singing it: vocal split, lead vocal, alignment, an LTX-2.5 performance as long as the song, a lip kit from it, the dub, Verify (the sync score) and the saved video with the song.\n\n**Needs:** a big GPU (or backend = comfy_cloud), the generator models and the Mel-Band RoFormer vocal checkpoint in models/audio_separation (README).\n\n**Time:** about 30-40 min on a 96 GB card for the 15 s demo song (\"About That Time\", an ACE-Step song of ours).\n\n**Change:** *Load Audio* (your song), *Load Image* (your character), *LSDub Performance* prompt, *LSDub Lyrics*.')
     wf.add('project', 'LSDubProject', (0, 0), name='lsdub-character-sing', mode='run', preset='none', song_offset=0.0,
            backend='local')
-    wf.add('load_song', 'LoadAudio', (0, 500), audio=DEMO + 'landing_song_12s.wav')
+    wf.add('load_song', 'LoadAudio', (0, 500), audio=DEMO + 'alr_song_15s.wav')
     wf.add('split', 'LSDubVocalSplit', (400, 500), model='MelBandRoformer_kim_vocals.ckpt').link('load_song', 0, 'split', 'audio')
     wf.add('lead', 'LSDubLeadVocal', (800, 500)).link('split', 'vocals', 'lead', 'vocals')
     wf.add('song', 'LSDubSongSlot', (1200, 500)).link('project', 'project', 'song', 'project').link('load_song', 0, 'song', 'audio')
@@ -217,7 +264,7 @@ def make_character_sing():
            negative_prompt='blurry, distorted face, extra fingers, text, watermark', shot_seconds=5.0, chain='same_still')
     for s_, o, i in (('project', 'project', 'project'), ('load_char', 0, 'character'), ('song', 'song', 'song')): wf.link(s_, o, 'video', i)
     wf.add('shots', 'LSDubShotSplit', (800, 0)).link('project', 'project', 'shots', 'project').link('video', 'source', 'shots', 'source')
-    wf.add('lyrics', 'LSDubLyricsSlot', (1200, 800), text=LYRICS_CHORUS).link('project', 'project', 'lyrics', 'project')
+    wf.add('lyrics', 'LSDubLyricsSlot', (1200, 800), text=LYRICS_ALR).link('project', 'project', 'lyrics', 'project')
     wf.add('align', 'LSDubAlign', (1600, 800))
     for s_, o, i in (('project', 'project', 'project'), ('song', 'song', 'song'), ('lyrics', 'lyrics', 'lyrics')): wf.link(s_, o, 'align', i)
     wf.add('triage', 'LSDubTriage', (1200, 0))
