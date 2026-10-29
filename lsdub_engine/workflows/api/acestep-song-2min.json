@@ -1,0 +1,75 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderDiffusionModel",
+    "inputs": {
+      "checkpoint_name": "acestep_v1.5_turbo.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "TextEncodeAceStepAudio15",
+    "inputs": {
+      "clip": [
+        "1",
+        1
+      ],
+      "tags": "{PROMPT}",
+      "lyrics": "{LYRICS}",
+      "seed": "{SEED}",
+      "bpm": 120,
+      "duration": 120.0,
+      "timesignature": "4",
+      "language": "en",
+      "keyscale": "C major"
+    }
+  },
+  "3": {
+    "class_type": "EmptyAceStep15LatentAudio",
+    "inputs": {
+      "seconds": 120.0,
+      "batch_size": 1
+    }
+  },
+  "4": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "conditioning": [
+        "2",
+        0
+      ],
+      "latent": [
+        "3",
+        0
+      ],
+      "steps": 8,
+      "cfg_scale": 2.0,
+      "sampler_name": "euler",
+      "schedule": "uniform"
+    }
+  },
+  "5": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "4",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    }
+  },
+  "6": {
+    "class_type": "SaveAudio",
+    "inputs": {
+      "audio": [
+        "5",
+        0
+      ]
+    }
+  }
+}

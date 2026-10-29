@@ -1,0 +1,4 @@
+lsdub_engine: vendored from the lsdub engine (lsdub/ package), clean-room scrubbed.
+source_head: 370b409e6bf3812a6faeeaa8caad277ada60e4f1
+source_uncommitted_files: 18 (working tree included in the copy)
+frozen: 2026-10-29

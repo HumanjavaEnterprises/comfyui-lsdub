@@ -1,0 +1,414 @@
+{
+  "version": 0,
+  "id": "acestep-song",
+  "width": 1400,
+  "height": 1000,
+  "zoom": 1.0,
+  "x": 0,
+  "y": 0,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CheckpointLoaderDiffusionModel",
+      "pos": [
+        -1500,
+        0
+      ],
+      "size": [
+        380,
+        110
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": []
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": []
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": []
+        }
+      ],
+      "widgets_values": [
+        "acestep_v1.5_turbo.safetensors"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "TextEncodeAceStepAudio15",
+      "pos": [
+        -1200,
+        100
+      ],
+      "size": [
+        500,
+        280
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": null
+        },
+        {
+          "name": "tags",
+          "type": "STRING",
+          "widget": {
+            "name": "tags",
+            "default": "pop rock, energetic, male vocals, electric guitar, bass, drums, upbeat"
+          }
+        },
+        {
+          "name": "lyrics",
+          "type": "STRING",
+          "widget": {
+            "name": "lyrics",
+            "multiline": true,
+            "default": "I woke up this morning feeling good\nThe sun is shining bright in the sky\nI got a dream in my heart to find\nA melody that makes me want to sing"
+          }
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed",
+            "default": 42
+          }
+        },
+        {
+          "name": "bpm",
+          "type": "INT",
+          "widget": {
+            "name": "bpm",
+            "default": 120
+          }
+        },
+        {
+          "name": "duration",
+          "type": "FLOAT",
+          "widget": {
+            "name": "duration",
+            "default": 120.0
+          }
+        },
+        {
+          "name": "timesignature",
+          "type": "COMBO",
+          "widget": {
+            "name": "timesignature",
+            "options": [
+              "2",
+              "3",
+              "4",
+              "6"
+            ],
+            "default": "4"
+          }
+        },
+        {
+          "name": "language",
+          "type": "COMBO",
+          "widget": {
+            "name": "language",
+            "options": [
+              "en"
+            ],
+            "default": "en"
+          }
+        },
+        {
+          "name": "keyscale",
+          "type": "COMBO",
+          "widget": {
+            "name": "keyscale",
+            "options": [
+              "C major",
+              "C minor"
+            ],
+            "default": "C major"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": []
+        }
+      ],
+      "widgets_values": [
+        null,
+        "pop rock, energetic, male vocals, electric guitar, bass, drums, upbeat",
+        "I woke up this morning feeling good\nThe sun is shining bright in the sky\nI got a dream in my heart to find\nA melody that makes me want to sing",
+        42,
+        120,
+        120.0,
+        "4",
+        "en",
+        "C major"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "EmptyAceStep15LatentAudio",
+      "pos": [
+        -900,
+        0
+      ],
+      "size": [
+        380,
+        80
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "seconds",
+            "default": 120.0
+          }
+        },
+        {
+          "name": "batch_size",
+          "type": "INT",
+          "widget": {
+            "name": "batch_size",
+            "default": 1
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "widgets_values": [
+        120.0,
+        1
+      ]
+    },
+    {
+      "id": 4,
+      "type": "KSampler",
+      "pos": [
+        -600,
+        100
+      ],
+      "size": [
+        400,
+        130
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": null
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": null
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": null
+        },
+        {
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps",
+            "default": 8
+          }
+        },
+        {
+          "name": "cfg_scale",
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg_scale",
+            "default": 2.0
+          }
+        },
+        {
+          "name": "sampler_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler_name",
+            "options": [
+              "euler",
+              "euler_a"
+            ],
+            "default": "euler"
+          }
+        },
+        {
+          "name": "schedule",
+          "type": "COMBO",
+          "widget": {
+            "name": "schedule",
+            "options": [
+              "uniform",
+              "kdtwo",
+              "low"
+            ],
+            "default": "uniform"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "widgets_values": [
+        8,
+        2.0,
+        "euler",
+        "uniform"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "VAEDecode",
+      "pos": [
+        -250,
+        100
+      ],
+      "size": [
+        380,
+        60
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": []
+        }
+      ],
+      "widgets_values": []
+    },
+    {
+      "id": 6,
+      "type": "SaveAudio",
+      "pos": [
+        100,
+        100
+      ],
+      "size": [
+        400,
+        60
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [],
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      1,
+      2,
+      0,
+      "CLIP"
+    ],
+    [
+      2,
+      1,
+      2,
+      4,
+      0,
+      "MODEL"
+    ],
+    [
+      3,
+      1,
+      3,
+      5,
+      1,
+      "VAE"
+    ],
+    [
+      4,
+      2,
+      0,
+      4,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      5,
+      3,
+      0,
+      4,
+      2,
+      "LATENT"
+    ],
+    [
+      6,
+      4,
+      0,
+      5,
+      0,
+      "LATENT"
+    ],
+    [
+      7,
+      5,
+      0,
+      6,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "last_node_id": 6
+}
