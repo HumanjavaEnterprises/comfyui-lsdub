@@ -36,9 +36,9 @@ Homepage = "https://lsdub.vidbnch.app"
 [tool.comfy]
 PublisherId = "vveerrgg"
 DisplayName = "LSDub"
-Icon = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/main/assets/icon.png"
-Banner = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/main/assets/banner.png"
-requires-comfyui = ">=0.34.0"
+Icon = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/v0.1.0/assets/icon.png"
+Banner = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/v0.1.0/assets/banner.png"
+requires-comfyui = ">=0.3.50"
 includes = []
 
 [tool.ruff]
