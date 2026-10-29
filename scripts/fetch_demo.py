@@ -19,7 +19,7 @@ import zipfile
 
 VERSION = '0.1.0'
 URL = f'https://github.com/HumanjavaEnterprises/comfyui-lsdub/releases/download/v{VERSION}/lsdub-demo-{VERSION}.zip'
-SHA256 = '0328d38b09be97242e8b13dadf842ec128244cfd7848fee3a1e3890a76f88c11'
+SHA256 = '7981fef8f453b0bf29e47b3ffc00b3adcba1d22d8dbe259504f66c2beb00de17'
 
 
 def guess_comfyui():
