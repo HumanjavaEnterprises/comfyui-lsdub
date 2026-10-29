@@ -38,8 +38,8 @@ and grades the result.
 - `pip install comfy-sdk` for the Comfy Cloud backend.
 
 **Demo assets** for the example workflows: `python custom_nodes/comfyui-lsdub/scripts/fetch_demo.py`. This downloads
-about 24 MB, checks its checksum, and installs into `ComfyUI/input/`. You get a 7.5 s clip, its song and dry lead
-vocal, the lyrics, a start still and a lip kit. All are original synthetic characters and an original song.
+about 29 MB, checks its checksum, and installs into `ComfyUI/input/`. You get a 7.5 s clip, its song and dry lead
+vocal, the lyrics, a 12 s chorus, a start still and a lip kit. All are original synthetic characters and an original song.
 
 ## Models
 

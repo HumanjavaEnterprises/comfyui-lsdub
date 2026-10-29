@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""Fetch the LSDub demo assets (a 7.5 s clip, its song and dry lead vocal, the lyrics, a start still and a lip kit;
-~24 MB, Apache-2.0, original synthetic characters and song) into a ComfyUI install, for the example workflows.
+"""Fetch the LSDub demo assets (a 7.5 s clip, its song and dry lead vocal, the lyrics, a 12 s chorus, a start still and a lip kit;
+~29 MB, Apache-2.0, original synthetic characters and song) into a ComfyUI install, for the example workflows.
 
   python scripts/fetch_demo.py [--comfyui ~/ComfyUI] [--zip lsdub-demo-0.1.0.zip]
 
@@ -19,7 +19,7 @@ import zipfile
 
 VERSION = '0.1.0'
 URL = f'https://github.com/HumanjavaEnterprises/comfyui-lsdub/releases/download/v{VERSION}/lsdub-demo-{VERSION}.zip'
-SHA256 = '37c490519554d8c27e950217b3f7e95ea15ea59e9e532cd6c1360f318bf25038'
+SHA256 = '0328d38b09be97242e8b13dadf842ec128244cfd7848fee3a1e3890a76f88c11'
 
 
 def guess_comfyui():
