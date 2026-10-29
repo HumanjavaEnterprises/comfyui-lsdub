@@ -12,18 +12,16 @@ finds the objects from plain words and follows them through the shot:
   lsdub occluders --video plate.mp4 --out occ.npz [--phrase microphone --phrase hand] [--review occ.mp4]
 
 Then `lsdub paint ... --occluder-mask occ.npz`: the painted frame takes the take's own pixels under the mask.
-In ComfyUI the same mask comes from the Florence-2 + SAM 2 nodes into the LSDub node's occluder_mask input.
+In ComfyUI the LSDub Occluders node runs this on the dubbed shots' face crops.
 
-SAM 2 code: the sam2 package (pip install sam2), or the copy vendored in the ComfyUI-segment-anything-2 node
-(--sam2-node, or LIPS_SAM2_NODE) with its safetensors weights.
+SAM 2 code: the sam2 package (Meta, Apache-2.0; the optional `occluders` extra). Weights: --model-dir (the node uses
+models/lsdub/occluders).
 """
-import argparse, importlib, os, sys
+import argparse, os
 from ..io import ff
 import cv2, numpy as np
 
 FLORENCE = 'florence-community/Florence-2-large'
-SAM_W = os.environ.get('LIPS_SAM2_WEIGHTS', os.path.join(os.environ.get('LIPS_CACHE', os.path.expanduser('~/.cache/lsdub')), 'sam2',
-                                                       'sam2.1_hiera_base_plus-fp16.safetensors'))
 MEAN, STD = np.array([0.485, 0.456, 0.406], np.float32), np.array([0.229, 0.224, 0.225], np.float32)
 
 
@@ -37,13 +35,13 @@ def _read(video):
     return F, cap.get(cv2.CAP_PROP_FPS) or 24.0
 
 
-def ground(F, phrases, dev='cuda', seeds=3):
+def ground(F, phrases, dev='cuda', seeds=3, model_dir=None):
     """-> {phrase index: (frame, box xyxy)}: the first seed frame where Florence-2 finds the phrase."""
     import torch
     from PIL import Image
     from transformers import AutoProcessor, Florence2ForConditionalGeneration
-    proc = AutoProcessor.from_pretrained(FLORENCE)
-    fl = Florence2ForConditionalGeneration.from_pretrained(FLORENCE, torch_dtype=torch.float16).to(dev)
+    proc = AutoProcessor.from_pretrained(FLORENCE, cache_dir=model_dir)
+    fl = Florence2ForConditionalGeneration.from_pretrained(FLORENCE, torch_dtype=torch.float16, cache_dir=model_dir).to(dev)
     H, W = F[0].shape[:2]
     task = '<CAPTION_TO_PHRASE_GROUNDING>'
     out = {}
@@ -55,40 +53,44 @@ def ground(F, phrases, dev='cuda', seeds=3):
             if bb:
                 out[oi] = (int(k), min(bb, key=lambda b: (b[2] - b[0]) * (b[3] - b[1])))
                 break
-    del fl
-    torch.cuda.empty_cache()
+    del fl, proc
+    if torch.cuda.is_available(): torch.cuda.empty_cache()
     return out
 
 
-def _sam2(node_dir, dev):
-    import torch
-    try:                                                              # the ComfyUI node's vendored copy + safetensors
-        if not node_dir: raise ImportError('no --sam2-node')
-        sys.path[:0] = [os.path.dirname(node_dir), os.path.dirname(os.path.dirname(node_dir))]
-        lm = importlib.import_module(os.path.basename(node_dir) + '.load_model')
-        cfg = os.path.join(node_dir, 'sam2_configs', 'sam2.1_hiera_b+.yaml')
-        return lm.load_model(SAM_W, cfg, 'video', torch.float16, torch.device(dev)).to(dev)
-    except ImportError:                                               # the sam2 package (Meta, Apache-2.0)
-        from sam2.build_sam import build_sam2_video_predictor_hf
-        return build_sam2_video_predictor_hf('facebook/sam2.1-hiera-base-plus', device=dev)
+SAM2_ID, SAM2_CFG, SAM2_FILE = 'facebook/sam2.1-hiera-base-plus', 'configs/sam2.1/sam2.1_hiera_b+.yaml', 'sam2.1_hiera_base_plus.pt'
 
 
-def follow(F, seeds, node_dir, dev='cuda'):
-    """-> (n_phrases, n, H, W) bool."""
+def sam2_checkpoint(ckpt=None, model_dir=None):
+    """the SAM 2.1 base+ checkpoint: a given file, else downloaded once (Hugging Face) into model_dir."""
+    if ckpt and os.path.exists(ckpt): return ckpt
+    from huggingface_hub import hf_hub_download
+    return hf_hub_download(SAM2_ID, SAM2_FILE, cache_dir=model_dir)
+
+
+def follow(F, seeds, dev='cuda', ckpt=None, model_dir=None):
+    """-> (n_phrases, n, H, W) bool. The sam2 package (Meta, Apache-2.0) video predictor, seeded with the boxes."""
+    import tempfile
     import torch
+    from sam2.build_sam import build_sam2_video_predictor
     H, W = F[0].shape[:2]
-    model = _sam2(node_dir, dev)
-    S = model.image_size
-    x = np.stack([(cv2.resize(f[..., ::-1], (S, S)).astype(np.float32) / 255 - MEAN) / STD for f in F]).transpose(0, 3, 1, 2)
     M = np.zeros((max(seeds) + 1 if seeds else 0, len(F), H, W), bool)
     if not seeds: return M
-    with torch.autocast('cuda', dtype=torch.float16):
-        st = model.init_state(torch.from_numpy(x).to(dev), H, W, device=dev)
-        for oi, (k, bb) in seeds.items():
-            model.add_new_points_or_box(st, frame_idx=k, obj_id=oi, box=np.array(bb, np.float32))
-        for rev in (False, True):
-            for fi, ids, lg in model.propagate_in_video(st, reverse=rev):
-                for j, oid in enumerate(ids): M[oid, fi] = (lg[j, 0] > 0).cpu().numpy()
+    model = build_sam2_video_predictor(SAM2_CFG, sam2_checkpoint(ckpt, model_dir), device=dev)
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            for i, f in enumerate(F): cv2.imwrite(os.path.join(d, f'{i:05d}.jpg'), f, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            with torch.inference_mode(), torch.autocast(str(dev).split(':')[0], dtype=torch.bfloat16, enabled=str(dev) != 'cpu'):
+                st = model.init_state(video_path=d)
+                for oi, (k, bb) in seeds.items():
+                    model.add_new_points_or_box(st, frame_idx=k, obj_id=oi, box=np.array(bb, np.float32))
+                for rev in (False, True):
+                    for fi, ids, lg in model.propagate_in_video(st, reverse=rev):
+                        for j, oid in enumerate(ids): M[oid, fi] = (lg[j, 0] > 0).cpu().numpy()
+                del st
+    finally:
+        del model
+        if torch.cuda.is_available(): torch.cuda.empty_cache()
     return M
 
 
@@ -145,13 +147,14 @@ def main(argv=None):
     ap.add_argument('--out', required=True, help='masks npz')
     ap.add_argument('--phrase', action='append', help='what is in front of the face (repeatable; default "microphone")')
     ap.add_argument('--review', help='also write an overlay video of the masks')
-    ap.add_argument('--sam2-node', default=os.environ.get('LIPS_SAM2_NODE'))
+    ap.add_argument('--sam2-ckpt', help='SAM 2.1 base+ checkpoint (.pt); default: downloaded into --model-dir')
+    ap.add_argument('--model-dir', help='where Florence-2 / SAM 2 weights are cached (default: the Hugging Face cache)')
     ap.add_argument('--device', default='cuda')
     a = ap.parse_args(argv)
     phrases = a.phrase or ['microphone']
     F, fps = _read(a.video)
-    seeds = ground(F, phrases, a.device)
-    M = follow(F, seeds, a.sam2_node, a.device)
+    seeds = ground(F, phrases, a.device, model_dir=a.model_dir)
+    M = follow(F, seeds, a.device, a.sam2_ckpt, a.model_dir)
     if len(M) < len(phrases): M = np.concatenate([M, np.zeros((len(phrases) - len(M),) + M.shape[1:], bool)])
     cov = M.reshape(len(phrases), len(F), -1).mean(-1)
     np.savez_compressed(a.out, masks=(M.any(0) * 255).astype(np.uint8), phrases=np.array(phrases), coverage=cov.astype(np.float32))

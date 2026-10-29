@@ -10,8 +10,8 @@ assembled into the cut with the source's audio, and the cut is watermarked."""
 import json
 import os
 import shutil
+import sys
 
-import folder_paths
 from comfy_api.v0_0_2 import io
 
 from . import lsdub_types as T
@@ -158,52 +158,119 @@ class LSDubTweaks(io.ComfyNode):
 
 
 DEFAULT_TWEAKS = T.Tweaks(flags=dict(lead=0.06, word_close=0.06, face_target=512.0, snap=True, auto=True, continuity=True))
+ON_FAIL = ('source', 'render')
+AUDIO = ('source', 'song')
+
+
+def _log(msg):
+    print(f'[LSDub] {msg}', file=sys.stderr)
+
+
+def _write_frames(frames, dst, fps, crf=10):
+    """BGR frames -> an H.264 file through ffmpeg; raises if ffmpeg fails (the file appears only when complete)."""
+    import numpy as np
+    from .lsdub_engine.io import ff
+    h, w = frames[0].shape[:2]
+    tmp = dst + '.part.mp4'
+    p = ff.popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{w}x{h}', '-r', str(fps), '-i', '-',
+                  '-c:v', 'libx264', '-crf', str(crf), '-pix_fmt', 'yuv420p', tmp], stdin=ff.PIPE)
+    try:
+        for f in frames: p.stdin.write(np.ascontiguousarray(f).tobytes())
+        p.stdin.close()
+    except BrokenPipeError:
+        pass
+    if p.wait() != 0: raise RuntimeError(f'ffmpeg failed writing {dst}')
+    os.replace(tmp, dst)
+    return dst
 
 
 def extract_shot(src, f0, f1, dst):
-    """frames f0..f1 of src (frame-exact) -> dst."""
+    """frames f0..f1 of src, frame-exact: decoded in order from frame 0 (no seeking, which is not frame-exact on
+    long-GOP sources) -> dst. Raises when the source ends early."""
     import cv2
-    from .lsdub_engine.core import medium as MED
     cap = cv2.VideoCapture(src)
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-    cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
+    for _ in range(f0):
+        if not cap.grab(): break
     F = []
     for _ in range(f1 - f0 + 1):
         ok, f = cap.read()
         if not ok: break
         F.append(f)
     cap.release()
-    MED.write(F, dst, fps, crf=10)
-    return dst
+    if len(F) != f1 - f0 + 1:
+        raise RuntimeError(f'shot frames {f0}-{f1}: the source has only {f0 + len(F)} frames')
+    return _write_frames(F, dst, fps)
 
 
-def assemble(source, renders, out, fps, crf=18):
-    """the cut: source frames, with each dubbed shot's frames replacing its range; the source's audio."""
+def _audio_has_stream(path):
+    from .lsdub_engine.io import ff
+    r = ff.run(['ffprobe', '-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', path],
+               capture_output=True, text=True)
+    return bool(r.stdout.strip())
+
+
+def assemble(source, renders, out, fps, crf=18, audio='source', song=None, offset=0.0):
+    """the cut: the source's frames, with each dubbed shot's frames replacing its range. Audio: 'source' = the source's
+    own track (a music video whose picture already carries the song); 'song' = the song file, placed at song_offset
+    (video time = song time + offset). Raises if ffmpeg fails; -> warnings (frame-count mismatches, no audio)."""
     import cv2
+    import numpy as np
     from .lsdub_engine.core import medium as MED
+    from .lsdub_engine.io import ff
+    warn = []
     cap = cv2.VideoCapture(source)
     W, H = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     reps = {}
     for (f0, f1), path in renders.items():
         R, _ = MED.read(path)
+        if len(R) != f1 - f0 + 1: warn.append(f'shot {f0}-{f1}: render has {len(R)} frames, expected {f1 - f0 + 1}')
         for i, f in enumerate(R[:f1 - f0 + 1]): reps[f0 + i] = f
-    from .lsdub_engine.io import ff
-    import numpy as np
+    if audio == 'source' and not _audio_has_stream(source):
+        if song: audio = 'song'
+        warn.append('the source has no audio' + ('; using the song at song_offset' if song else '; the cut is silent'))
+    if audio == 'song' and song:
+        a_in = ['-itsoffset', f'{offset:.3f}', '-i', song]
+    else:
+        a_in = ['-i', source]
+    tmp = out + '.part.mp4'
     p = ff.popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', str(fps), '-i', '-',
-                  '-i', source, '-map', '0:v', '-map', '1:a?', '-c:v', 'libx264', '-crf', str(int(crf)), '-pix_fmt', 'yuv420p',
-                  '-c:a', 'aac', '-shortest', '-movflags', '+faststart', out], stdin=ff.PIPE)
+                  *a_in, '-map', '0:v', '-map', '1:a?', '-c:v', 'libx264', '-crf', str(int(crf)), '-pix_fmt', 'yuv420p',
+                  '-c:a', 'aac', '-shortest', '-movflags', '+faststart', tmp], stdin=ff.PIPE)
     i = 0
-    while True:
-        ok, f = cap.read()
-        if not ok: break
-        g = reps.get(i, f)
-        if g.shape[:2] != (H, W): g = cv2.resize(g, (W, H), interpolation=cv2.INTER_AREA)
-        p.stdin.write(np.ascontiguousarray(g).tobytes())
-        i += 1
-    cap.release()
-    p.stdin.close()
-    p.wait()
-    return out
+    try:
+        while True:
+            ok, f = cap.read()
+            if not ok: break
+            g = reps.get(i, f)
+            if g.shape[:2] != (H, W): g = cv2.resize(g, (W, H), interpolation=cv2.INTER_AREA)
+            p.stdin.write(np.ascontiguousarray(g).tobytes())
+            i += 1
+        p.stdin.close()
+    except BrokenPipeError:
+        pass
+    finally:
+        cap.release()
+    if p.wait() != 0: raise RuntimeError('ffmpeg failed assembling the cut')
+    os.replace(tmp, out)
+    for w in warn: _log(w)
+    return warn
+
+
+def cut_render(project, source, shots, quality, audio, song, scope='LSDubDub/cut'):
+    """assemble (or reuse) the cut of these per-shot results. The key holds every shot's RESULT (render hash, pass,
+    which frames were used), so a redone shot always gives a new cut."""
+    used = {k: v for k, v in shots.items() if v.get('used') == 'render' and v.get('render')}
+    ckey = stage_key(scope, {'shots': {k: [v.get('result'), v.get('used')] for k, v in sorted(shots.items())}, 'crf': quality,
+                             'audio': audio}, [project.cache_key(), source.hash, song.cache_key() if (song and audio == 'song') else ''])
+    cst = project.stage('shots/_cut', ckey)
+    cut = cst.path('cut.mp4')
+    if not cst.is_done():
+        warn = assemble(source.path, {(v['f0'], v['f1']): v['render'] for v in used.values()}, cut, source.fps, quality, audio,
+                        (song.mix if song else None), project.song_offset)
+        cst.mark_done(True, shots=sorted(used), warnings=warn)
+    failed = sorted(int(k) for k, v in shots.items() if not v.get('pass'))
+    return T.Render(shots=shots, cut=cut, hash=ckey), failed
 
 
 class LSDubDub(io.ComfyNode):
@@ -228,19 +295,23 @@ class LSDubDub(io.ComfyNode):
                 io.String.Input('only_shots', default='', tooltip='Dub only these shots, e.g. "16,19" (empty = all that passed).'),
                 io.Int.Input('quality', default=18, min=10, max=30, optional=True,
                              tooltip='Cut quality (x264 CRF): lower = better and bigger; 18 is visually clean, 14 near-lossless.'),
+                io.Combo.Input('on_fail', options=list(ON_FAIL), default='source', optional=True,
+                               tooltip='A shot that fails its sync gate: source = keep the original frames in the cut (the '
+                                       'shot is listed for Fix-It); render = use the render anyway.'),
+                io.Combo.Input('audio', options=list(AUDIO), default='source', optional=True,
+                               tooltip='Sound of the cut: source = the video\'s own track (a music video that already '
+                                       'carries the song); song = the song file at the project\'s song_offset.'),
             ],
-            outputs=[T.LSDubRender.Output(display_name='render', tooltip='Per-shot renders, gates and the assembled cut.'),
+            outputs=[T.LSDubRender.Output(display_name='render', tooltip='Per-shot results (pass / fail and why), gates and '
+                                                                         'the assembled cut.'),
                      io.Video.Output(display_name='video', tooltip='The assembled cut.')],
         )
 
     @classmethod
     def _plan(cls, project, shots, kits, only):
         only = set(only)
-        plan = []
-        for s in shots.shots:
-            if s.get('verdict') in DUB_VERDICTS and (not only or s['shot'] in only) and s.get('target') in kits:
-                plan.append(s)
-        return plan
+        return [s for s in shots.shots if s.get('verdict') in DUB_VERDICTS and (not only or s['shot'] in only)
+                and s.get('target') in kits]
 
     @classmethod
     def _shot_key(cls, project, source, s, song, align, kit, tweaks, masks, cast):
@@ -260,71 +331,89 @@ class LSDubDub(io.ComfyNode):
 
     @classmethod
     def fingerprint_inputs(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None,
-                           cast=None, only_shots='', quality=18):
+                           cast=None, only_shots='', quality=18, on_fail='source', audio='source'):
         if project.mode == 'test_learn': return stage_key('LSDubDub', {'mode': 'test_learn'}, [source.hash])
         keys = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots)[0]
-        return stage_key('LSDubDub', {'shots': keys, 'force': list(project.force_shots), 'crf': quality})
+        return stage_key('LSDubDub', {'shots': keys, 'force': list(project.force_shots), 'crf': quality, 'fail': on_fail, 'audio': audio})
+
+    @classmethod
+    def _mask_for(cls, masks, s, tw, n):
+        """the shot's occluder mask, if it was made on a crop that matches this dub's (face size, frame rate, length)."""
+        occ = (masks.shots or {}).get(str(s['shot'])) if masks else None
+        if not occ or not os.path.exists(occ): return None, None
+        meta_p = occ[:-4] + '.json'
+        meta = json.load(open(meta_p)) if os.path.exists(meta_p) else {}
+        want = {'face_target': float(tw.flags.get('face_target', 512.0)), 'fps_mult': 2 if tw.flags.get('snap', True) else 1,
+                'frames': n * (2 if tw.flags.get('snap', True) else 1)}
+        bad = {k: (meta.get(k), v) for k, v in want.items() if meta.get(k) != v}
+        if bad:
+            msg = f"shot {s['shot']}: occluder mask was made on a different crop {bad}; not used (re-run LSDub Occluders)"
+            _log(msg)
+            return None, msg
+        return occ, None
 
     @classmethod
     def run_shot(cls, project, source, s, song, align, kit, tw, masks, cast, st):
         from .lsdub_engine.core import sing as SING, continuity as CONT
         work = st.path('work')
+        os.makedirs(work, exist_ok=True)
         take = extract_shot(source.path, s['f0'], s['f1'], st.path('take.mp4'))
-        occ = (masks.shots or {}).get(str(s['shot'])) if masks else None
-        if occ and os.path.exists(occ): shutil.copyfile(occ, os.path.join(work, 'occ.npz'))
+        occ, note = cls._mask_for(masks, s, tw, s['f1'] - s['f0'] + 1)
+        if occ: shutil.copyfile(occ, os.path.join(work, 'occ.npz'))
         f = tw.flags
         pa = ['--lib', kit.dir, *_kit_flags(project, kit.identity), *SING_EXTRA, *tw.settings.split()]
-        box = None if cast else s.get('box')
         info = SING.run(take, align.align, song.lead or song.vocal or song.mix, s['start'] - project.song_offset,
                         st.path('sung.mp4'), work, pa, char=s['target'] if cast else None, db=cast.db if cast else None,
-                        box=box, face_target=float(f.get('face_target', 512.0)), snap=bool(f.get('snap', True)),
-                        report=st.path('gate.json'), lead=f.get('lead'), word_close=f.get('word_close'), a2f=f.get('jaw_csv') or None,
-                        auto=bool(f.get('auto', True)), preset=project.preset)
-        render = st.path('sung.mp4')
+                        box=None if cast else s.get('box'), face_target=float(f.get('face_target', 512.0)),
+                        snap=bool(f.get('snap', True)), report=st.path('gate.json'), lead=f.get('lead'),
+                        word_close=f.get('word_close'), a2f=f.get('jaw_csv') or None, auto=bool(f.get('auto', True)),
+                        preset=project.preset)
+        render = st.path('render.mp4')
         if f.get('continuity', True):
-            CONT.run(take, render, st.path('render.mp4'), report=st.path('continuity.json'))
-            render = st.path('render.mp4')
+            CONT.run(take, st.path('sung.mp4'), render, report=st.path('continuity.json'))
         else:
-            shutil.copyfile(st.path('sung.mp4'), st.path('render.mp4'))
-            render = st.path('render.mp4')
+            shutil.copyfile(st.path('sung.mp4'), render)
+        if note: info['mask_note'] = note
         return render, info
 
     @classmethod
     def execute(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None, cast=None,
-                only_shots='', quality=18):
+                only_shots='', quality=18, on_fail='source', audio='source'):
+        from .project import take_force
         if project.mode == 'test_learn':                              # analyse only: the cut is the source
             return io.NodeOutput(T.Render(shots={}, cut=source.path, hash=source.hash), cls._video(source.path))
         keys, plan, kits, tw = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots)
+        forced = take_force(project, 'dub')
         try:
             import comfy.utils
             pbar = comfy.utils.ProgressBar(max(1, len(plan)))
         except Exception:
             pbar = None
-        done_shots = {}
+        res = {}
         for s in plan:
             sid, k = s['shot'], keys[s['shot']]
-            todo = shots_todo(project, k, [sid])
             st = project.shot(sid, k)
-            if todo:
+            if shots_todo(project, k, [sid], forced):
                 try:
                     render, info = cls.run_shot(project, source, s, song, align, kits[s['target']], tw, masks, cast, st)
+                    reason = '' if info.get('pass') else (f"sync gate failed: measured corr {info.get('corr')} "
+                                                           f"(open in silence {info.get('open_in_silence')})")
                     st.mark_done(bool(info.get('pass')), corr=info.get('corr'), auto=(info.get('auto') or {}).get('winner'),
-                                 render=render)
+                                 render=render, reason=reason or info.get('mask_note', ''))
                 except Exception as e:                                  # a failed shot does not stop the cut
-                    st.mark_done(False, error=f'{type(e).__name__}: {e}')
+                    _log(f'shot {sid} failed: {type(e).__name__}: {e}')
+                    st.mark_done(False, error=f'{type(e).__name__}: {e}', reason=f'dub error: {type(e).__name__}: {e}')
             d = st.done() or {}
-            if d.get('render') and os.path.exists(d['render']):
-                done_shots[str(sid)] = {'f0': s['f0'], 'f1': s['f1'], 'render': d['render'], 'pass': d.get('pass'),
-                                        'corr': d.get('corr'), 'gate': st.path('gate.json'), 'key': k}
+            r = d.get('render') if d.get('render') and os.path.exists(d.get('render')) else ''
+            ok = bool(d.get('pass'))
+            res[str(sid)] = {'f0': s['f0'], 'f1': s['f1'], 'render': r, 'pass': ok, 'corr': d.get('corr'),
+                             'reason': d.get('reason') or d.get('error') or '', 'gate': st.path('gate.json'), 'key': k,
+                             'result': file_hash(r) if r else 'none',
+                             'used': 'render' if r and (ok or on_fail == 'render') else 'source'}
             if pbar: pbar.update(1)
-        ckey = stage_key('LSDubDub/cut', {'shots': {k: v['key'] for k, v in done_shots.items()}, 'crf': quality},
-                         [project.cache_key(), source.hash])
-        cst = project.stage('shots/_cut', ckey)
-        cut = cst.path('cut.mp4')
-        if not cst.is_done():
-            assemble(source.path, {(v['f0'], v['f1']): v['render'] for v in done_shots.values()}, cut, source.fps, quality)
-            cst.mark_done(True, shots=sorted(done_shots))
-        return io.NodeOutput(T.Render(shots=done_shots, cut=cut, hash=ckey), cls._video(cut))
+        rec, failed = cut_render(project, source, res, quality, audio, song)
+        if failed: _log(f'{len(failed)} shot(s) failed: {failed} (see LSDub Fix It)')
+        return io.NodeOutput(rec, cls._video(rec.cut))
 
     @staticmethod
     def _video(path):
@@ -341,7 +430,7 @@ class LSDubOccluders(io.ComfyNode):
         return io.Schema(
             node_id='LSDubOccluders', display_name='LSDub Occluders', category='LSDub/mouth',
             description='Mask what is in front of the mouth (a microphone, a hand) on the dubbed shots\' face crops, so '
-                        'the next dub keeps it in front. Uses the GPU (Florence-2 + SAM 2).',
+                        'the next dub keeps it in front. Uses the GPU (Florence-2 + SAM 2.1, weights in models/lsdub).',
             inputs=[
                 T.LSDubProject.Input('project', tooltip='The LSDub project.'),
                 T.LSDubRender.Input('render', tooltip='A dub (its shots\' face crops are masked).'),
@@ -354,32 +443,48 @@ class LSDubOccluders(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, project, render, phrases, shot_ids=''):
-        from .lsdub_engine.core import occluders as OCC
+    def _crops(cls, render, shot_ids):
         from .project import parse_force_shots
-        from . import devices
         want = set(parse_force_shots(shot_ids))
-        out, review = {}, None
         for sid, v in sorted(render.shots.items(), key=lambda kv: int(kv[0])):
             if want and int(sid) not in want: continue
-            crop = os.path.join(os.path.dirname(v['render']), 'work', 'crop.mp4')
-            if not os.path.exists(crop): continue
-            st = project.stage('mouth/masks', stage_key('LSDubOccluders', {'p': phrases, 'crop': file_hash(crop)}))
+            d = os.path.dirname(v.get('gate') or v.get('render') or '')
+            crop = os.path.join(d, 'work', 'crop.mp4')
+            if os.path.exists(crop): yield sid, d, crop
+
+    @classmethod
+    def fingerprint_inputs(cls, project, render, phrases, shot_ids=''):
+        return stage_key('LSDubOccluders', {'p': phrases, 'crops': [file_hash(c) for _, _, c in cls._crops(render, shot_ids)]})
+
+    @classmethod
+    def execute(cls, project, render, phrases, shot_ids=''):
+        from .lsdub_engine.core import occluders as OCC
+        from . import devices
+        out, review = {}, None
+        for sid, d, crop in cls._crops(render, shot_ids):
+            st = project.stage('mouth/masks', stage_key('LSDubOccluders', {'p': phrases, 'crop': file_hash(crop),
+                                                                           'models': [OCC.FLORENCE, OCC.SAM2_ID]}))
             m, rv = st.path('occ.npz'), st.path('review.mp4')
             if not st.is_done():
-                argv = ['--video', crop, '--out', m, '--review', rv, '--device', str(devices.torch_device())]
-                node = os.path.join(os.path.dirname(folder_paths.models_dir), 'custom_nodes', 'ComfyUI-segment-anything-2')
-                if os.path.isdir(node): argv += ['--sam2-node', node]             # its SAM 2 code, if installed
-                sam_w = os.path.join(devices.models_dir('sam2'), os.path.basename(OCC.SAM_W))
-                if os.path.exists(sam_w): OCC.SAM_W = sam_w                       # weights in models/lsdub/sam2
+                md = devices.models_dir('occluders')
+                argv = ['--video', crop, '--out', m, '--review', rv, '--device', str(devices.torch_device()), '--model-dir', md]
+                ck = os.path.join(md, OCC.SAM2_FILE)
+                if os.path.exists(ck): argv += ['--sam2-ckpt', ck]
                 for ph in phrases.split(','):
                     if ph.strip(): argv += ['--phrase', ph.strip()]
-                call(OCC.main, argv, name='occluders')
-                devices.free()
+                try:
+                    call(OCC.main, argv, name='occluders')
+                finally:
+                    devices.free()
+                g = json.load(open(os.path.join(d, 'gate.json'))) if os.path.exists(os.path.join(d, 'gate.json')) else {}
+                media_meta = {'face_target': float(g.get('face_target', 512.0)), 'fps_mult': int(g.get('fps_mult', 2)),
+                              'frames': int(g.get('frames', 0)) * int(g.get('fps_mult', 2)), 'crop': file_hash(crop)}
+                with open(m[:-4] + '.json', 'w') as f: json.dump(media_meta, f)
                 st.mark_done(True)
             out[sid] = m
             review = review or rv
-        return io.NodeOutput(T.Masks(dir=project.dir, shots=out, hash=text_hash(json.dumps(sorted((k, file_hash(p)) for k, p in out.items())))),
+        return io.NodeOutput(T.Masks(dir=os.path.join(project.dir, 'mouth', 'masks'), shots=out,
+                                     hash=text_hash(json.dumps(sorted((k, file_hash(p)) for k, p in out.items())))),
                              LSDubDub._video(review) if review else None)
 
 
@@ -397,35 +502,35 @@ class LSDubContinuity(io.ComfyNode):
                 io.String.Input('shot_ids', default='', tooltip='Shots to repair, e.g. "21,23" (empty = all dubbed shots).'),
                 io.Float.Input('z', default=3.5, min=1.5, max=8.0, step=0.1,
                                tooltip='How unusual a frame must be to be repaired; lower repairs more.'),
+                io.Int.Input('quality', default=18, min=10, max=30, optional=True, tooltip='Cut quality (x264 CRF).'),
             ],
             outputs=[T.LSDubRender.Output(display_name='render', tooltip='The dub with the repaired shots.'),
                      io.Video.Output(display_name='video', tooltip='The re-assembled cut.')],
         )
 
     @classmethod
-    def execute(cls, project, source, render, shot_ids='', z=3.5):
+    def fingerprint_inputs(cls, project, source, render, shot_ids='', z=3.5, quality=18):
+        return stage_key('LSDubContinuity', {'ids': shot_ids, 'z': z, 'q': quality}, [render.hash])
+
+    @classmethod
+    def execute(cls, project, source, render, shot_ids='', z=3.5, quality=18):
         from .lsdub_engine.core import continuity as CONT
         from .project import parse_force_shots
         want = set(parse_force_shots(shot_ids))
         shots = {}
         for sid, v in render.shots.items():
             v = dict(v)
-            if not want or int(sid) in want:
-                d = os.path.dirname(v['render'])
-                st = project.stage('shots/_continuity', stage_key('LSDubContinuity', {'z': z}, [v['key']]))
+            if v.get('render') and (not want or int(sid) in want):
+                d = os.path.dirname(v['gate'])
+                st = project.stage('shots/_continuity', stage_key('LSDubContinuity', {'z': z}, [v['key'], v['result']]))
                 out = st.path('render.mp4')
                 if not st.is_done():
                     CONT.run(os.path.join(d, 'take.mp4'), os.path.join(d, 'sung.mp4'), out, z=z, report=st.path('continuity.json'))
                     st.mark_done(True)
-                v.update(render=out, key=v['key'] + f'/c{z}')
+                v.update(render=out, result=file_hash(out))
             shots[sid] = v
-        ckey = stage_key('LSDubDub/cut', {'shots': {k: v['key'] for k, v in shots.items()}}, [project.cache_key(), source.hash])
-        cst = project.stage('shots/_cut', ckey)
-        cut = cst.path('cut.mp4')
-        if not cst.is_done():
-            assemble(source.path, {(v['f0'], v['f1']): v['render'] for v in shots.values()}, cut, source.fps)
-            cst.mark_done(True)
-        return io.NodeOutput(T.Render(shots=shots, cut=cut, hash=ckey), LSDubDub._video(cut))
+        rec, _ = cut_render(project, source, shots, quality, 'source', None)
+        return io.NodeOutput(rec, LSDubDub._video(rec.cut))
 
 
 NODES = [LSDubBuildLipKit, LSDubTweaks, LSDubOccluders, LSDubDub, LSDubContinuity]

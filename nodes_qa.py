@@ -180,11 +180,13 @@ class LSDubSyncQA(io.ComfyNode):
 FIXES = [
     ('too small', 'Use a closer framing or a higher-resolution source; mediums dub through a crop (DUB-MEDIUM >= 120 px @1080).'),
     ('profile', 'The face is turned away: pick another take or accept the shot as is.'),
-    ('mouth hidden', 'Mask what covers the mouth with LSDub Occluders (phrase "microphone" / "hand"), then dub again.'),
-    ('mic', 'Mask the microphone with LSDub Occluders, then dub again.'),
+    ('mouth hidden', 'Mask what covers the mouth with LSDub Occluders (phrase "microphone" / "hand") and feed the masks to LSDub Dub.'),
+    ('sync gate failed', 'The dub missed the vocal: check the lyric check for mis-timed words, then try lead 0.03-0.10 or word_close 0.08 in LSDub Mouth Tweaks.'),
+    ('dub error', 'The dub stopped with an error (shown): fix the cause (kit, cast, missing file), then force the shot.'),
+    ('mic', 'Mask the microphone with LSDub Occluders and connect its masks to LSDub Dub (the new masks re-dub the shot).'),
     ('no singing', 'No vocal under this shot: leave it.'),
     ('too short', 'Shorter than the minimum shot: leave it.'),
-    ('identity drift', 'The face changed: lower face_target or turn auto off in LSDub Mouth Tweaks, then force the shot.'),
+    ('identity drift', 'The face changed: lower face_target or turn auto off in LSDub Mouth Tweaks (a tweak change re-dubs the shot).'),
     ('mouth off the vocal', 'Sync is off: try lead 0.03-0.10 in LSDub Mouth Tweaks (check the words in the lyric check first).'),
     ('open in the silences', 'Mouth open in the gaps: raise word_close (0.08-0.12) in LSDub Mouth Tweaks.'),
     ('soft attacks', 'Attacks are soft: keep snap on and lower lead a little.'),
@@ -211,6 +213,7 @@ class LSDubFixIt(io.ComfyNode):
                 T.LSDubShots.Input('shots', tooltip='The triaged shots (their reasons).'),
                 T.LSDubReport.Input('report', optional=True, tooltip='A Verify report (bands + reasons).'),
                 T.LSDubReport.Input('sync', optional=True, tooltip='A Sync QA report (measured corr).'),
+                T.LSDubRender.Input('render', optional=True, tooltip='The dub: its own per-shot pass / fail and why.'),
                 io.Float.Input('min_corr', default=0.5, min=0.0, max=1.0, step=0.05,
                                tooltip='A sung shot measuring below this sync corr is listed.'),
             ],
@@ -219,20 +222,26 @@ class LSDubFixIt(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, project, shots, report=None, sync=None, min_corr=0.5):
+    def execute(cls, project, shots, report=None, sync=None, min_corr=0.5, render=None):
         items = {}
         for s in shots.shots:
             if s.get('verdict') == 'NO' and s.get('voiced') and s.get('target'):
                 items.setdefault(s['shot'], []).append(('triage: ' + s['reason'], fix_for(s['reason']), False))
             elif s.get('verdict') in ('DUB', 'DUB-MEDIUM') and (s.get('mic') or 0) >= 0.10:   # the triage's mic line
-                items.setdefault(s['shot'], []).append(('triage: mic near the mouth', fix_for('mic'), True))
+                items.setdefault(s['shot'], []).append(('triage: mic near the mouth', fix_for('mic'), False))
         if report is not None and report.json and os.path.exists(report.json):
             for r in json.load(open(report.json)).get('shots', []):
                 if r.get('band') in ('FAIL', 'REVIEW'):
                     items.setdefault(r['shot'], []).append((f"verify {r['band']} {r.get('score')}: {r.get('reason')}", fix_for(r.get('reason')), True))
+        if render is not None:
+            for sid, v in (render.shots or {}).items():
+                if not v.get('pass'):
+                    why = v.get('reason') or 'failed'
+                    items.setdefault(int(sid), []).append((f"dub: {why} (cut uses the {v.get('used', 'source')})", fix_for(why),
+                                                          'dub error' in why))
         if sync is not None:
             for sid, c in (sync.verdicts or {}).items():
-                if c is not None and sid not in ('None', '') and float(c) < min_corr:
+                if c is not None and str(sid).isdigit() and float(c) < min_corr:
                     items.setdefault(int(sid), []).append((f'sync corr {float(c):.2f} < {min_corr}', fix_for('mouth off the vocal'), True))
         redo = sorted(k for k, v in items.items() if any(x[2] for x in v))
         L = ['# LSDub fix-it', '', f"Mode {project.mode}. {len(items)} shot(s) to look at; redo: {','.join(map(str, redo)) or 'none'}.", '',

@@ -63,7 +63,7 @@ async def run_local(graph, out_node='out', uploads=None, out_dir='.'):
     valid = await execution.validate_prompt(pid, graph, None)
     if not valid[0]:
         raise GenerationError(f'generator graph rejected: {valid[1]} {valid[3]}')
-    ex = execution.PromptExecutor(_QuietServer(), cache_type=execution.CacheType.NONE)
+    ex = execution.PromptExecutor(_QuietServer(), cache_type=execution.CacheType.NONE, cache_args={'ram': 16.0, 'lru': 0})
     await ex.execute_async(graph, pid, {}, [out_node])
     if not ex.success:
         msgs = [m for m in ex.status_messages if m[0] == 'execution_error']

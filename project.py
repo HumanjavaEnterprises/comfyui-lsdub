@@ -165,9 +165,27 @@ class StageCache:
         return True
 
 
-def shots_todo(project, key, shot_ids):
-    """which shots of a per-shot stage still need work: force_shots are re-opened first; a shot is skipped only when
-    its done.json says pass=true (a failed shot is redone)."""
-    for s in project.force_shots:
+def take_force(project, scope='dub'):
+    """force_shots acts ONCE per value: -> the shots to re-open now (the project's force_shots when that value differs
+    from the last one applied in this scope, else ()); the applied value is recorded in <project>/force.json."""
+    p = os.path.join(project.dir, 'force.json')
+    try:
+        with open(p) as f: done = json.load(f)
+    except (OSError, ValueError):
+        done = {}
+    now = ','.join(map(str, project.force_shots))
+    if done.get(scope, '') == now: return ()
+    done[scope] = now
+    os.makedirs(project.dir, exist_ok=True)
+    tmp = p + '.tmp'
+    with open(tmp, 'w') as f: json.dump(done, f)
+    os.replace(tmp, p)
+    return tuple(project.force_shots)
+
+
+def shots_todo(project, key, shot_ids, forced=None):
+    """which shots of a per-shot stage still need work: the forced shots (default: project.force_shots) are re-opened
+    first; a shot is skipped only when its done.json says pass=true (a failed shot is redone)."""
+    for s in (project.force_shots if forced is None else forced):
         if s in shot_ids: project.shot(s, key).reopen()
     return [s for s in shot_ids if not project.shot(s, key).is_done()]

@@ -124,7 +124,7 @@ class LSDubAlign(io.ComfyNode):
 
     @classmethod
     def _vocal(cls, song, vocal):
-        return song.lead or song.vocal or song.mix if vocal is None else None
+        return (song.lead or song.vocal or song.mix) if vocal is None else None
 
     @classmethod
     def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json):

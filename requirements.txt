@@ -9,3 +9,5 @@ faster-whisper>=1.0
 soundswallower>=0.6
 g2p>=2.0
 transformers>=4.40
+# optional: LSDub Occluders -> pip install sam2 hydra-core iopath   (SAM2_BUILD_CUDA=0 skips its CUDA extension)
+# optional: Comfy Cloud backend -> pip install comfy-sdk

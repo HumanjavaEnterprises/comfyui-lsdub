@@ -10,7 +10,7 @@ from . import generate, graphs
 from . import lsdub_types as T
 from . import media
 from .lsdub_engine import presets
-from .project import file_hash, stage_key, text_hash
+from .project import file_hash, stage_key
 
 VERDICT_COLOUR = {'DUB': (60, 200, 60), 'DUB-MEDIUM': (0, 170, 255), 'NO': (60, 60, 210)}
 
@@ -102,7 +102,8 @@ class LSDubVideoSlot(io.ComfyNode):
     def fingerprint_inputs(cls, project, video=None, still=None, prompt='', negative_prompt='', seconds=5.0):
         if video is not None:
             p, data = media.video_source(video)
-            return stage_key('LSDubVideoSlot', {'video': file_hash(p) if p else text_hash(str(len(data)))}, [project.cache_key()])
+            import hashlib
+            return stage_key('LSDubVideoSlot', {'video': file_hash(p) if p else hashlib.sha1(data).hexdigest()}, [project.cache_key()])
         if still is not None and (prompt or '').strip():
             return cls._gen_key(project, still, prompt, negative_prompt, seconds)
         return stage_key('LSDubVideoSlot', {'still': None if still is None else media.audio_hash({'waveform': still[None], 'sample_rate': 0}),
@@ -228,8 +229,10 @@ class LSDubCast(io.ComfyNode):
     @classmethod
     def _key(cls, project, source, shots, singer_refs, names, cast_db, refs_dir):
         refs = None if singer_refs is None else media.audio_hash({'waveform': singer_refs[None], 'sample_rate': 0})
+        from .nodes_mouth import LSDubBuildLipKit
+        listing = LSDubBuildLipKit._hash(refs_dir) if refs_dir and os.path.isdir(refs_dir) else ''
         return stage_key('LSDubCast', {'refs': refs, 'names': names, 'db': file_hash(cast_db) if cast_db else '',
-                                       'dir': refs_dir}, [project.cache_key(), source.hash, shots.hash])
+                                       'dir': refs_dir, 'dir_files': listing}, [project.cache_key(), source.hash, shots.hash])
 
     @classmethod
     def fingerprint_inputs(cls, project, source, shots, singer_refs=None, names='', cast_db='', refs_dir=''):
@@ -252,18 +255,20 @@ class LSDubCast(io.ComfyNode):
                     kv.append(f'{n}={media.image_to_png(singer_refs[i:i + 1], st.path(f"ref_{i:02d}_{n}.png"))}')
             from . import devices
             emb = devices.embedder()
-            db = qa.build_db(cast_db or None, refs_dir or None, kv, emb=emb)
-            if db is None: raise ValueError('LSDub Cast: give singer_refs + names, a cast_db file or a refs_dir')
-            np.savez_compressed(db_path, **db)
-            faces = C.Faces()
-            mids = {s['shot']: (s['f0'] + s['f1']) // 2 for s in shots.shots}
-            F = qa.read_frames(source.path, sorted(set(mids.values())))
-            who = {}
-            for sid, f in mids.items():
-                img = F.get(f)
-                fs = faces(img) if img is not None else []
-                who[str(sid)] = sorted({qa.identify(db, emb, img, x, project.preset)[0] for x in fs})
-            devices.release(emb)
+            try:
+                db = qa.build_db(cast_db or None, refs_dir or None, kv, emb=emb)
+                if db is None: raise ValueError('LSDub Cast: give singer_refs + names, a cast_db file or a refs_dir')
+                np.savez_compressed(db_path, **db)
+                faces = C.Faces()
+                mids = {s['shot']: (s['f0'] + s['f1']) // 2 for s in shots.shots}
+                F = qa.read_frames(source.path, sorted(set(mids.values())))
+                who = {}
+                for sid, f in mids.items():
+                    img = F.get(f)
+                    fs = faces(img) if img is not None else []
+                    who[str(sid)] = sorted({qa.identify(db, emb, img, x, project.preset)[0] for x in fs})
+            finally:
+                devices.release(emb)
             media.dump(who, per_shot)
             qa.sheet(source.path, shots.shots, sheet, lambda s: (200, 200, 200), lambda s: ' '.join(who.get(str(s['shot'])) or ['-']))
             st.mark_done(True, names=sorted(set(db['name'].tolist())))
