@@ -54,6 +54,21 @@ def _stage_uploads(uploads):
     return names
 
 
+def _cache_args():
+    """the cache settings ComfyUI's own executor gets (main.py), from its command-line args and the machine's RAM."""
+    try:
+        import comfy.model_management as mm
+        from comfy.cli_args import args
+        ram = min(10.0, max(2.0, mm.total_ram * 0.10 / 1024.0))
+        inactive = min(128.0, mm.total_ram / 1024.0)
+        cr = list(getattr(args, 'cache_ram', []) or [])
+        if len(cr) > 0: ram = cr[0]
+        if len(cr) > 1: inactive = cr[1]
+        return {'lru': getattr(args, 'cache_lru', 0) or 0, 'ram': ram, 'ram_inactive': inactive}
+    except Exception:
+        return {'lru': 0, 'ram': 4.0, 'ram_inactive': 16.0}
+
+
 async def run_local(graph, out_node='out', uploads=None, out_dir='.'):
     import execution
     import folder_paths
@@ -63,7 +78,7 @@ async def run_local(graph, out_node='out', uploads=None, out_dir='.'):
     valid = await execution.validate_prompt(pid, graph, None)
     if not valid[0]:
         raise GenerationError(f'generator graph rejected: {valid[1]} {valid[3]}')
-    ex = execution.PromptExecutor(_QuietServer(), cache_type=execution.CacheType.NONE, cache_args={'ram': 16.0, 'lru': 0})
+    ex = execution.PromptExecutor(_QuietServer(), cache_type=execution.CacheType.NONE, cache_args=_cache_args())
     await ex.execute_async(graph, pid, {}, [out_node])
     if not ex.success:
         msgs = [m for m in ex.status_messages if m[0] == 'execution_error']
