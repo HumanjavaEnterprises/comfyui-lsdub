@@ -168,3 +168,11 @@ def test_performance_covers_the_song(pack, tmp_path, monkeypatch, clip):
     calls.clear()
     asyncio.run(P.execute(p, img, song, 'sings', '', 2.0, 0.0, 'last_frame'))
     assert len({c[1] for c in calls}) == 3                                # each shot starts from the previous one's end
+
+
+def test_cloud_model_names(pack):
+    G = pack.graphs
+    g = G.still('@img', 'x', 1)
+    assert G.for_backend(g, 'local') is g
+    c = G.for_backend(g, 'comfy_cloud')
+    assert c['lora']['inputs']['lora_name'].endswith('-fp32.safetensors') and g['lora']['inputs']['lora_name'].endswith('-bf16.safetensors')

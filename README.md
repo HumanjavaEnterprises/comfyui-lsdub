@@ -159,6 +159,8 @@ slots and Lip Kit building. They run there through the Comfy Python SDK (`pip in
 - **What runs where:** the dub and QA always run locally.
 - **Plan:** API-key runs need a **paid Comfy Cloud plan**; free-tier accounts are refused, and LSDub says so in
   plain words.
+- **Models:** Comfy Cloud has the same generator models; LSDub renames the one file whose name differs there (the
+  Qwen-Image-Edit Lightning LoRA). Tested 2026-10-29: a Still edit in 54 s and a 2 s LTX-2.5 clip in 16 s.
 - **Cost:** cloud runs use your Comfy credits. Local is the default, and the example workflows use local.
 
 ## Built on and learned from

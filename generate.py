@@ -164,6 +164,8 @@ def _run_cloud_job(c, graph, out_node, uploads, out_dir):
 async def run(graph, backend='local', uploads=None, out_dir='.', api_key=None, out_node='out'):
     if backend == 'comfy_cloud':
         import asyncio
+        from .graphs import for_backend
+        graph = for_backend(graph, backend)
         return await asyncio.to_thread(run_cloud, graph, out_node, uploads, out_dir, api_key)
     if backend != 'local': raise GenerationError(f'unknown backend {backend!r} (have {BACKENDS})')
     return await run_local(graph, out_node, uploads, out_dir)
