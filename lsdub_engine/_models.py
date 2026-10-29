@@ -26,7 +26,12 @@ def yunet_path():
 
 def _fetch(url, dst, sha):
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    urllib.request.urlretrieve(url, dst + ".part")  # noqa: S310 (fixed https URL, checksum below)
+    try:
+        urllib.request.urlretrieve(url, dst + ".part")  # noqa: S310 (fixed https URL, checksum below)
+    except OSError as e:                                   # no network, a proxy, a 404: say what to do by hand
+        if os.path.exists(dst + ".part"): os.remove(dst + ".part")
+        raise RuntimeError(f"could not download {os.path.basename(dst)} ({e}). Download it from {url} and place it at "
+                           f"{dst}") from e
     with open(dst + ".part", "rb") as f:
         got = hashlib.sha256(f.read()).hexdigest()
     if got != sha:
@@ -47,14 +52,4 @@ def face_landmarker_path():
 
 def fetch_face_landmarker(force=False):
     dst = face_landmarker_path()
-    if os.path.exists(dst) and not force:
-        return dst
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
-    urllib.request.urlretrieve(FACE_URL, dst + ".part")
-    with open(dst + ".part", "rb") as f:
-        got = hashlib.sha256(f.read()).hexdigest()
-    if got != FACE_SHA256:
-        os.remove(dst + ".part")
-        raise RuntimeError(f"face_landmarker.task checksum mismatch (got {got}); refusing to use it")
-    os.replace(dst + ".part", dst)
-    return dst
+    return dst if os.path.exists(dst) and not force else _fetch(FACE_URL, dst, FACE_SHA256)
