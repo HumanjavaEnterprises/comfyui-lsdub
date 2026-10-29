@@ -9,7 +9,11 @@ import folder_paths
 
 def torch_device():
     import comfy.model_management as mm
-    return mm.get_torch_device()
+    try:
+        return mm.get_torch_device()
+    except RuntimeError:                                                # no usable GPU: the CPU
+        import torch
+        return torch.device('cpu')
 
 
 def offload_device():

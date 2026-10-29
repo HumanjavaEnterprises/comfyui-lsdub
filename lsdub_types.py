@@ -96,7 +96,7 @@ class Kit(_Record):
 class Masks(_Record):
     """LSDUB_MASKS: per-shot occluder masks (a mic, a hand) the dub must not paint over."""
     dir: str
-    shots: list = field(default_factory=list)
+    shots: dict = field(default_factory=dict)          # shot id -> masks npz
     hash: str = ''
 
 

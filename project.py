@@ -87,10 +87,11 @@ class Project:
         return os.path.join(self.root, self.name)
 
     def cache_key(self):
-        """what downstream keys depend on: everything but force_shots (forcing a shot must not move every key)."""
+        """what downstream keys depend on: not force_shots (forcing a shot must not move every key), not mode (only the
+        dub reads it, so test_learn and run share their analysis) and not seed (only the generator slots use it, and
+        they key on it themselves)."""
         d = asdict(self)
-        d.pop('force_shots')
-        d.pop('root')
+        for k in ('force_shots', 'root', 'mode', 'seed'): d.pop(k)
         return text_hash(canonical(d))
 
     def ensure(self):
