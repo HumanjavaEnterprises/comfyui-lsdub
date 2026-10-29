@@ -176,3 +176,68 @@ def test_cloud_model_names(pack):
     assert G.for_backend(g, 'local') is g
     c = G.for_backend(g, 'comfy_cloud')
     assert c['lora']['inputs']['lora_name'].endswith('-fp32.safetensors') and g['lora']['inputs']['lora_name'].endswith('-bf16.safetensors')
+
+
+def _perf_setup(pack, tmp_path, monkeypatch, song_s, clip_frames=121):
+    import shutil
+    import subprocess
+    clip = str(tmp_path / f'clip{clip_frames}.mp4')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', f'testsrc=size=96x64:rate=25', '-frames:v', str(clip_frames),
+                    '-pix_fmt', 'yuv420p', clip], check=True)
+    calls = []
+
+    async def run(graph, backend='local', uploads=None, out_dir='.', api_key=None, out_node='out'):
+        calls.append(graph['noise']['inputs']['noise_seed'])
+        os.makedirs(out_dir, exist_ok=True)
+        p = os.path.join(out_dir, 'gen.mp4')
+        shutil.copyfile(clip, p)
+        return [p]
+    monkeypatch.setattr(pack.generate, 'run', run)
+    wav = str(tmp_path / f'song{song_s}.wav')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', f'sine=f=220:d={song_s}', wav], check=True)
+    return calls, pack.lsdub_types.Song(mix=wav, hash=f's{song_s}'), np.zeros((1, 64, 96, 3), np.float32)
+
+
+def test_performance_keeps_generating_until_the_song_is_covered(pack, tmp_path, monkeypatch):
+    calls, song, img = _perf_setup(pack, tmp_path, monkeypatch, 10)
+    p = _proj(pack, tmp_path, fps=25.0)
+    src = asyncio.run(pack.nodes_video.LSDubPerformance.execute(p, img, song, 'sings', '', 5.0, 0.0, 'same_still')).args[0]
+    assert len(calls) == 3                                                # 2 x 121 frames < 250: a third shot, no frozen tail
+    assert abs(src.n_frames - 250) <= 1
+    F, _ = pack.lsdub_engine.core.medium.read(src.path)
+    tail = [float(np.abs(F[k].astype(int) - F[k - 1].astype(int)).mean()) for k in range(len(F) - 8, len(F))]
+    assert min(tail) > 0.5                                                # the last frames still move
+
+
+def test_performance_song_shorter_than_one_shot(pack, tmp_path, monkeypatch):
+    calls, song, img = _perf_setup(pack, tmp_path, monkeypatch, 3)
+    p = _proj(pack, tmp_path, fps=25.0)
+    src = asyncio.run(pack.nodes_video.LSDubPerformance.execute(p, img, song, 'sings', '', 5.0, 0.0, 'same_still')).args[0]
+    assert len(calls) == 1 and abs(src.n_frames - 75) <= 1
+
+
+def test_performance_song_longer_than_the_clips_and_max_seconds(pack, tmp_path, monkeypatch):
+    calls, song, img = _perf_setup(pack, tmp_path, monkeypatch, 12, clip_frames=50)
+    p = _proj(pack, tmp_path, fps=25.0)
+    src = asyncio.run(pack.nodes_video.LSDubPerformance.execute(p, img, song, 'sings', '', 5.0, 0.0, 'same_still')).args[0]
+    assert len(calls) == 6 and abs(src.n_frames - 300) <= 1                # 50-frame clips: 6 shots for 300 frames
+    calls.clear()
+    src = asyncio.run(pack.nodes_video.LSDubPerformance.execute(p, img, song, 'sings', '', 5.0, 4.0, 'same_still')).args[0]
+    assert abs(src.n_frames - 100) <= 1                                   # max_seconds trims the song
+
+
+def test_performance_refuses_a_song_offset(pack, tmp_path, monkeypatch):
+    calls, song, img = _perf_setup(pack, tmp_path, monkeypatch, 3)
+    p = _proj(pack, tmp_path, fps=25.0, song_offset=1.5)
+    with pytest.raises(ValueError, match='song_offset'):
+        asyncio.run(pack.nodes_video.LSDubPerformance.execute(p, img, song, 'sings', '', 5.0, 0.0, 'same_still'))
+    assert calls == []
+
+
+def test_performance_fingerprint_follows_the_project(pack, tmp_path):
+    P = pack.nodes_video.LSDubPerformance
+    song = pack.lsdub_types.Song(mix='m.wav', hash='s')
+    img = np.zeros((1, 8, 8, 3), np.float32)
+    a = P.fingerprint_inputs(_proj(pack, tmp_path, fps=25.0), img, song, 'x', '')
+    b = P.fingerprint_inputs(pack.project.Project(root=str(tmp_path), name='other', fps=25.0).ensure(), img, song, 'x', '')
+    assert a != b

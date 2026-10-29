@@ -195,7 +195,7 @@ class LSDubPerformance(io.ComfyNode):
     def fingerprint_inputs(cls, project, character, song, prompt, negative_prompt, shot_seconds=5.0, max_seconds=0.0,
                            chain='same_still'):
         return stage_key('LSDubPerformance', cls._base(project, character, song, prompt, negative_prompt, shot_seconds,
-                                                       max_seconds, chain))
+                                                       max_seconds, chain), [project.cache_key(), project.dir])
 
     @classmethod
     async def execute(cls, project, character, song, prompt, negative_prompt, shot_seconds=5.0, max_seconds=0.0,
@@ -204,6 +204,9 @@ class LSDubPerformance(io.ComfyNode):
         import cv2
         from .lsdub_engine.core import medium as MED
         from .nodes_mouth import LSDubDub, _write_frames
+        if project.song_offset:
+            raise ValueError('LSDub Performance: the project\'s song_offset must be 0 (the performance starts with the '
+                             'song); set it on the project, or trim the song first.')
         base = cls._base(project, character, song, prompt, negative_prompt, shot_seconds, max_seconds, chain)
         st = project.stage('slots/video', stage_key('LSDubPerformance', base))
         dst = st.path('source.mp4')
@@ -220,7 +223,10 @@ class LSDubPerformance(io.ComfyNode):
                 pbar = comfy.utils.ProgressBar(n)
             except Exception:
                 pbar = None
-            for i in range(n):
+            i = 0
+            while i < n or len(frames) < need:                        # a generated shot can be a few frames short of
+                if i >= n + 8: raise RuntimeError('LSDub Performance: the video model returns too few frames per shot')
+                if i >= n and pbar: pbar.total = i + 1                 # shot_seconds: keep going until the song is covered
                 sk = stage_key('LSDubPerformance/shot', {**base, 'i': i, 'start': key})
                 sst = project.stage('slots/video/shots', sk)
                 clip = sst.path('shot.mp4')
@@ -238,14 +244,15 @@ class LSDubPerformance(io.ComfyNode):
                     cv2.imwrite(still, F[-1])
                     key = file_hash(still)
                 if pbar: pbar.update(1)
-            frames = frames[:need] + [frames[-1]] * max(0, need - len(frames))
+                i += 1
+            frames = frames[:need]
             silent = _write_frames(frames, st.path('silent.mp4'), project.fps, crf=12)
             from .lsdub_engine.io import ff
             r = ff.run(['ffmpeg', '-v', 'error', '-y', '-i', silent, '-i', song.mix, '-map', '0:v', '-map', '1:a', '-c:v', 'copy',
                         '-c:a', 'aac', '-shortest', dst + '.part.mp4'], capture_output=True)
             if r.returncode != 0: raise RuntimeError('ffmpeg failed muxing the performance')
             os.replace(dst + '.part.mp4', dst)
-            st.mark_done(True, shots=n, seconds=round(dur, 3))
+            st.mark_done(True, shots=i, seconds=round(dur, 3))
         fps, nf, wh = media.probe_video(dst)
         return io.NodeOutput(T.Source(path=dst, hash=file_hash(dst), fps=fps, n_frames=nf, wh=wh, name='performance.mp4'),
                              LSDubDub._video(dst))
