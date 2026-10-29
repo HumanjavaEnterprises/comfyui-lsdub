@@ -20,7 +20,7 @@ def _setup(pack, tmp_path):
 def test_verify_node(pack, tmp_path, monkeypatch):
     calls = []
 
-    def verify(video, vocal, sj, before=None, align=None, model=None, work=None):
+    def verify(video, vocal, sj, before=None, align=None, model=None, work=None, emb=None):
         calls.append((video, vocal, before, align, json.load(open(sj))['offset']))
         return {'video': video}, [{'shot': 3, 'band': 'REVIEW', 'score': 60.0, 'reason': 'mouth open in the silences'}]
 

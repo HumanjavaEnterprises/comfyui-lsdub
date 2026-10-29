@@ -49,7 +49,7 @@ def landmarks0(frame):
     H, W = frame.shape[:2]
     big = cv2.resize(frame, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     r = lm.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(big[:, :, ::-1])))
-    if not r.face_landmarks: raise SystemExit('no face on frame 0')
+    if not r.face_landmarks: raise RuntimeError('no face on frame 0')
     return np.array([[q.x * W, q.y * H] for q in r.face_landmarks[0]])
 
 def landmarks_first(frames):
@@ -58,7 +58,7 @@ def landmarks_first(frames):
     for k, f in enumerate(frames):
         try:
             p = landmarks0(f)
-        except SystemExit:
+        except RuntimeError:
             continue
         dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
         for i in range(k, 0, -1):
@@ -70,7 +70,7 @@ def landmarks_first(frames):
             yi = np.clip(p[:, 1].round().astype(int), 0, H - 1)
             p = p + fl[yi, xi]
         return p
-    raise SystemExit('no face in any frame')
+    raise RuntimeError('no face in any frame')
 
 
 

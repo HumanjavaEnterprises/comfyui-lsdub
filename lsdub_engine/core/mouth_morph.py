@@ -506,7 +506,7 @@ def run(a):
         from . import mouth_library as ml_
         _, l3 = ml_.landmarker()
         pb3 = lm3d(base, l3)
-        if pb3 is None: raise SystemExit('--anchors strict: no face found on the library base image')
+        if pb3 is None: raise RuntimeError('--anchors strict: no face found on the library base image')
     if P3D:   # same weights / openness / smoothing / closures on the 3D shape, kept as a delta from the base
         L3 = np.einsum('tv,vkd->tkd', Wt, np.stack([lib3[v] for v in names]))
         L3[:, low] = pb3[None, low] + (L3[:, low] - pb3[None, low]) * s[:, None, None]
@@ -868,14 +868,14 @@ def lip_tissue_mask(P, shape):
 def lip_ref_stats(img, P=None):
     """--lip-ref: Lab (mean, std) per channel of the lip tissue of a reference face image -> 3 x 2 array.
     P = its landmarks (detected with MediaPipe when None)."""
-    if img is None: raise SystemExit('--lip-ref: cannot read the image')
+    if img is None: raise RuntimeError('--lip-ref: cannot read the image')
     if P is None:
         from . import mouth_library as ml_
         P = ml_.landmarks(img)
-        if P is None: raise SystemExit('--lip-ref: no face found in the reference image')
+        if P is None: raise RuntimeError('--lip-ref: no face found in the reference image')
         P = np.asarray(P)[:, :2]
     w = lip_tissue_mask(P, img.shape)
-    if w.sum() < 30: raise SystemExit('--lip-ref: lip region too small')
+    if w.sum() < 30: raise RuntimeError('--lip-ref: lip region too small')
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
     return np.array([[lab[..., c][w].mean(), lab[..., c][w].std()] for c in range(3)])
 

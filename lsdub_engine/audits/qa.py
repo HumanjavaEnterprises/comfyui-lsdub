@@ -269,7 +269,7 @@ def verdict(s, has_refs):
 
 
 # ---------------------------------------------------------------------------------------------------- verify
-def verify(video, vocal, shots_json, before=None, align=None, model=None, work=None):
+def verify(video, vocal, shots_json, before=None, align=None, model=None, work=None, emb=None):
     from . import sync_qa as Q, snap as SN, scorecard as SC
     from ..core import cast as C
     J = json.load(open(shots_json))
@@ -283,7 +283,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
     act, env = vad(vocal, n, fps, offset)
     words = json.load(open(align))['words'] if align else []
     faces = C.Faces()
-    emb = C.Embedder(model or C.MODEL)
+    emb = (emb or C.Embedder(model or C.MODEL)) if before else None
     rows = []
     for s in J['shots']:
         if s['verdict'] not in ('DUB', 'DUB-MEDIUM'): continue

@@ -65,7 +65,7 @@ def singer_box(take, char, db_path, model=None, preset=None):
     from . import cast as C
     r = C.scan_video(take, C.load_db(db_path), model or C.MODEL, preset=preset)
     T = [t for t in r['tracks'] if t['character'] == char]
-    if not T: raise SystemExit(f"sing: no '{char}' track in {take} (found {sorted({t['character'] for t in r['tracks']})})")
+    if not T: raise RuntimeError(f"sing: no '{char}' track in {take} (found {sorted({t['character'] for t in r['tracks']})})")
     t = max(T, key=lambda t: t['face_px_med'] * t['n'])
     return [float(np.median([f['box'][j] for f in t['frames']])) for j in range(4)], t
 

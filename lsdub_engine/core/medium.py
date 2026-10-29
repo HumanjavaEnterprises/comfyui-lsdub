@@ -92,7 +92,7 @@ def track_face(F, box=None, faces=None, smooth=2.0):
     faces = faces or Faces()
     per = [faces(f) for f in F]
     T = [t for t in link(per) if len(t) >= max(2, len(F) // 10)] or link(per)
-    if not T: raise SystemExit('medium: no face track in the clip')
+    if not T: raise RuntimeError('medium: no face track in the clip')
     t = pick_track(T, box)
     c = {i: [(f['box'][0] + f['box'][2]) / 2, (f['box'][1] + f['box'][3]) / 2] for i, f in t}
     C = _gauss(fill(c, len(F)), smooth)
@@ -262,7 +262,7 @@ def run(video, track, out, paint_args=(), box=None, face_target=330.0, crop_mult
     P = [PH[min(len(PH) - 1, max(0, int(j)))] for j in idx]
     # the mask comes from the ORIGINAL crop's landmarks (smoothed), mapped back to the source frame
     Lc = crop_landmarks(crops, faces, face_target)
-    if not Lc: raise SystemExit('medium: the landmarker found no face in the crop')
+    if not Lc: raise RuntimeError('medium: the landmarker found no face in the crop')
     ks = sorted(Lc)
     A = np.stack([Lc[k] for k in ks])
     LM = np.stack([np.stack([np.interp(np.arange(n), ks, A[:, j, d]) for d in (0, 1)], 1) for j in range(A.shape[1])], 1)

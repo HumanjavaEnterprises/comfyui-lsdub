@@ -150,7 +150,7 @@ def _square(img, cx, cy, s, size):
 class Embedder:
     def __init__(self, model=MODEL):
         if not os.path.exists(model):
-            raise SystemExit(f'cast: no embedder at {model}; run `lsdub cast export-onnx --out {model}` '
+            raise RuntimeError(f'cast: no embedder at {model}; run `lsdub cast export-onnx --out {model}` '
                              '(needs torch + transformers + onnx once) or pass --model')
         self.net = cv2.dnn.readNetFromONNX(model)
 

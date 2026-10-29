@@ -102,7 +102,10 @@ install_stubs(_TMP)
 def pack():
     p = load_pack()
     import importlib
-    importlib.import_module(p.__name__ + '.devices').ensure_face_models = lambda: None    # no downloads in tests
+    dev = importlib.import_module(p.__name__ + '.devices')
+    dev.ensure_face_models = lambda: None                                          # no downloads in tests
+    dev.embedder = lambda: None
+    dev.release = lambda e: None
     return p
 
 

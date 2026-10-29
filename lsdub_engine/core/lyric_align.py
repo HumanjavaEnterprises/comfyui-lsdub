@@ -128,7 +128,7 @@ def pron(d, w, extra):
         s = make_g2p('eng', 'eng-arpabet')(w).output_string.strip()
         if s: return s
     except Exception: pass
-    raise SystemExit(f'no pronunciation for {w!r}; pass --extra-dict "{w}=P H O N E S"')
+    raise RuntimeError(f'no pronunciation for {w!r}; pass --extra-dict "{w}=P H O N E S"')
 
 
 def dict_phones(d, w, extra):

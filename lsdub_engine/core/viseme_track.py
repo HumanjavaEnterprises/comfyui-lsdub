@@ -260,7 +260,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     align = json.load(open(a.align)) if a.align else None
     oc = None
-    if not align and not (a.rhubarb and a.rhubarb_mode == 'fallback'): raise SystemExit('--align, or --rhubarb with --rhubarb-mode fallback')
+    if not align and not (a.rhubarb and a.rhubarb_mode == 'fallback'): raise RuntimeError('--align, or --rhubarb with --rhubarb-mode fallback')
     xp = rhubarb_phones(json.load(open(a.rhubarb)), a.rhubarb_mode) if a.rhubarb else []
     if a.a2f_csv:
         with open(a.a2f_csv) as f:

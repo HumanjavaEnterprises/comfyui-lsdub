@@ -63,8 +63,13 @@ class LSDubVerify(io.ComfyNode):
         out = st.path('verify')
         if not st.is_done():
             sj = media.dump({'fps': source.fps, 'offset': project.song_offset, 'shots': shots.shots}, st.path('shots.json'))
-            meta, rows = qa.verify(_cut_video(project, source, render), _vocal(song), sj, before=source.path, align=align.align,
-                                   work=st.path('work'))
+            from . import devices
+            emb = devices.embedder()
+            try:
+                meta, rows = qa.verify(_cut_video(project, source, render), _vocal(song), sj, before=source.path, align=align.align,
+                                       work=st.path('work'), emb=emb)
+            finally:
+                devices.release(emb)
             qa.write_verify(meta, rows, out)
             st.mark_done(True)
         J = json.load(open(out + '.json'))

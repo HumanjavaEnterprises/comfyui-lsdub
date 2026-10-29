@@ -239,6 +239,11 @@ def plan_jaw(th_t, w=None, hide=None, hide_w=None, hold=None, lead=0.0, vmax=np.
     n = len(th_t)
     if n < 4: return np.clip(th_t, *np.radians(lim))
     w = np.ones(n) if w is None else np.clip(np.asarray(w, float), 0, 1)
+    bad = ~np.isfinite(th_t)                                            # frames with no readable target: no pull,
+    if bad.all(): return np.clip(np.zeros(n), *np.radians(lim))          # interpolated from their neighbours
+    if bad.any():
+        th_t = np.interp(np.arange(n), np.flatnonzero(~bad), th_t[~bad])
+        w = np.where(bad, 0.0, np.nan_to_num(w))
     if lead: th_t = np.interp(np.arange(n) + lead, np.arange(n), th_t)
     hide = None if hide is None else np.asarray(hide, float)
     hide_w = np.zeros(n) if hide_w is None else np.asarray(hide_w, float)
@@ -252,8 +257,11 @@ def plan_jaw(th_t, w=None, hide=None, hide_w=None, hold=None, lead=0.0, vmax=np.
         if hide is not None: r.append(mu * hide_w * np.maximum(0, hide - x))
         if floor is not None: r.append(mu * np.maximum(0, np.asarray(floor, float) - x))
         return np.concatenate(r)
+    if hide is not None: hide = np.nan_to_num(hide, nan=-np.inf)
+    hide_w = np.nan_to_num(hide_w)
     x0 = gaussian_filter1d(th_t if hide is None else np.where(hide_w > 0.5, np.maximum(th_t, hide), th_t), 1.0, mode='nearest')
-    if floor is not None: x0 = np.maximum(x0, floor)
+    if floor is not None: x0 = np.maximum(x0, np.nan_to_num(np.asarray(floor, float), nan=-np.inf))
+    x0 = np.nan_to_num(x0)
     x = least_squares(res, x0, method='trf', x_scale=0.05, max_nfev=4000).x
     return np.clip(x, *np.radians(lim))
 
