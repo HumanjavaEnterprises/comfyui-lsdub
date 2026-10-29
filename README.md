@@ -23,11 +23,12 @@ and grades the result.
   ```
   cd ComfyUI/custom_nodes
   git clone https://github.com/HumanjavaEnterprises/comfyui-lsdub
-  pip install -r comfyui-lsdub/requirements.txt
+  <ComfyUI's python> -m pip install -r comfyui-lsdub/requirements.txt
   ```
+  Use the Python that runs ComfyUI (its venv, or `python_embeded/python.exe` in the Windows portable build).
 
 **Requirements:**
-- ComfyUI 0.34 or newer (V3 nodes).
+- ComfyUI 0.3.50 or newer (the V3 node API).
 - Python 3.10 or newer.
 - `ffmpeg` on PATH.
 - The Python packages in `requirements.txt`: numpy, OpenCV, SciPy, MediaPipe, Pillow, faster-whisper,
@@ -40,21 +41,27 @@ and grades the result.
 **Demo assets** for the example workflows: `python custom_nodes/comfyui-lsdub/scripts/fetch_demo.py`. This downloads
 about 29 MB, checks its checksum, and installs into `ComfyUI/input/`. You get a 7.5 s clip, its song and dry lead
 vocal, the lyrics, a 12 s chorus, a start still and a lip kit. All are original synthetic characters and an original song.
+If the download fails, get `lsdub-demo-0.1.0.zip` from the GitHub Releases page by hand and run
+`python scripts/fetch_demo.py --zip lsdub-demo-0.1.0.zip`.
 
 ## Models
 
-Nothing is downloaded when ComfyUI starts. Each model is fetched the first time a node needs it, or you place it
-yourself. The generator models are standard ComfyUI files: if you already run these models in ComfyUI, LSDub uses
-your copies.
+Nothing is downloaded when ComfyUI starts.
+- **Placed by you** (not downloaded by LSDub): the generator models (ACE-Step, Qwen-Image-Edit, LTX-2.5) and the
+  Mel-Band RoFormer vocal checkpoint. Put them in the ComfyUI model folders below. They are standard ComfyUI files: if
+  you already run these models in ComfyUI, LSDub uses your copies.
+- **Downloaded on first use:** Whisper, DINOv2, the face models and the Occluders models, into `models/lsdub`.
+- **Disk:** about 120 GB for Prompt Everything (all the generators), about 3.5 GB for the other workflows (Whisper,
+  DINOv2, the face models; plus 0.9 GB for the RoFormer in workflow 4).
 
 | used by | file | size | licence | folder |
 |---|---|---|---|---|
-| Song slot | [acestep_v1.5_xl_turbo_bf16.safetensors](https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files) | 9.3 GB | ACE-Step model card | `diffusion_models` |
-| Song slot | ace_1.5_vae, qwen_0.6b_ace15, qwen_4b_ace15 (same repo) | 0.3 + 1.2 + 7.9 GB | ACE-Step model card | `vae`, `text_encoders` |
+| Song slot | [acestep_v1.5_xl_turbo_bf16.safetensors](https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files) | 9.3 GB | ACE-Step 1.5 licence (on its model card; v1 was Apache-2.0) | `diffusion_models` |
+| Song slot | ace_1.5_vae, qwen_0.6b_ace15, qwen_4b_ace15 (same repo) | 0.3 + 1.2 + 7.9 GB | as above (ACE-Step 1.5 files) | `vae`, `text_encoders` |
 | Still slot, Lip Kit | [qwen_image_edit_2511 (int8 or bf16)](https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI) | 20 GB | Apache-2.0 | `diffusion_models` |
 | Still slot, Lip Kit | qwen_2.5_vl_7b, qwen_image_vae, Qwen-Image-Edit-2511-Lightning-8steps lora | 16 + 0.2 + 0.8 GB | Apache-2.0 | `text_encoders`, `vae`, `loras` |
-| Video slot | [ltx-2.5-22b-distilled-transformer-bf16](https://huggingface.co/Lightricks) | 40 GB | LTX model licence (see its card) | `diffusion_models` |
-| Video slot | gemma4-12b-with-proj-ltx-2.5, ltx-2.5-video-vae, ltx-2.5-audio-vae | 25 + 1.4 + 0.3 GB | see the model cards | `text_encoders`, `vae` |
+| Video slot | [ltx-2.5-22b-distilled-transformer-bf16](https://huggingface.co/Lightricks) | 40 GB | LTX-2 Community License (revenue threshold; see its card) | `diffusion_models` |
+| Video slot | gemma4-12b-with-proj-ltx-2.5, ltx-2.5-video-vae, ltx-2.5-audio-vae | 25 + 1.4 + 0.3 GB | Gemma licence (text encoder; see its card); LTX-2 Community License (VAEs) | `text_encoders`, `vae` |
 | Vocal Split | [MelBandRoformer_kim_vocals.ckpt](https://huggingface.co/KimberleyJSN/melbandroformer) | 0.9 GB | MIT | `audio_separation` |
 | Align | Whisper large-v3 (faster-whisper / CTranslate2), downloaded on first use | 3 GB | MIT | `lsdub/whisper` |
 | Cast, Triage, Verify | DINOv2 base (facebook/dinov2-base), downloaded on first use | 0.3 GB | Apache-2.0 | `lsdub/dinov2` |
@@ -66,7 +73,8 @@ ComfyUI offloads to system RAM on smaller cards, which is slower.
 
 ## The nodes
 
-Every input and output has a tooltip. Categories are `LSDub/video`, `LSDub/audio`, `LSDub/mouth` and `LSDub/qa`.
+Every input and output has a tooltip. Categories are `LSDub` (the Project node), `LSDub/video`, `LSDub/audio`,
+`LSDub/mouth` and `LSDub/qa`.
 
 **Project**
 - **LSDub Project:** the project folder for one cut.
@@ -93,8 +101,9 @@ Every input and output has a tooltip. Categories are `LSDub/video`, `LSDub/audio
 - **LSDub Lyrics:** the sung words.
 - **LSDub Vocal Split:** vocals and instrumental (Mel-Band RoFormer).
 - **LSDub Lead Vocal:** lead, backing, and a lead-activity curve.
-- **LSDub Align:** times every word (lyrics optional: without them the transcript is used). It runs speech-to-text, reconciles the result with your lyrics, then
-  force-aligns. It builds the viseme track with vocalisations (ooh, da da) marked to skip, and writes a lyric
+- **LSDub Align:** times every word (lyrics optional: without them the transcript is used). It runs speech-to-text (prompted with your lyrics), reconciles the result with them, then
+  force-aligns. If what is sung matches the lyrics poorly (below 0.5) it warns and places the lyrics on the voice;
+  below 0.2 it stops and asks you to check the lyrics. It builds the viseme track with vocalisations (ooh, da da) marked to skip, and writes a lyric
   check.
 
 **MOUTH lane**
@@ -107,6 +116,7 @@ Every input and output has a tooltip. Categories are `LSDub/video`, `LSDub/audio
     measured sync gate is applied.
   - With `auto`, the full-frame warp also runs, and the version with better measured sync is kept.
   - A continuity repair runs afterwards.
+  - `vocalisations`: `skip` keeps the video's own mouth on ooh / da da, `rest` closes it, `mouth` sings them.
   - Each shot is saved as it finishes, so the dub resumes. Failed shots are reported, and by default the cut keeps
     their original frames.
 - **LSDub Occluders:** masks a microphone or hand in front of the mouth, so the next dub keeps it in front.
@@ -129,17 +139,21 @@ They are in `example_workflows/` and appear in ComfyUI's template browser. Workf
 1. **Prompt Everything** (the hero). Still → video (LTX-2.5), tags + lyrics → song (ACE-Step), lip kit built from the
    generated clip, then dub, QA and save. Needs a GPU and the generator models.
 2. **BYO Clip and Song.** The demo clip, song, lead vocal, lyrics and lip kit, then triage, align, dub, verify,
-   fix-it and save. Runs on the CPU. The models it needs download on first use.
+   fix-it and save. It uses the bundled lip kit, so it runs on the CPU only (no GPU, no generator models). The models
+   it needs (Whisper, DINOv2, the face models) download on first use.
 3. **Test and Learn.** Triage, alignment, sync QA with its card, and the fix-it notes, with no dub. Run this first
    on any new video.
-4. **Make Your Character Sing.** A song + a character image (+ optional lyrics): vocal split, lead vocal, alignment,
-   a performance video made with LTX-2.5 to the song's length, a lip kit built from it, the dub, verify (the sync
-   score), and the saved video with the song. Needs a GPU and the generator models.
+4. **Make Your Character Sing** (experimental). A song + a character image (+ optional lyrics): vocal split, lead
+   vocal, alignment, a performance video made with LTX-2.5 to the song's length, a lip kit built from it, the dub,
+   verify (the sync score), and the saved video with the song. Needs a GPU, the generator models, and
+   `MelBandRoformer_kim_vocals.ckpt` in `models/audio_separation` (for Vocal Split). Works best with worded lyrics:
+   the Dub here sets `vocalisations` to `mouth`, so scat (da da, ooh) is sung like words; with `skip`, those passages
+   keep LTX-2.5's own mouth motion and may fail Verify.
 
 **Test & Learn vs Run:** in `test_learn` mode the Dub node passes the source through untouched, so the QA nodes
 measure your original video. Their analysis is cached and reused when you switch to `run`.
 
-**Runtimes**, measured on the 100 s demo film:
+**Runtimes**, measured on a 100 s internal test film (not the demo pack):
 - Shot split: ~20 s.
 - Triage: ~8 min on the CPU, ~3 min with a GPU (identity on the GPU).
 - Align: ~1 min.
@@ -149,6 +163,9 @@ measure your original video. Their analysis is cached and reused when you switch
 - ACE-Step: ~12 s for 15 s of song.
 
 Re-runs are cache hits.
+
+On the 7.5 s demo clip, workflow 2 dubs its one close-up in about 8 minutes on the CPU (triage and align add a few
+minutes on the first run). Workflow 2 uses the lip kit in the demo pack, so it needs no GPU and no generator models.
 
 ## Comfy Cloud (opt-in)
 
@@ -169,8 +186,9 @@ slots and Lip Kit building. They run there through the Comfy Python SDK (`pip in
   entry point the pack is written in (GPL-3.0 host; the pack only imports its API).
 - [cookiecutter-comfy-extension](https://github.com/Comfy-Org/cookiecutter-comfy-extension): the pack layout, tests
   and CI shape (MIT).
-- [Mel-Band RoFormer](https://arxiv.org/abs/2310.01809): the vocal split architecture, reimplemented from the paper.
-  It loads an MIT vocal checkpoint (paper).
+- [Mel-Band RoFormer](https://arxiv.org/abs/2310.01809) (Wang et al., 2023): the vocal split architecture,
+  reimplemented from the paper. It loads the MIT-licensed
+  [MelBandRoformer_kim_vocals.ckpt](https://huggingface.co/KimberleyJSN/melbandroformer) checkpoint.
 - [MediaPipe Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker): the 478-point
   face mesh every mouth measurement runs on (Apache-2.0).
 - [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet): face detection at any scale
