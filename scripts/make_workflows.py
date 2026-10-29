@@ -199,6 +199,35 @@ def prompt_everything():
     return wf
 
 
+LYRICS_CHORUS = "Pleiadians don't dance\nPleiadians don't dance\nPleiadians don't dance\nWhy don't they try?"
+
+
+def make_character_sing():
+    wf = WF('LSDub 4: Make Your Character Sing')
+    wf.add('project', 'LSDubProject', (0, 0), name='lsdub-character-sing', mode='run', preset='none', song_offset=0.0,
+           backend='local')
+    wf.add('load_song', 'LoadAudio', (0, 500), audio=DEMO + 'landing_song_12s.wav')
+    wf.add('split', 'LSDubVocalSplit', (400, 500), model='MelBandRoformer_kim_vocals.ckpt').link('load_song', 0, 'split', 'audio')
+    wf.add('lead', 'LSDubLeadVocal', (800, 500)).link('split', 'vocals', 'lead', 'vocals')
+    wf.add('song', 'LSDubSongSlot', (1200, 500)).link('project', 'project', 'song', 'project').link('load_song', 0, 'song', 'audio')
+    wf.link('lead', 'lead', 'song', 'vocal')
+    wf.add('load_char', 'LoadImage', (0, 250), image=DEMO + 'landing_still.png')
+    wf.add('video', 'LSDubPerformance', (400, 0), prompt='close-up, she sings to the camera on a small club stage, her mouth clearly '
+                                                       'visible, warm spotlight, gentle camera push in',
+           negative_prompt='blurry, distorted face, extra fingers, text, watermark', shot_seconds=5.0, chain='same_still')
+    for s_, o, i in (('project', 'project', 'project'), ('load_char', 0, 'character'), ('song', 'song', 'song')): wf.link(s_, o, 'video', i)
+    wf.add('shots', 'LSDubShotSplit', (800, 0)).link('project', 'project', 'shots', 'project').link('video', 'source', 'shots', 'source')
+    wf.add('lyrics', 'LSDubLyricsSlot', (1200, 800), text=LYRICS_CHORUS).link('project', 'project', 'lyrics', 'project')
+    wf.add('align', 'LSDubAlign', (1600, 800))
+    for s_, o, i in (('project', 'project', 'project'), ('song', 'song', 'song'), ('lyrics', 'lyrics', 'lyrics')): wf.link(s_, o, 'align', i)
+    wf.add('triage', 'LSDubTriage', (1200, 0))
+    for s_, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('shots', 'shots', 'shots'), ('song', 'song', 'song')):
+        wf.link(s_, o, 'triage', i)
+    dub_and_qa(wf, {'identity': 'singer', 'kit_dir': '', 'shot_id': 0}, audio='song')
+    wf.link('video', 'source', 'kit', 'source').link('shots', 'shots', 'kit', 'shots')
+    return wf
+
+
 def thumb(path, title, sub, still):
     import cv2
     import numpy as np
@@ -219,11 +248,13 @@ def main():
     still = sys.argv[1] if len(sys.argv) > 1 else ''
     for name, wf, sub in (('1-LSDub-Prompt-Everything', prompt_everything(), 'still -> video, tags -> song, lip kit, dub, QA'),
                           ('2-LSDub-BYO-Clip-and-Song', byo(), 'your clip + song + lyrics + lip kit -> the dub'),
-                          ('3-LSDub-Test-and-Learn', test_and_learn(), 'triage, sync QA and fix-it notes, no dub')):
+                          ('3-LSDub-Test-and-Learn', test_and_learn(), 'triage, sync QA and fix-it notes, no dub'),
+                          ('4-LSDub-Make-Your-Character-Sing', make_character_sing(), 'a song + a character image -> a singing video')):
         json.dump(wf.json(), open(os.path.join(out, name + '.json'), 'w'), indent=1)
         if os.environ.get('LSDUB_API_OUT'):
             json.dump(wf.api(), open(os.path.join(os.environ['LSDUB_API_OUT'], name + '.api.json'), 'w'), indent=1)
-        thumb(os.path.join(out, name + '.jpg'), name.split('-', 1)[1].replace('LSDub-', '').replace('-', ' '), sub, still)
+        shot = os.environ.get('LSDUB_THUMB_' + name.split('-')[0])                 # a frame from a real run, if given
+        thumb(os.path.join(out, name + '.jpg'), name.split('-', 1)[1].replace('LSDub-', '').replace('-', ' '), sub, shot or still)
         print(name, len(wf.nodes), 'nodes', len(wf.links), 'links')
 
 

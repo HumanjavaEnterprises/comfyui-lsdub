@@ -142,3 +142,29 @@ def test_cloud_free_tier_refusal_in_plain_words(pack, tmp_path):
     with pytest.raises(G.GenerationError, match='paid Comfy Cloud plan') as e:
         G.run_cloud({'out': {'class_type': 'X', 'inputs': {}}}, 'out', None, str(tmp_path), 'sk-secret', client_factory=Client)
     assert 'sk-secret' not in str(e.value)
+
+
+def test_performance_covers_the_song(pack, tmp_path, monkeypatch, clip):
+    import shutil
+    import subprocess
+    calls = []
+
+    async def run(graph, backend='local', uploads=None, out_dir='.', api_key=None, out_node='out'):
+        calls.append((graph['noise']['inputs']['noise_seed'], uploads['img']))
+        os.makedirs(out_dir, exist_ok=True)
+        p = os.path.join(out_dir, 'gen.mp4')
+        shutil.copyfile(clip, p)                                         # a 2 s, 50-frame stand-in clip
+        return [p]
+    monkeypatch.setattr(pack.generate, 'run', run)
+    wav = str(tmp_path / 'song.wav')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=f=220:d=4.5', wav], check=True)
+    p = pack.project.Project(root=str(tmp_path), name='cut', fps=25.0).ensure()
+    song = pack.lsdub_types.Song(mix=wav, hash='s')
+    img = np.zeros((1, 64, 96, 3), np.float32)
+    P = pack.nodes_video.LSDubPerformance
+    src = asyncio.run(P.execute(p, img, song, 'sings', '', 2.0, 0.0, 'same_still')).args[0]
+    assert len(calls) == 3 and len({c[0] for c in calls}) == 3 and len({c[1] for c in calls}) == 1   # 3 shots, 3 seeds, one still
+    assert abs(src.n_frames - 112) <= 1                                   # 4.5 s at 25 fps
+    calls.clear()
+    asyncio.run(P.execute(p, img, song, 'sings', '', 2.0, 0.0, 'last_frame'))
+    assert len({c[1] for c in calls}) == 3                                # each shot starts from the previous one's end

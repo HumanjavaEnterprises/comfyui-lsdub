@@ -111,7 +111,9 @@ class LSDubAlign(io.ComfyNode):
             inputs=[
                 T.LSDubProject.Input('project', tooltip='The LSDub project (its fps sets the viseme track rate).'),
                 T.LSDubSong.Input('song', tooltip='The song. Its lead vocal is used when present, else the vocal, else the mix.'),
-                T.LSDubLyrics.Input('lyrics', tooltip='The lyrics as sung.'),
+                T.LSDubLyrics.Input('lyrics', optional=True,
+                                    tooltip='The lyrics as sung. Optional: without them the words speech-to-text hears are used '
+                                            '(less accurate on sung vocals).'),
                 io.Audio.Input('vocal', optional=True,
                                tooltip='The lead vocal (from LSDub Lead Vocal). Best results: a dry lead vocal.'),
                 io.String.Input('pronunciations', multiline=True, default='',
@@ -136,16 +138,16 @@ class LSDubAlign(io.ComfyNode):
     def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json):
         vh = media.audio_hash(vocal) if vocal is not None else (song.hashes.get('lead') or song.hash or file_hash(cls._vocal(song, None)))
         tj = file_hash(transcript_json) if transcript_json else ''
-        return stage_key('LSDubAlign', {'vocal': vh, 'lyrics': lyrics.hash, 'pron': text_hash(pronunciations.strip()),
+        return stage_key('LSDubAlign', {'vocal': vh, 'lyrics': lyrics.hash if lyrics else 'transcript', 'pron': text_hash(pronunciations.strip()),
                                         'stt': stt_model, 'transcript': tj, 'which': 'given' if vocal is not None else
                                         ('lead' if song.lead else 'vocal' if song.vocal else 'mix')}, [project.cache_key()])
 
     @classmethod
-    def fingerprint_inputs(cls, project, song, lyrics, vocal=None, pronunciations='', stt_model='large-v3', transcript_json=''):
+    def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json=''):
         return cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json)
 
     @classmethod
-    def execute(cls, project, song, lyrics, vocal=None, pronunciations='', stt_model='large-v3', transcript_json=''):
+    def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json=''):
         from .lsdub_engine.core import lyric_align as LA, viseme_track as VT, vocalisations as VO
         st = project.stage('audio/align', cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json))
         align, vis, vis_skip, md = st.path('align.json'), st.path('visemes.json'), st.path('visemes_skip.json'), st.path('lyric_check.md')
@@ -157,7 +159,18 @@ class LSDubAlign(io.ComfyNode):
                 with open(transcript_json) as f, open(stt, 'w') as g: g.write(f.read())
             from . import devices
             wd, wi = devices.whisper_device()
-            argv = ['--audio', voc, '--lyrics', lyrics.path, '--t0', '0', '--t1', f'{dur:.3f}', '--out', align,
+            dev_args = ['--device', wd, '--device-index', str(wi), '--whisper-dir', devices.models_dir('whisper'),
+                        '--whisper-model', stt_model, '--whisper-python', '']
+            lyr = lyrics.path if lyrics else st.path('lyrics_from_transcript.txt')
+            if lyrics is None:                                          # no lyric sheet: the transcript is the sheet
+                if not os.path.exists(stt):
+                    open(lyr, 'w').close()
+                    call(LA.main, ['--stt-only', '--audio', voc, '--lyrics', lyr, '--t0', '0', '--t1', f'{dur:.3f}', '--out', align,
+                                   '--stt-json', stt, *dev_args], quiet=True, name='speech-to-text')
+                heard = [w['w'] for w in json.load(open(stt))]
+                if not heard: raise RuntimeError('LSDub Align: no lyrics given and speech-to-text heard no words; connect the lyrics')
+                with open(lyr, 'w', encoding='utf-8') as f: f.write(' '.join(heard) + '\n')
+            argv = ['--audio', voc, '--lyrics', lyr, '--t0', '0', '--t1', f'{dur:.3f}', '--out', align,
                     '--stt-json', stt, '--aligner', 'sphinx', '--whisper-python', '', '--whisper-model', stt_model,
                     '--device', wd, '--device-index', str(wi), '--whisper-dir', devices.models_dir('whisper')]
             for ln in pronunciations.splitlines():
@@ -166,7 +179,7 @@ class LSDubAlign(io.ComfyNode):
             devices.free()
             call(VT.main, ['--align', align, '--t0', '0', '--frames', str(int(dur * project.fps)), '--fps', str(project.fps),
                            '--audio', voc, '--out', vis], quiet=True, name='visemes')
-            call(VO.main, ['skip', '--track', vis, '--out', vis_skip, '--lyrics', lyrics.path, '--align', align], quiet=True,
+            call(VO.main, ['skip', '--track', vis, '--out', vis_skip, '--lyrics', lyr, '--align', align], quiet=True,
                  name='vocalisations')
             with open(md, 'w') as f: f.write(lyric_check_md(align, vis_skip))
             st.mark_done(True, vocal=voc, seconds=round(dur, 3))

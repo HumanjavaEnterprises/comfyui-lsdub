@@ -155,6 +155,102 @@ class LSDubVideoSlot(io.ComfyNode):
         raise ValueError('LSDub Video: connect a video (or a still) to dub.')
 
 
+class LSDubPerformance(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id='LSDubPerformance', display_name='LSDub Performance', category='LSDub/video',
+            description='A character image + a song -> a performance video as long as the song: LTX-2.5 image-to-video '
+                        'shots of ~5 s, placed one after another on the song timeline (open weights; local GPU or Comfy '
+                        'Cloud per the project). Dub it afterwards to make the mouth sing the words.',
+            hidden=[io.Hidden.api_key_comfy_org],
+            inputs=[
+                T.LSDubProject.Input('project', tooltip='The LSDub project (fps, seed, backend).'),
+                io.Image.Input('character', tooltip='The character to animate (first image is used).'),
+                T.LSDubSong.Input('song', tooltip='The song: the video is made as long as it.'),
+                io.String.Input('prompt', multiline=True, default='close-up, the character sings to the camera, mouth clearly visible',
+                                tooltip='The performance: what the character does, the camera, the light.'),
+                io.String.Input('negative_prompt', multiline=True, default='blurry, distorted face, extra fingers, text',
+                                tooltip='What to avoid.'),
+                io.Float.Input('shot_seconds', default=5.0, min=2.0, max=10.0, step=0.5,
+                               tooltip='Length of each generated shot, s.'),
+                io.Float.Input('max_seconds', default=0.0, min=0.0, max=600.0, step=1.0, optional=True,
+                               tooltip='Stop after this many seconds of the song (0 = the whole song).'),
+                io.Combo.Input('chain', options=['same_still', 'last_frame'], default='same_still', optional=True,
+                               tooltip='same_still: every shot starts from the character image (a new seed per shot) and '
+                                       'keeps the identity best; last_frame: each shot continues from the previous one '
+                                       '(smoother, but the face drifts over a long song).'),
+            ],
+            outputs=[T.LSDubSource.Output(display_name='source', tooltip='The performance video (with the song).'),
+                     io.Video.Output(display_name='video', tooltip='The performance video.')],
+        )
+
+    @classmethod
+    def _base(cls, project, character, song, prompt, negative_prompt, shot_seconds, max_seconds, chain):
+        return {'img': media.audio_hash({'waveform': character[:1][None], 'sample_rate': 0}), 'song': song.cache_key(),
+                'p': prompt.strip(), 'n': negative_prompt.strip(), 'shot': shot_seconds, 'max': max_seconds, 'chain': chain,
+                'seed': project.seed, 'backend': project.backend, 'fps': project.fps}
+
+    @classmethod
+    def fingerprint_inputs(cls, project, character, song, prompt, negative_prompt, shot_seconds=5.0, max_seconds=0.0,
+                           chain='same_still'):
+        return stage_key('LSDubPerformance', cls._base(project, character, song, prompt, negative_prompt, shot_seconds,
+                                                       max_seconds, chain))
+
+    @classmethod
+    async def execute(cls, project, character, song, prompt, negative_prompt, shot_seconds=5.0, max_seconds=0.0,
+                      chain='same_still'):
+        import math
+        import cv2
+        from .lsdub_engine.core import medium as MED
+        from .nodes_mouth import LSDubDub, _write_frames
+        base = cls._base(project, character, song, prompt, negative_prompt, shot_seconds, max_seconds, chain)
+        st = project.stage('slots/video', stage_key('LSDubPerformance', base))
+        dst = st.path('source.mp4')
+        if not st.is_done():
+            dur = media.duration(song.mix)
+            if max_seconds and max_seconds > 0: dur = min(dur, float(max_seconds))
+            need = int(round(dur * project.fps))
+            n = max(1, math.ceil(dur / shot_seconds))
+            still = media.image_to_png(character, st.path('character.png'))
+            w, h = _fit((int(character.shape[2]), int(character.shape[1])))
+            frames, key = [], media.audio_hash({'waveform': character[:1][None], 'sample_rate': 0})
+            try:
+                import comfy.utils
+                pbar = comfy.utils.ProgressBar(n)
+            except Exception:
+                pbar = None
+            for i in range(n):
+                sk = stage_key('LSDubPerformance/shot', {**base, 'i': i, 'start': key})
+                sst = project.stage('slots/video/shots', sk)
+                clip = sst.path('shot.mp4')
+                if not sst.is_done():
+                    g = graphs.video('@img', prompt.strip(), negative_prompt.strip(), shot_seconds, project.seed + 1000 * i,
+                                     project.fps, w, h, prefix=f'lsdub/perf_{sk}')
+                    paths = await generate.run(g, project.backend, uploads={'img': still}, out_dir=sst.path('gen'),
+                                               api_key=media.hidden_api_key(cls))
+                    os.replace(paths[0], clip)
+                    sst.mark_done(True)
+                F, _ = MED.read(clip)
+                frames += F
+                if chain == 'last_frame' and F:                       # the next shot starts where this one ended
+                    still = sst.path('last.png')
+                    cv2.imwrite(still, F[-1])
+                    key = file_hash(still)
+                if pbar: pbar.update(1)
+            frames = frames[:need] + [frames[-1]] * max(0, need - len(frames))
+            silent = _write_frames(frames, st.path('silent.mp4'), project.fps, crf=12)
+            from .lsdub_engine.io import ff
+            r = ff.run(['ffmpeg', '-v', 'error', '-y', '-i', silent, '-i', song.mix, '-map', '0:v', '-map', '1:a', '-c:v', 'copy',
+                        '-c:a', 'aac', '-shortest', dst + '.part.mp4'], capture_output=True)
+            if r.returncode != 0: raise RuntimeError('ffmpeg failed muxing the performance')
+            os.replace(dst + '.part.mp4', dst)
+            st.mark_done(True, shots=n, seconds=round(dur, 3))
+        fps, nf, wh = media.probe_video(dst)
+        return io.NodeOutput(T.Source(path=dst, hash=file_hash(dst), fps=fps, n_frames=nf, wh=wh, name='performance.mp4'),
+                             LSDubDub._video(dst))
+
+
 def _shots_key(project, source):
     return stage_key('LSDubShotSplit', {}, [project.cache_key(), source.hash])
 
@@ -340,4 +436,4 @@ class LSDubTriage(io.ComfyNode):
         return io.NodeOutput(rec, media.load_image(out + '_sheet.jpg'), open(out + '.md').read())
 
 
-NODES = [LSDubStillSlot, LSDubVideoSlot, LSDubShotSplit, LSDubCast, LSDubTriage]
+NODES = [LSDubStillSlot, LSDubVideoSlot, LSDubPerformance, LSDubShotSplit, LSDubCast, LSDubTriage]
