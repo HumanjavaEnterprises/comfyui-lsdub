@@ -49,6 +49,7 @@ def _io_stub():
         def define_schema(cls): raise NotImplementedError
 
     io.Schema, io.NodeOutput, io.ComfyNode = Schema, NodeOutput, ComfyNode
+    io.Hidden = types.SimpleNamespace(api_key_comfy_org='API_KEY_COMFY_ORG', unique_id='UNIQUE_ID')
     return io
 
 

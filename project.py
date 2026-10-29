@@ -76,6 +76,7 @@ class Project:
     vocalisations: str = 'skip'
     seed: int = 0
     preset: str = 'none'
+    backend: str = 'local'
     force_shots: tuple = field(default_factory=tuple)
 
     def __post_init__(self):
@@ -91,7 +92,7 @@ class Project:
         dub reads it, so test_learn and run share their analysis) and not seed (only the generator slots use it, and
         they key on it themselves)."""
         d = asdict(self)
-        for k in ('force_shots', 'root', 'mode', 'seed'): d.pop(k)
+        for k in ('force_shots', 'root', 'mode', 'seed', 'backend'): d.pop(k)
         return text_hash(canonical(d))
 
     def ensure(self):

@@ -6,13 +6,67 @@ import os
 
 from comfy_api.v0_0_2 import io
 
+from . import generate, graphs
 from . import lsdub_types as T
 from . import media
 from .lsdub_engine import presets
-from .nodes_audio import GENERATION_LATER
 from .project import file_hash, stage_key, text_hash
 
 VERDICT_COLOUR = {'DUB': (60, 200, 60), 'DUB-MEDIUM': (0, 170, 255), 'NO': (60, 60, 210)}
+
+
+def _fit(wh, long_side=768, multiple=32):
+    """a still's aspect at ~long_side px, both sides a multiple of 32 (LTX)."""
+    w, h = wh
+    k = long_side / max(w, h)
+    return max(multiple, int(round(w * k / multiple)) * multiple), max(multiple, int(round(h * k / multiple)) * multiple)
+
+
+class LSDubStillSlot(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id='LSDubStillSlot', display_name='LSDub Still', category='LSDub/video',
+            description='A still for the video slot: bring an image, or edit one with Qwen-Image-Edit-2511 (open '
+                        'weights) by an instruction. Local GPU or Comfy Cloud per the project.',
+            hidden=[io.Hidden.api_key_comfy_org],
+            inputs=[
+                T.LSDubProject.Input('project', tooltip='The LSDub project.'),
+                io.Image.Input('image', tooltip='The image to use or to edit (first image of the batch).'),
+                io.String.Input('edit_prompt', multiline=True, default='',
+                                tooltip='Optional edit instruction, e.g. "make her hold a chrome microphone". Empty = '
+                                        'use the image as it is. (This model takes no negative prompt.)'),
+                io.Image.Input('ref', optional=True, tooltip='Optional second reference image (a costume, a prop).'),
+            ],
+            outputs=[io.Image.Output(display_name='image', tooltip='The still (edited or as given).')],
+        )
+
+    @classmethod
+    def _key(cls, project, image, edit_prompt, ref):
+        h = media.audio_hash({'waveform': image[None], 'sample_rate': 0})
+        r = media.audio_hash({'waveform': ref[None], 'sample_rate': 0}) if ref is not None else ''
+        return stage_key('LSDubStillSlot', {'img': h, 'ref': r, 'p': edit_prompt.strip(), 'seed': project.seed,
+                                            'backend': project.backend}, [project.cache_key()])
+
+    @classmethod
+    def fingerprint_inputs(cls, project, image, edit_prompt='', ref=None):
+        return cls._key(project, image, edit_prompt, ref)
+
+    @classmethod
+    async def execute(cls, project, image, edit_prompt='', ref=None):
+        if not (edit_prompt or '').strip():
+            return io.NodeOutput(image[:1])
+        st = project.stage('slots/still', cls._key(project, image, edit_prompt, ref))
+        out = st.path('still.png')
+        if not st.is_done():
+            ups = {'img': media.image_to_png(image, st.path('in.png'))}
+            if ref is not None: ups['ref'] = media.image_to_png(ref, st.path('ref.png'))
+            g = graphs.still('@img', edit_prompt.strip(), project.seed, ref='@ref' if ref is not None else None,
+                             prefix=f'lsdub/still_{os.path.basename(st.dir)}')
+            paths = await generate.run(g, project.backend, uploads=ups, out_dir=st.path('gen'), api_key=media.hidden_api_key(cls))
+            os.replace(paths[0], out)
+            st.mark_done(True, backend=project.backend)
+        return io.NodeOutput(media.load_image(out))
 
 
 class LSDubVideoSlot(io.ComfyNode):
@@ -20,33 +74,42 @@ class LSDubVideoSlot(io.ComfyNode):
     def define_schema(cls):
         return io.Schema(
             node_id='LSDubVideoSlot', display_name='LSDub Video', category='LSDub/video',
-            description='The picture to dub. Bring a finished video (or a still); generation from a prompt comes in '
-                        'a later release. Saved in the project, keyed by its bytes.',
+            description='The picture to dub. Bring a finished video, or animate a still with LTX-2.5 (open weights) from '
+                        'a prompt. Saved in the project, keyed by its bytes or its settings.',
+            hidden=[io.Hidden.api_key_comfy_org],
             inputs=[
                 T.LSDubProject.Input('project', tooltip='The LSDub project.'),
                 io.Video.Input('video', optional=True, tooltip='The finished video (e.g. from Load Video). Takes priority.'),
-                io.Image.Input('still', optional=True, tooltip='A still to dub or to animate (first image is used).'),
+                io.Image.Input('still', optional=True, tooltip='A still: dubbed as is, or animated when a prompt is given '
+                                                              '(use LSDub Still to make or edit one).'),
                 io.String.Input('prompt', multiline=True, default='',
-                                tooltip='What to generate (later release). Ignored when video is connected.'),
+                                tooltip='What happens in the clip (generated from the still). Ignored when video is connected.'),
                 io.String.Input('negative_prompt', multiline=True, default='',
-                                tooltip='What to avoid when generating (later release).'),
-                io.Float.Input('seconds', default=5.0, min=1.0, max=60.0, step=0.5,
-                               tooltip='Length of a generated clip (later release).'),
+                                tooltip='What to avoid in the generated clip.'),
+                io.Float.Input('seconds', default=5.0, min=1.0, max=20.0, step=0.5, tooltip='Length of a generated clip, s.'),
             ],
             outputs=[T.LSDubSource.Output(display_name='source', tooltip='The source record: path, hash, fps, frames, size.'),
-                     io.Video.Output(display_name='video', tooltip='The video, passed through for previews.')],
+                     io.Video.Output(display_name='video', tooltip='The video, for previews.')],
         )
+
+    @classmethod
+    def _gen_key(cls, project, still, prompt, negative_prompt, seconds):
+        return stage_key('LSDubVideoSlot/gen', {'still': media.audio_hash({'waveform': still[None], 'sample_rate': 0}),
+                                                'p': prompt.strip(), 'n': negative_prompt.strip(), 's': seconds,
+                                                'seed': project.seed, 'backend': project.backend}, [project.cache_key()])
 
     @classmethod
     def fingerprint_inputs(cls, project, video=None, still=None, prompt='', negative_prompt='', seconds=5.0):
         if video is not None:
             p, data = media.video_source(video)
             return stage_key('LSDubVideoSlot', {'video': file_hash(p) if p else text_hash(str(len(data)))}, [project.cache_key()])
-        return stage_key('LSDubVideoSlot', {'still': None if still is None else float(still.sum()), 'prompt': prompt,
-                                            'neg': negative_prompt, 'seconds': seconds}, [project.cache_key()])
+        if still is not None and (prompt or '').strip():
+            return cls._gen_key(project, still, prompt, negative_prompt, seconds)
+        return stage_key('LSDubVideoSlot', {'still': None if still is None else media.audio_hash({'waveform': still[None], 'sample_rate': 0}),
+                                            'prompt': prompt}, [project.cache_key()])
 
     @classmethod
-    def execute(cls, project, video=None, still=None, prompt='', negative_prompt='', seconds=5.0):
+    async def execute(cls, project, video=None, still=None, prompt='', negative_prompt='', seconds=5.0):
         if video is not None:
             tmp = project.stage('slots/video', '_incoming').path('source.mp4')
             h = media.store_video(video, tmp)
@@ -58,7 +121,23 @@ class LSDubVideoSlot(io.ComfyNode):
             src_path = media.video_source(video)[0]
             return io.NodeOutput(T.Source(path=dst, hash=h, fps=fps, n_frames=n, wh=wh,
                                           name=os.path.basename(src_path) if src_path else ''), video)
-        if still is not None and not (prompt or '').strip():
+        if still is not None and (prompt or '').strip():
+            st = project.stage('slots/video', cls._gen_key(project, still, prompt, negative_prompt, seconds))
+            dst = st.path('source.mp4')
+            if not st.is_done():
+                img = media.image_to_png(still, st.path('still.png'))
+                w, h = _fit((int(still.shape[2]), int(still.shape[1])))
+                g = graphs.video('@img', prompt.strip(), negative_prompt.strip(), seconds, project.seed, project.fps, w, h,
+                                 prefix=f'lsdub/video_{os.path.basename(st.dir)}')
+                paths = await generate.run(g, project.backend, uploads={'img': img}, out_dir=st.path('gen'),
+                                           api_key=media.hidden_api_key(cls))
+                os.replace(paths[0], dst)
+                st.mark_done(True, backend=project.backend)
+            fps, n, wh = media.probe_video(dst)
+            from .nodes_mouth import LSDubDub
+            return io.NodeOutput(T.Source(path=dst, hash=file_hash(dst), fps=fps, n_frames=n, wh=wh, name='generated.mp4'),
+                                 LSDubDub._video(dst))
+        if still is not None:
             st = project.stage('slots/still', '_incoming')
             p = media.image_to_png(still, st.path('still.png'))
             h = file_hash(p)
@@ -69,7 +148,7 @@ class LSDubVideoSlot(io.ComfyNode):
             return io.NodeOutput(T.Source(path=dst, hash=h, fps=project.fps, n_frames=1,
                                           wh=(int(still.shape[2]), int(still.shape[1])), still=True), None)
         if (prompt or '').strip():
-            raise RuntimeError(GENERATION_LATER.format(node='LSDub Video', what='video', port='video'))
+            raise ValueError('LSDub Video: to generate, connect a still (LSDub Still makes or edits one) and a prompt.')
         raise ValueError('LSDub Video: connect a video (or a still) to dub.')
 
 
@@ -250,4 +329,4 @@ class LSDubTriage(io.ComfyNode):
         return io.NodeOutput(rec, media.load_image(out + '_sheet.jpg'), open(out + '.md').read())
 
 
-NODES = [LSDubVideoSlot, LSDubShotSplit, LSDubCast, LSDubTriage]
+NODES = [LSDubStillSlot, LSDubVideoSlot, LSDubShotSplit, LSDubCast, LSDubTriage]

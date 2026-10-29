@@ -94,3 +94,26 @@ def dump(obj, path):
     with open(tmp, 'w') as f: json.dump(obj, f, indent=1)
     os.replace(tmp, path)
     return path
+
+
+def load_audio(path, sr=44100):
+    """a file -> ComfyUI AUDIO (stereo float32 at sr), through ffmpeg."""
+    import numpy as np
+    raw = ff.run(['ffmpeg', '-v', 'error', '-i', path, '-ac', '2', '-ar', str(sr), '-f', 'f32le', '-'], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, np.float32).reshape(-1, 2).T.copy()
+    try:
+        import torch
+        return {'waveform': torch.from_numpy(x)[None], 'sample_rate': sr}
+    except ImportError:
+        return {'waveform': x[None], 'sample_rate': sr}
+
+
+def to_wav(src, dst):
+    ff.run(['ffmpeg', '-v', 'error', '-y', '-i', src, '-c:a', 'pcm_f32le', dst], check=True)
+    return dst
+
+
+def hidden_api_key(cls):
+    """the comfy.org API key ComfyUI hands a node that declares Hidden.api_key_comfy_org (None outside ComfyUI)."""
+    h = getattr(cls, 'hidden', None)
+    return getattr(h, 'api_key_comfy_org', None) if h is not None else None

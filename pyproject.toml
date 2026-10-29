@@ -16,6 +16,9 @@ dependencies = [
   "transformers>=4.40",
 ]
 
+[project.optional-dependencies]
+cloud = ["comfy-sdk>=0.5"]   # opt-in Comfy Cloud backend for the generator slots
+
 [project.urls]
 Repository = "https://github.com/HumanjavaEnterprises/comfyui-lsdub"
 Documentation = "https://lsdub.vidbnch.app"

@@ -37,6 +37,10 @@ class LSDubProjectNode(io.ComfyNode):
                                        'named character can sing.'),
                 io.Int.Input('seed', default=0, min=0, max=2 ** 31 - 1,
                              tooltip='Seed for the generator slots (video, still, song).'),
+                io.Combo.Input('backend', options=['local', 'comfy_cloud'], default='local', optional=True,
+                               tooltip='Where the generator slots (song, still, video, lip kit) run: local = this '
+                                       'ComfyUI\'s GPU and models; comfy_cloud = Comfy Cloud, signed in with your comfy.org '
+                                       'account (uses your credits). The dub and QA always run locally.'),
                 io.String.Input('force_shots', default='',
                                 tooltip='Shots to redo even if they passed, e.g. "21,23". Their earlier renders are kept.'),
             ],
@@ -44,19 +48,19 @@ class LSDubProjectNode(io.ComfyNode):
         )
 
     @classmethod
-    def build(cls, name, root, mode, fps, song_offset, preset, seed, force_shots):
+    def build(cls, name, root, mode, fps, song_offset, preset, seed, force_shots, backend='local'):
         return Project(root=root or default_root(), name=name.strip(), mode=mode, fps=float(fps),
                        song_offset=float(song_offset), seed=int(seed), preset=preset,
-                       force_shots=parse_force_shots(force_shots))
+                       force_shots=parse_force_shots(force_shots), backend=backend or 'local')
 
     @classmethod
     def fingerprint_inputs(cls, **kw):
         p = cls.build(**kw)
-        return stage_key('LSDubProject', {'project': p.cache_key(), 'root': p.root, 'force': list(p.force_shots)})
+        return stage_key('LSDubProject', p.to_json())                  # every field: a mode or backend change re-runs it
 
     @classmethod
-    def execute(cls, name, root, mode, fps, song_offset, preset, seed, force_shots):
-        return io.NodeOutput(cls.build(name, root, mode, fps, song_offset, preset, seed, force_shots).ensure())
+    def execute(cls, name, root, mode, fps, song_offset, preset, seed, force_shots, backend='local'):
+        return io.NodeOutput(cls.build(name, root, mode, fps, song_offset, preset, seed, force_shots, backend).ensure())
 
 
 def norm_lyrics(text):

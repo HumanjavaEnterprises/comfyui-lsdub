@@ -128,25 +128,30 @@ def prep(a):
     print(f'frame {idx} (open {best[0]:.3f}) face {fh:.0f}px -> crop {side}px -> {a.size}px; {a.out_dir}')
 
 
-def gen(a):
-    from ..backends import comfy_backend as cb
-    run, label = cb.make_client()
+def gen(a, runner=None):
+    """runner(viseme_text, keep, seed, base_png, out_dir) -> [paths]: how one Qwen edit runs. Default: the ComfyUI
+    HTTP / cloud client (comfy_backend); the ComfyUI node passes an in-process runner."""
+    if runner is None:
+        from ..backends import comfy_backend as cb
+        run, label = cb.make_client()
+
+        def runner(vis_text, keep, seed, base, out_dir):
+            return run('qwen-mouth-viseme.json', '60', out_dir, upload_paths=[base], VISEME=vis_text, KEEP=keep, SEED=seed)
+    else:
+        label = 'in-process'
     D = a.out_dir
     os.makedirs(f'{D}/takes', exist_ok=True)
     for v in (a.only or SHAPES):
-        (f'Change ONLY the mouth and jaw: {SHAPES[v]}. Keep everything else exactly the same as image 1: the same '
-                  f'{a.keep}, '
-                  'the same lighting, colours, camera angle, framing and sharpness. Photoreal, natural lips. No text, no letters, no captions.')
         for s in a.seeds:
             dst = f'{D}/takes/{v}_s{s}.png'
             if os.path.exists(dst): continue
-            paths = run('qwen-mouth-viseme.json', '60', f'{D}/takes',
-                        upload_paths=[f'{D}/base.png'],
-                        VISEME=SHAPES[v], KEEP=a.keep, SEED=s)
+            paths = runner(SHAPES[v], a.keep, s, f'{D}/base.png', f'{D}/takes')
             src = None
             for p in paths:
                 if p.endswith('.png'):
-                    src = p
+                    src = dst if os.path.abspath(p) == os.path.abspath(dst) else p
+                    if src != dst: os.replace(p, dst)
+                    src = dst
                     break
             if src is None:
                 continue
@@ -265,6 +270,11 @@ def main(argv=None):
         q.add_argument('--open-cap', type=float, default=0.0, help='reject takes opening wider than this (inner gap / face h; 0 = off)')
     a = ap.parse_args(argv)
     {'prep': prep, 'gen': gen, 'sheet': sheet}[a.cmd](a)
+
+
+def viseme_prompt(vis_text, keep):
+    return (f'Change ONLY the mouth and jaw: {vis_text}. Keep everything else exactly the same as image 1: the same {keep}, '
+            'the same lighting, colours, camera angle, framing and sharpness. Photoreal, natural lips. No text, no letters, no captions.')
 
 
 if __name__ == '__main__':

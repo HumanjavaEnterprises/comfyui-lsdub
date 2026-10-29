@@ -37,13 +37,23 @@ class LSDubBuildLipKit(io.ComfyNode):
     def define_schema(cls):
         return io.Schema(
             node_id='LSDubBuildLipKit', display_name='LSDub Lip Kit', category='LSDub/mouth',
-            description='One singer\'s mouth kit (mouth shapes, teeth, jaw): the "mouth LoRA" every dub needs. Bring a '
-                        'kit folder; building one from the source arrives in a later release.',
+            description='One singer\'s mouth kit (13 mouth shapes from their own face): the "mouth LoRA" every dub needs. '
+                        'Bring a kit folder, or build one from a shot of the source with Qwen-Image-Edit-2511 (open '
+                        'weights; local GPU or Comfy Cloud per the project, ~39 edits).',
+            hidden=[io.Hidden.api_key_comfy_org],
             inputs=[
                 T.LSDubProject.Input('project', tooltip='The LSDub project.'),
-                io.String.Input('identity', default='', tooltip='Who this kit is for: the cast name of the singer.'),
-                io.String.Input('kit_dir', default='', tooltip='A finished kit / mouth-library folder.'),
-                T.LSDubSource.Input('source', optional=True, tooltip='Build from this source (later release).'),
+                io.String.Input('identity', default='', tooltip='Who this kit is for: the singer\'s cast name.'),
+                io.String.Input('kit_dir', default='', tooltip='A finished kit folder. Leave empty to build one from the source.'),
+                T.LSDubSource.Input('source', optional=True, tooltip='Build from this video: the frame with the most closed '
+                                                                    'mouth of the chosen shot is the base face.'),
+                T.LSDubShots.Input('shots', optional=True, tooltip='The shots, to pick shot_id from.'),
+                io.Int.Input('shot_id', default=-1, min=-1, max=100000, optional=True,
+                             tooltip='The shot to build from (a close-up of this singer); -1 = the whole source.'),
+                io.String.Input('keep', default='person, same face shape, skin tone, hair, eyewear and makeup', optional=True,
+                                tooltip='Who to keep: describes the singer, after "the same ...", so the edits keep the face.'),
+                io.Int.Input('seeds', default=3, min=1, max=6, optional=True,
+                             tooltip='Takes per mouth shape; the best-measured take is kept.'),
             ],
             outputs=[T.LSDubKit.Output(display_name='kit', tooltip='The lip kit: folder, identity, hash.')],
         )
@@ -58,19 +68,56 @@ class LSDubBuildLipKit(io.ComfyNode):
         return text_hash('\n'.join(h))
 
     @classmethod
-    def fingerprint_inputs(cls, project, identity, kit_dir, source=None):
-        return stage_key('LSDubBuildLipKit', {'id': identity, 'dir': kit_dir, 'h': cls._hash(kit_dir) if os.path.isdir(kit_dir) else ''})
+    def _build_key(cls, project, identity, source, shots, shot_id, keep, seeds):
+        span = None
+        if shots is not None and shot_id is not None and shot_id >= 0:
+            s = next((x for x in shots.shots if x['shot'] == shot_id), None)
+            span = [s['f0'], s['f1']] if s else None
+        return stage_key('LSDubBuildLipKit', {'id': identity.strip(), 'span': span, 'keep': keep, 'seeds': seeds,
+                                              'seed': project.seed, 'backend': project.backend}, [source.hash])
 
     @classmethod
-    def execute(cls, project, identity, kit_dir, source=None):
-        if not kit_dir:
-            if source is not None:
-                raise RuntimeError('LSDub Lip Kit: building a kit from the source arrives in a later LSDub release. For now '
-                                   'point kit_dir at a finished kit folder.')
-            raise ValueError('LSDub Lip Kit: set kit_dir')
-        if not os.path.isdir(kit_dir): raise FileNotFoundError(f'LSDub Lip Kit: no folder {kit_dir}')
+    def fingerprint_inputs(cls, project, identity, kit_dir, source=None, shots=None, shot_id=-1, keep='', seeds=3):
+        if kit_dir: return stage_key('LSDubBuildLipKit', {'id': identity, 'dir': kit_dir,
+                                                          'h': cls._hash(kit_dir) if os.path.isdir(kit_dir) else ''})
+        return cls._build_key(project, identity, source, shots, shot_id, keep, seeds) if source is not None else 'none'
+
+    @classmethod
+    async def execute(cls, project, identity, kit_dir, source=None, shots=None, shot_id=-1,
+                      keep='person, same face shape, skin tone, hair, eyewear and makeup', seeds=3):
         if not identity.strip(): raise ValueError('LSDub Lip Kit: set identity (the singer\'s cast name)')
-        return io.NodeOutput(T.Kit(dir=kit_dir, identity=identity.strip(), hash=cls._hash(kit_dir)))
+        if kit_dir:
+            if not os.path.isdir(kit_dir): raise FileNotFoundError(f'LSDub Lip Kit: no folder {kit_dir}')
+            return io.NodeOutput(T.Kit(dir=kit_dir, identity=identity.strip(), hash=cls._hash(kit_dir)))
+        if source is None: raise ValueError('LSDub Lip Kit: set kit_dir, or connect a source to build a kit from')
+        import asyncio
+        import argparse
+        from . import generate, graphs, media
+        from .lsdub_engine.core import mouth_library as ML
+        st = project.stage(f'mouth/kits/{identity.strip()}', cls._build_key(project, identity, source, shots, shot_id, keep, seeds))
+        D = st.path('kit')
+        if not st.is_done():
+            clip = source.path
+            if shots is not None and shot_id >= 0:
+                s = next((x for x in shots.shots if x['shot'] == shot_id), None)
+                if s is None: raise ValueError(f'LSDub Lip Kit: no shot {shot_id}')
+                clip = extract_shot(source.path, s['f0'], s['f1'], st.path('clip.mp4'))
+            await asyncio.to_thread(call, ML.main, ['prep', '--video', clip, '--out-dir', D], True, 'lip kit prep')
+            loop = asyncio.get_running_loop()
+            key = media.hidden_api_key(cls)
+
+            def runner(vis_text, keep_, seed, base, out_dir):        # one Qwen edit, run on ComfyUI's loop
+                g = graphs.still('@img', ML.viseme_prompt(vis_text, keep_), seed, megapixels=1.0, prefix='lsdub/kit',
+                                 negative='cartoon, painting, blurry face, distorted mouth, extra teeth, flicker, text, watermark, '
+                                          'deformed, plastic skin')
+                fut = asyncio.run_coroutine_threadsafe(generate.run(g, project.backend, uploads={'img': base}, out_dir=out_dir,
+                                                                    api_key=key), loop)
+                return fut.result()
+            args = argparse.Namespace(out_dir=D, seeds=[11 * (i + 1) + project.seed for i in range(seeds)], only=None,
+                                      no_register=False, keep=keep, max_drift=12.0, open_cap=0.0)
+            await asyncio.to_thread(ML.gen, args, runner)
+            st.mark_done(True, backend=project.backend)
+        return io.NodeOutput(T.Kit(dir=D, identity=identity.strip(), base_frame=os.path.join(D, 'base.png'), hash=cls._hash(D)))
 
 
 class LSDubTweaks(io.ComfyNode):
@@ -93,13 +140,20 @@ class LSDubTweaks(io.ComfyNode):
                                  tooltip='After the dub, repair single-frame pops against the source.'),
                 io.String.Input('settings', default='', multiline=True,
                                 tooltip='Advanced: extra mouth-warp flags, passed through as is (e.g. --warp-sigma 0.8).'),
+                io.String.Input('jaw_csv', default='', optional=True,
+                                tooltip='Optional: a jaw-curve CSV for the whole song (Audio2Face-3D blendshape export, '
+                                        'columns frame,time_s,...,jawOpen; song time). Drives the jaw in the silences more '
+                                        'cleanly. Empty = the vocal envelope only.'),
             ],
             outputs=[T.LSDubTweaks.Output(display_name='tweaks', tooltip='The mouth controls.')],
         )
 
     @classmethod
-    def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings):
-        flags = dict(lead=lead, word_close=word_close, face_target=face_target, snap=snap, auto=auto, continuity=continuity)
+    def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv=''):
+        jaw_csv = (jaw_csv or '').strip()
+        if jaw_csv and not os.path.exists(jaw_csv): raise FileNotFoundError(f'LSDub Mouth Tweaks: no jaw CSV {jaw_csv}')
+        flags = dict(lead=lead, word_close=word_close, face_target=face_target, snap=snap, auto=auto, continuity=continuity,
+                     jaw_csv=jaw_csv, jaw_csv_hash=file_hash(jaw_csv) if jaw_csv else '')
         return io.NodeOutput(T.Tweaks(flags=flags, settings=settings.strip(), hash=text_hash(json.dumps(flags, sort_keys=True) + settings)))
 
 
@@ -123,7 +177,7 @@ def extract_shot(src, f0, f1, dst):
     return dst
 
 
-def assemble(source, renders, out, fps):
+def assemble(source, renders, out, fps, crf=18):
     """the cut: source frames, with each dubbed shot's frames replacing its range; the source's audio."""
     import cv2
     from .lsdub_engine.core import medium as MED
@@ -136,7 +190,7 @@ def assemble(source, renders, out, fps):
     from .lsdub_engine.io import ff
     import numpy as np
     p = ff.popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', str(fps), '-i', '-',
-                  '-i', source, '-map', '0:v', '-map', '1:a?', '-c:v', 'libx264', '-crf', '14', '-pix_fmt', 'yuv420p',
+                  '-i', source, '-map', '0:v', '-map', '1:a?', '-c:v', 'libx264', '-crf', str(int(crf)), '-pix_fmt', 'yuv420p',
                   '-c:a', 'aac', '-shortest', '-movflags', '+faststart', out], stdin=ff.PIPE)
     i = 0
     while True:
@@ -172,6 +226,8 @@ class LSDubDub(io.ComfyNode):
                 T.LSDubMasks.Input('masks', optional=True, tooltip='Occluder masks (from LSDub Occluders): keep a mic in front.'),
                 T.LSDubCast.Input('cast', optional=True, tooltip='The cast: finds each singer by identity (else by the triage box).'),
                 io.String.Input('only_shots', default='', tooltip='Dub only these shots, e.g. "16,19" (empty = all that passed).'),
+                io.Int.Input('quality', default=18, min=10, max=30, optional=True,
+                             tooltip='Cut quality (x264 CRF): lower = better and bigger; 18 is visually clean, 14 near-lossless.'),
             ],
             outputs=[T.LSDubRender.Output(display_name='render', tooltip='Per-shot renders, gates and the assembled cut.'),
                      io.Video.Output(display_name='video', tooltip='The assembled cut.')],
@@ -204,10 +260,10 @@ class LSDubDub(io.ComfyNode):
 
     @classmethod
     def fingerprint_inputs(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None,
-                           cast=None, only_shots=''):
+                           cast=None, only_shots='', quality=18):
         if project.mode == 'test_learn': return stage_key('LSDubDub', {'mode': 'test_learn'}, [source.hash])
         keys = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots)[0]
-        return stage_key('LSDubDub', {'shots': keys, 'force': list(project.force_shots)})
+        return stage_key('LSDubDub', {'shots': keys, 'force': list(project.force_shots), 'crf': quality})
 
     @classmethod
     def run_shot(cls, project, source, s, song, align, kit, tw, masks, cast, st):
@@ -222,7 +278,7 @@ class LSDubDub(io.ComfyNode):
         info = SING.run(take, align.align, song.lead or song.vocal or song.mix, s['start'] - project.song_offset,
                         st.path('sung.mp4'), work, pa, char=s['target'] if cast else None, db=cast.db if cast else None,
                         box=box, face_target=float(f.get('face_target', 512.0)), snap=bool(f.get('snap', True)),
-                        report=st.path('gate.json'), lead=f.get('lead'), word_close=f.get('word_close'),
+                        report=st.path('gate.json'), lead=f.get('lead'), word_close=f.get('word_close'), a2f=f.get('jaw_csv') or None,
                         auto=bool(f.get('auto', True)), preset=project.preset)
         render = st.path('sung.mp4')
         if f.get('continuity', True):
@@ -235,7 +291,7 @@ class LSDubDub(io.ComfyNode):
 
     @classmethod
     def execute(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None, cast=None,
-                only_shots=''):
+                only_shots='', quality=18):
         if project.mode == 'test_learn':                              # analyse only: the cut is the source
             return io.NodeOutput(T.Render(shots={}, cut=source.path, hash=source.hash), cls._video(source.path))
         keys, plan, kits, tw = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots)
@@ -261,11 +317,12 @@ class LSDubDub(io.ComfyNode):
                 done_shots[str(sid)] = {'f0': s['f0'], 'f1': s['f1'], 'render': d['render'], 'pass': d.get('pass'),
                                         'corr': d.get('corr'), 'gate': st.path('gate.json'), 'key': k}
             if pbar: pbar.update(1)
-        ckey = stage_key('LSDubDub/cut', {'shots': {k: v['key'] for k, v in done_shots.items()}}, [project.cache_key(), source.hash])
+        ckey = stage_key('LSDubDub/cut', {'shots': {k: v['key'] for k, v in done_shots.items()}, 'crf': quality},
+                         [project.cache_key(), source.hash])
         cst = project.stage('shots/_cut', ckey)
         cut = cst.path('cut.mp4')
         if not cst.is_done():
-            assemble(source.path, {(v['f0'], v['f1']): v['render'] for v in done_shots.values()}, cut, source.fps)
+            assemble(source.path, {(v['f0'], v['f1']): v['render'] for v in done_shots.values()}, cut, source.fps, quality)
             cst.mark_done(True, shots=sorted(done_shots))
         return io.NodeOutput(T.Render(shots=done_shots, cut=cut, hash=ckey), cls._video(cut))
 
