@@ -122,50 +122,83 @@ def input_dir():
         return None
 
 
-def input_file(p, what='file'):
-    """a file input given as a string: absolute, or relative to ComfyUI's input folder, the way LoadVideo/LoadAudio
-    name theirs. `comfy deploy run` uploads every string input with a file extension that names a local file and the
-    worker rewrites it to the uploaded file's name (optionally `subfolder/name`) in its input folder, so the same
-    widget value works locally and on a deployment. ComfyUI's ' [input]' annotation is accepted. '' -> ''.
-    Raises FileNotFoundError (naming where it looked) when the file is not there."""
-    if not p: return p
+ALLOW_ABS_ENV = 'LSDUB_ALLOW_ABS_INPUTS'   # =1: absolute input paths inside ComfyUI too (local use; never on a deployment)
+ZIP_MAX_BYTES, ZIP_MAX_MEMBERS, ZIP_MAX_RATIO = 2 << 30, 20000, 200      # a kit is ~10 MB, ~100 files
+
+
+def _within(path, root):
+    rp = os.path.realpath(path)
+    return rp == root or rp.startswith(root + os.sep)
+
+
+def _clean(p):
     p = p.strip()
-    if p.endswith(' [input]'): p = p[:-len(' [input]')]
-    tried = []
+    return p[:-len(' [input]')] if p.endswith(' [input]') else p
+
+
+def _input_candidates(p, what):
+    """where a string input may live. Inside ComfyUI: under its input folder only (a relative path that escapes it is
+    refused; an absolute path only with LSDUB_ALLOW_ABS_INPUTS=1 or when it is inside the input folder). Outside
+    ComfyUI (the CLI, tests): as given, relative to the working folder."""
+    d = input_dir()
+    if d is None: return [p if os.path.isabs(p) else os.path.abspath(p)]
+    root = os.path.realpath(d)
     if os.path.isabs(p):
-        tried.append(p)
-    else:
-        d = input_dir()
-        if d: tried += [os.path.join(d, p), os.path.join(d, os.path.basename(p))]
-        tried.append(os.path.abspath(p))
+        if os.environ.get(ALLOW_ABS_ENV) == '1' or _within(p, root): return [p]
+        raise PermissionError(f'{what}: absolute path {p!r} refused; name a file in ComfyUI\'s input folder '
+                              f'(or set {ALLOW_ABS_ENV}=1 for local use)')
+    first = os.path.join(d, p)
+    if not _within(first, root): raise PermissionError(f'{what}: {p!r} escapes ComfyUI\'s input folder; refusing')
+    return [first, os.path.join(d, os.path.basename(p))]
+
+
+def input_file(p, what='file'):
+    """a file input given as a string, the way LoadVideo/LoadAudio name theirs: relative to ComfyUI's input folder
+    (`comfy deploy run` uploads every string input with a file extension that names a local file, and the worker
+    rewrites it to the uploaded file's name, optionally `subfolder/name`, in its input folder). ComfyUI's ' [input]'
+    annotation is accepted. '' -> ''. Raises FileNotFoundError (naming where it looked) when the file is not there,
+    PermissionError when the path leaves the input folder."""
+    if not p: return p
+    p = _clean(p)
+    tried = _input_candidates(p, what)
     for q in tried:
         if os.path.isfile(q): return q
     raise FileNotFoundError(f'{what} {p!r} not found (looked in: {", ".join(dict.fromkeys(tried))})')
 
 
 def _safe_extract(zf, dst):
+    """extract after checking every member: no symlinks, nothing outside dst (also Windows `..\\` / drive forms), and
+    zip-bomb caps on total size, member count and compression ratio."""
     root = os.path.realpath(dst)
-    for m in zf.infolist():
+    ms = zf.infolist()
+    if len(ms) > ZIP_MAX_MEMBERS: raise ValueError(f'zip has {len(ms)} members (max {ZIP_MAX_MEMBERS}); refusing')
+    total = 0
+    for m in ms:
+        n = m.filename
         if (m.external_attr >> 16) & 0o170000 == 0o120000:
-            raise ValueError(f'zip member {m.filename!r} is a symlink; refusing')
-        out = os.path.realpath(os.path.join(dst, m.filename))
+            raise ValueError(f'zip member {n!r} is a symlink; refusing')
+        if '\\' in n or (len(n) > 1 and n[1] == ':'):
+            raise ValueError(f'zip member {n!r} escapes the folder; refusing')
+        out = os.path.realpath(os.path.join(dst, n))
         if out != root and not out.startswith(root + os.sep):
-            raise ValueError(f'zip member {m.filename!r} escapes the folder; refusing')
+            raise ValueError(f'zip member {n!r} escapes the folder; refusing')
+        total += m.file_size
+        if m.file_size > (1 << 20) and m.file_size / max(m.compress_size, 1) > ZIP_MAX_RATIO:
+            raise ValueError(f'zip member {n!r} compresses {m.file_size / max(m.compress_size, 1):.0f}:1; refusing')
+    if total > ZIP_MAX_BYTES: raise ValueError(f'zip unpacks to {total} bytes (max {ZIP_MAX_BYTES}); refusing')
     zf.extractall(dst)
 
 
 def kit_folder(p):
     """a lip-kit input: a folder, or a .zip of one (a single file, so `comfy deploy run` uploads it like any LoadImage
-    input; a folder never travels). A zip is unpacked once into <input>/lsdub_kits_unpacked/<sha1>/ and the folder
-    holding library.json (or base.png) inside it is returned."""
+    input; a folder never travels). Same containment as input_file. A zip is unpacked once into
+    <input>/lsdub_kits_unpacked/<sha1>/ and the folder holding library.json (or base.png) inside it is returned."""
     import tempfile
     import zipfile
-    q = p.strip()
-    if q.endswith(' [input]'): q = q[:-len(' [input]')]
-    d = input_dir()
-    base = q if os.path.isabs(q) else os.path.join(d, q) if d else os.path.abspath(q)
-    if not q.lower().endswith('.zip'): return base
+    q = _clean(p)
+    if not q.lower().endswith('.zip'): return _input_candidates(q, 'LSDub Lip Kit: kit_dir')[0]
     z = input_file(q, 'LSDub Lip Kit: kit zip')
+    d = input_dir()
     h = hashlib.sha1()
     with open(z, 'rb') as f:
         for b in iter(lambda: f.read(1 << 20), b''): h.update(b)

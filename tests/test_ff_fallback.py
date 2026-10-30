@@ -11,7 +11,7 @@ import pytest
 
 from lsdub_engine.io import ff
 
-imageio_ffmpeg = pytest.importorskip('imageio_ffmpeg')
+import imageio_ffmpeg  # a declared runtime dependency: missing = a failure, not a skip
 SYS_FFMPEG = shutil.which('ffmpeg') or imageio_ffmpeg.get_ffmpeg_exe()
 SYS_FFPROBE = shutil.which('ffprobe')
 
@@ -46,7 +46,7 @@ PROBES = [
 def _norm(of, out):
     if of == 'json': return json.loads(out)['streams']
     if of == 'csv=p=0' and out.strip() and out.strip()[0].isdigit() and '.' in out and ',' not in out:
-        return round(float(out), 2)                                               # duration: ffprobe and ffmpeg -i round differently
+        return round(float(out), 3)                                               # duration: to the millisecond
     return out.strip()
 
 
@@ -131,3 +131,14 @@ def test_audio_roundtrip_without_ffmpeg_on_path(no_ff_on_path, media, pack, tmp_
     assert a['waveform'].shape[-1] == pytest.approx(1.5 * 44100, abs=2000)
     out = media_mod.write_audio(a, str(tmp_path / 'rt.wav'))
     assert media_mod.duration(out) == pytest.approx(1.5, abs=0.05)
+
+
+@pytest.mark.skipif(not SYS_FFPROBE, reason='needs a real ffprobe to compare against')
+def test_duration_to_the_millisecond(tmp_path):
+    wav = str(tmp_path / 'odd.wav')
+    _mk(['-f', 'lavfi', '-i', 'sine=f=220:d=1.234567', wav])
+    real = float(subprocess.run([SYS_FFPROBE, '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', wav],
+                                capture_output=True, text=True).stdout)
+    emu = float(ff.probe(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', wav],
+                         capture_output=True, text=True).stdout)
+    assert abs(emu - real) < 1e-4, (emu, real)

@@ -51,6 +51,8 @@ def test_input_file_resolves_like_load_video(inputs, media_mod):
     assert f('a_stt.json [input]') == str(inputs / 'a_stt.json')
     assert f('sub/b_stt.json') == str(inputs / 'sub' / 'b_stt.json')       # the worker's `subfolder/name` form
     assert f('elsewhere/a_stt.json') == str(inputs / 'a_stt.json')         # uploaded by basename
+    with pytest.raises(PermissionError, match='escapes'):
+        f('../a_stt.json')
     assert f(str(inputs / 'a_stt.json')) == str(inputs / 'a_stt.json')
     assert f('') == ''
     with pytest.raises(FileNotFoundError, match='nope.json'):
@@ -99,7 +101,7 @@ def test_lip_kit_node_takes_a_zip(inputs, pack, tmp_path):
 def test_deploy_scanner_uploads_transcript_and_kit_zip(inputs, media_mod, tmp_path):
     """comfy-cli's own scan (what `comfy deploy run --asset-root` runs) on Align + Lip Kit inputs, then the worker's
     rewrite (core/ASSET -> the file's name in its input folder), then the nodes' lookup."""
-    dw = pytest.importorskip('comfy_cli.command.deploy_workflow')
+    import comfy_cli.command.deploy_workflow as dw    # CI installs comfy-cli: this must run, not skip
     assets = tmp_path / 'assets'
     (assets / 'lsdub_demo_kits').mkdir(parents=True)
     (assets / 'lsdub_demo_landing_stt.json').write_text('[]')
@@ -122,3 +124,57 @@ def test_deploy_scanner_uploads_transcript_and_kit_zip(inputs, media_mod, tmp_pa
     assert t['__type'] == 'core/ASSET' and k['__type'] == 'core/ASSET'
     assert media_mod.input_file(t['info']['file_path']) == str(inputs / 'lsdub_demo_landing_stt.json')
     assert os.path.isfile(os.path.join(media_mod.kit_folder(k['info']['file_path']), 'library.json'))
+
+
+def test_absolute_inputs_refused_inside_comfyui_unless_allowed(inputs, media_mod, tmp_path, monkeypatch):
+    outside = tmp_path / 'secret.json'
+    outside.write_text('[]')
+    monkeypatch.delenv('LSDUB_ALLOW_ABS_INPUTS', raising=False)
+    with pytest.raises(PermissionError, match='absolute'):
+        media_mod.input_file(str(outside))
+    with pytest.raises(PermissionError):
+        media_mod.kit_folder(str(tmp_path))
+    with pytest.raises(PermissionError, match='escapes'):
+        media_mod.kit_folder('../somewhere')
+    monkeypatch.setenv('LSDUB_ALLOW_ABS_INPUTS', '1')
+    assert media_mod.input_file(str(outside)) == str(outside)
+
+
+def test_absolute_inputs_ok_outside_comfyui(media_mod, tmp_path, monkeypatch):
+    monkeypatch.setattr(sys.modules['folder_paths'], 'get_input_directory', lambda: None, raising=False)
+    f = tmp_path / 'x.json'
+    f.write_text('[]')
+    assert media_mod.input_file(str(f)) == str(f)
+
+
+def test_kit_zip_bomb_caps(inputs, media_mod, monkeypatch):
+    with zipfile.ZipFile(inputs / 'bomb.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr('library.json', b'\0' * (8 << 20))                    # 8 MB of zeros: ~1000:1
+    with pytest.raises(ValueError, match='compresses'):
+        media_mod.kit_folder('bomb.zip')
+    with zipfile.ZipFile(inputs / 'many.zip', 'w') as zf:
+        for i in range(30): zf.writestr(f'f{i}', 'x')
+    monkeypatch.setattr(media_mod, 'ZIP_MAX_MEMBERS', 20)
+    with pytest.raises(ValueError, match='members'):
+        media_mod.kit_folder('many.zip')
+    with zipfile.ZipFile(inputs / 'big.zip', 'w') as zf:
+        zf.writestr('library.json', b'x' * 4096)
+    monkeypatch.setattr(media_mod, 'ZIP_MAX_BYTES', 1024)
+    with pytest.raises(ValueError, match='unpacks'):
+        media_mod.kit_folder('big.zip')
+    with zipfile.ZipFile(inputs / 'win.zip', 'w') as zf:
+        zf.writestr('..\\evil.txt', 'x')
+    with pytest.raises(ValueError, match='escapes'):
+        media_mod.kit_folder('win.zip')
+
+
+def test_vocal_split_reads_models_audio_separation(pack):
+    """the spec places MelBandRoformer_kim_vocals.ckpt under models/audio_separation; the Vocal Split node's model
+    list and path come from that folder."""
+    import importlib
+    import folder_paths
+    importlib.import_module(pack.__name__ + '.nodes_vocal')
+    assert os.path.join(folder_paths.models_dir, 'audio_separation') in folder_paths._extra['audio_separation']
+    nv = sys.modules[pack.__name__ + '.nodes_vocal']
+    assert "folder_paths.get_full_path('audio_separation', model)" in open(nv.__file__).read()
+    assert "get_filename_list('audio_separation')" in open(nv.__file__).read()

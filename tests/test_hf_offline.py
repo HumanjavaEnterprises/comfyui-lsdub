@@ -52,7 +52,7 @@ def test_whisper_name_maps_to_the_local_snapshot(tmp_path):
 
 def test_embedder_loads_by_path(tmp_path, monkeypatch):
     s = _files(tmp_path / 'models--facebook--dinov2-base' / 'snapshots' / REV, ['config.json', 'model.safetensors'])
-    tf = pytest.importorskip('transformers')
+    import transformers as tf                         # declared in requirements.txt: must run, not skip
     seen = {}
 
     class _M:

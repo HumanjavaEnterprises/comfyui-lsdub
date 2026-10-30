@@ -18,6 +18,7 @@ jobs:
       - name: Python deps (CPU)
         run: |
           python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu   # the DINOv2 load-by-path test
           pip install -r requirements.txt pytest ruff comfy-cli
       - name: Ruff (registry rules as errors)
         run: ruff check --select S102,S307,E702,F --target-version py310 .

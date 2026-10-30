@@ -125,8 +125,34 @@ def _parse_info(err):
                 if wh: s['width'], s['height'] = int(wh.group(1)), int(wh.group(2))
                 fr = re.search(r'([\d.]+)(?:k)? tbr', rest) or re.search(r'([\d.]+) fps', rest)
                 if fr: s['r_frame_rate'] = _rate(fr.group(1))
+            if kind == 'Audio':
+                hz = re.search(r'(\d+) Hz', rest)
+                if hz: s['_hz'] = int(hz.group(1))
             info['streams'].append(s)
     return info
+
+
+def _exact_duration(ff, path, info):
+    """`ffmpeg -i` prints the duration to 10 ms. Refine it to what ffprobe reports: the first audio stream's decoded
+    samples / rate, or else the first video stream's frame count / frame rate (stream copy, no decode), whichever
+    agrees with the header within that 10 ms rounding. Otherwise the header value stands."""
+    d = info['format'].get('duration')
+    if not d or d == 'N/A': return d
+    cands = []
+    a = next((s for s in info['streams'] if s['_k'] == 'a' and s.get('_hz')), None)
+    if a is not None:
+        r = subprocess.run([ff, '-v', 'error', '-nostdin', '-i', path, '-map', '0:a:0', '-ac', '1', '-f', 's16le', '-'],  # noqa: S603
+                           capture_output=True, shell=False)
+        if r.returncode == 0 and r.stdout: cands.append(len(r.stdout) / 2 / a['_hz'])
+    v = next((s for s in info['streams'] if s['_k'] == 'v' and s.get('r_frame_rate')), None)
+    if v is not None:
+        r = subprocess.run([ff, '-v', 'error', '-nostdin', '-i', path, '-map', '0:v:0', '-c', 'copy', '-f', 'framecrc',  # noqa: S603
+                            '-'], capture_output=True, text=True, shell=False)
+        n = sum(1 for ln in r.stdout.splitlines() if ln and not ln.startswith('#'))        # one line per packet
+        if r.returncode == 0 and n:
+            cands.append(n / float(Fraction(v['r_frame_rate'])))
+    good = [c for c in cands if abs(c - float(d)) <= 0.0101]
+    return f'{max(good):.6f}' if good else d
 
 
 def _opt(argv, flag):
@@ -148,6 +174,7 @@ def probe(argv, capture_output=False, text=False, check=False, stdout=None, stde
         info = _parse_info(r.stderr)
         sec, _, keys = ents.partition('=')
         keys = [k for k in keys.split(',') if k]
+        if sec == 'format' and 'duration' in keys: info['format']['duration'] = _exact_duration(ff, path, info)
         if sec == 'stream':
             ss = info['streams']
             if sel:
