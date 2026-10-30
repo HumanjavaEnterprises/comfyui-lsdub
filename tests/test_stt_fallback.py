@@ -46,7 +46,9 @@ def wav(tmp_path):
     import wave
     p = tmp_path / 'a.wav'
     with wave.open(str(p), 'wb') as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
         w.writeframes((np.zeros(16000, np.int16)).tobytes())
     return str(p)
 
