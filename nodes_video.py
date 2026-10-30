@@ -440,7 +440,8 @@ class LSDubTriage(io.ComfyNode):
             st.mark_done(True, **{v: sum(r['verdict'] == v for r in rows) for v in VERDICT_COLOUR})
         rows = json.load(open(out + '.json'))['shots']
         rec = T.Shots(shots=rows, hash=file_hash(out + '.json'), sheet=out + '_sheet.jpg', features=shots.features)
-        return io.NodeOutput(rec, media.load_image(out + '_sheet.jpg'), open(out + '.md').read())
+        return io.NodeOutput(rec, media.load_image(out + '_sheet.jpg'), open(out + '.md').read(),
+                             ui=media.ui_outputs(images=(out + '_sheet.jpg',), files=(out + '.md', out + '.json')))
 
 
 NODES = [LSDubStillSlot, LSDubVideoSlot, LSDubPerformance, LSDubShotSplit, LSDubCast, LSDubTriage]

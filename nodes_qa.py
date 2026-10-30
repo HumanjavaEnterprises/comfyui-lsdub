@@ -76,7 +76,7 @@ class LSDubVerify(io.ComfyNode):
         verdicts = {str(r['shot']): r['band'] for r in J['shots']}
         fix = sorted(int(k) for k, v in verdicts.items() if v in ('FAIL', 'REVIEW'))
         return io.NodeOutput(T.Report(json=out + '.json', md=out + '.md', verdicts=verdicts, fix=fix, hash=file_hash(out + '.json')),
-                             open(out + '.md').read())
+                             open(out + '.md').read(), ui=media.ui_outputs(files=(out + '.md', out + '.json')))
 
 
 class LSDubScorecard(io.ComfyNode):
@@ -123,7 +123,7 @@ class LSDubScorecard(io.ComfyNode):
         J = json.load(open(out + '.json'))
         verdicts = {str(r.get('shot', r['cut'])): r.get('class') for r in J['cuts']}
         return io.NodeOutput(T.Report(json=out + '.json', md=out + '.md', verdicts=verdicts, hash=file_hash(out + '.json')),
-                             open(out + '.md').read())
+                             open(out + '.md').read(), ui=media.ui_outputs(files=(out + '.md', out + '.json')))
 
 
 class LSDubSyncQA(io.ComfyNode):
@@ -183,9 +183,9 @@ class LSDubSyncQA(io.ComfyNode):
             st.mark_done(True, shots=len(json.load(open(js))))
         rows = json.load(open(js))
         verdicts = {str(r.get('shot')): r.get('corr') for r in rows}
-        return io.NodeOutput(T.Report(json=js, md=md, verdicts=verdicts, hash=file_hash(js)),
-                             LSDubDub._video(card if os.path.exists(card) else media.placeholder_video(st.path('none.mp4'), 'no sung shot to show')),
-                             open(md).read())
+        shown = card if os.path.exists(card) else media.placeholder_video(st.path('none.mp4'), 'no sung shot to show')
+        return io.NodeOutput(T.Report(json=js, md=md, verdicts=verdicts, hash=file_hash(js)), LSDubDub._video(shown), open(md).read(),
+                             ui=media.ui_outputs(videos=(shown,), files=(md, js)))
 
 
 # reason (substring) -> what to try
@@ -293,7 +293,7 @@ class LSDubSaveCut(io.ComfyNode):
             shutil.copyfile(render.cut, tmp)
             if watermark: WM.apply_inplace(tmp, crf=int(quality))
             os.replace(tmp, out)
-        return io.NodeOutput(LSDubDub._video(out), out)
+        return io.NodeOutput(LSDubDub._video(out), out, ui=media.ui_outputs(videos=(out,)))
 
 
 NODES = [LSDubVerify, LSDubScorecard, LSDubSyncQA, LSDubFixIt, LSDubSaveCut]

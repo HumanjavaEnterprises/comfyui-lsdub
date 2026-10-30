@@ -218,6 +218,34 @@ def kit_folder(p):
     raise FileNotFoundError(f'LSDub Lip Kit: {q!r} holds no kit (no library.json or base.png inside)')
 
 
+def _saved(path):
+    """a file under ComfyUI's output folder -> {filename, subfolder, type: 'output'} (what /view and the job outputs
+    serve); None outside it (a project folder set elsewhere) or outside ComfyUI."""
+    try:
+        import folder_paths
+        root = os.path.realpath(folder_paths.get_output_directory())
+    except (ImportError, AttributeError):
+        return None
+    rp = os.path.realpath(path)
+    if not os.path.isfile(rp) or not rp.startswith(root + os.sep): return None
+    sub = os.path.relpath(os.path.dirname(rp), root)
+    return {'filename': os.path.basename(rp), 'subfolder': '' if sub == '.' else sub.replace(os.sep, '/'), 'type': 'output'}
+
+
+def ui_outputs(videos=(), images=(), files=()):
+    """the node's ui result, so the files show in ComfyUI's history and come back as `comfy deploy run` job outputs:
+    videos as core SaveVideo reports them ('images' + animated), stills under 'images', reports (md/json) under
+    'files'. A node reports either videos or stills. None when nothing is under the output folder."""
+    ui = {}
+    vs = [r for r in map(_saved, videos) if r]
+    ims = [r for r in map(_saved, images) if r]
+    fs = [r for r in map(_saved, files) if r]
+    if vs: ui.update(images=vs, animated=(True,))
+    elif ims: ui['images'] = ims
+    if fs: ui['files'] = fs
+    return ui or None
+
+
 def hidden_api_key(cls):
     """the comfy.org API key ComfyUI hands a node that declares Hidden.api_key_comfy_org (None outside ComfyUI)."""
     h = getattr(cls, 'hidden', None)
