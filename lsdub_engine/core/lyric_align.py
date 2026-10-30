@@ -226,12 +226,14 @@ def stt(audio, t0, t1, model='large-v3', prompt='', device='cpu', device_index=0
     with tempfile.TemporaryDirectory() as d:
         p = f'{d}/w.wav'
         ff.run(['ffmpeg', '-v', 'error', '-y', '-ss', str(t0), '-t', str(t1 - t0), '-i', audio, '-ac', '1', '-ar', '16000', p], check=True)
+        cpu = lambda: WhisperModel(model, device='cpu', compute_type='int8', download_root=download_root)
+        on_cpu = device == 'cpu'
         try:
             m = WhisperModel(model, device=device, device_index=device_index, download_root=download_root,
                              compute_type='int8' if device == 'cpu' else 'float16')
         except (RuntimeError, ValueError) as e:                       # no usable GPU runtime: the CPU path
             print(f'stt: {device} unavailable ({e}); using the CPU', file=sys.stderr)
-            m = WhisperModel(model, device='cpu', compute_type='int8', download_root=download_root)
+            m, on_cpu = cpu(), True
         import numpy as np
         raw = ff.run(['ffmpeg', '-v', 'error', '-i', p, '-ac', '1', '-ar', '16000', '-f', 'f32le', '-'], capture_output=True, check=True).stdout
         pcm16 = np.frombuffer(raw, np.float32)          # decoded here, not by faster-whisper (its PyAV call varies by version)
@@ -241,12 +243,23 @@ def stt(audio, t0, t1, model='large-v3', prompt='', device='cpu', device_index=0
         pcm16 = np.concatenate([np.zeros(16000, np.float32), pcm16, np.zeros(16000, np.float32)])
         # deterministic decoding: no temperature fallback (it samples, so the same vocal could transcribe differently
         # from run to run) and no conditioning on earlier text (one misheard line no longer derails the rest)
-        segs, _ = m.transcribe(pcm16, word_timestamps=True, language='en', vad_filter=False, initial_prompt=prompt or None,
-                               temperature=0.0, condition_on_previous_text=False, beam_size=5)
+        def run(mdl):
+            segs, _ = mdl.transcribe(pcm16, word_timestamps=True, language='en', vad_filter=False, initial_prompt=prompt or None,
+                                     temperature=0.0, condition_on_previous_text=False, beam_size=5)
+            return [(w.word, w.start, w.end, w.probability) for s in segs for w in s.words]   # decoding is lazy: run it here
+        try:
+            words = run(m)
+        except RuntimeError as e:
+            # the CUDA runtime loads lazily, on the first encode: a GPU whose CUDA libraries do not match CTranslate2's
+            # (e.g. a CUDA 13 torch image without libcublas.so.12) fails HERE, not in WhisperModel(): the CPU path
+            if on_cpu:
+                raise
+            print(f'stt: {device} failed at run time ({e}); using the CPU', file=sys.stderr)
+            words = run(cpu())
         dur = len(pcm16) / 16000.0 - 2 * PAD
         clamp = lambda v: min(max(v - PAD, 0.0), dur)
-        return [{'w': w.word.strip(), 'start': round(clamp(w.start) + t0, 3), 'end': round(clamp(w.end) + t0, 3), 'p': round(w.probability, 3)}
-                for s in segs for w in s.words]
+        return [{'w': w.strip(), 'start': round(clamp(a) + t0, 3), 'end': round(clamp(b) + t0, 3), 'p': round(pr, 3)}
+                for w, a, b, pr in words]
 
 
 def lyric_tokens(path):
