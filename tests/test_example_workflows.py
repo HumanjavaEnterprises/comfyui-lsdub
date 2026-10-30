@@ -23,6 +23,12 @@ def schemas(pack):
     return out
 
 
+def has_control(p):
+    """the frontend rule: an INT/COMBO named seed or noise_seed, or declared with control_after_generate, gets a
+    'control after generate' widget right after it, so one extra value in widgets_values."""
+    return p.io_type in ('INT', 'COMBO') and (p.id in ('seed', 'noise_seed') or bool(p.kw.get('control_after_generate')))
+
+
 def check_widget(p, v):
     t, kw = p.io_type, p.kw
     if t == 'COMBO':
@@ -62,10 +68,14 @@ def check_workflow(wf, S):
         for i, p in zip(n['inputs'], sockets):
             if not p.optional: assert i['link'] is not None and i['link'] in links, f"{n['type']}.{p.id} is not linked"
         assert [(o['name'], o['type']) for o in n['outputs']] == [(o.display_name, o.io_type) for o in s.outputs], n['type']
-        wv = n['widgets_values']
-        assert len(wv) == len(widgets), f"{n['type']}: {len(wv)} widget values for {len(widgets)} widgets"
-        for p, v in zip(widgets, wv):
-            check_widget(p, v)
+        wv = list(n['widgets_values'])
+        n_values = len(widgets) + sum(has_control(p) for p in widgets)
+        assert len(wv) == n_values, f"{n['type']}: {len(wv)} widget values for {n_values} widget slots"
+        for p in widgets:                                                               # read them the way the frontend does
+            check_widget(p, wv.pop(0))
+            if has_control(p):
+                c = wv.pop(0)
+                assert c in ('fixed', 'increment', 'decrement', 'randomize'), f"{n['type']}.{p.id}: control value {c!r}"
     assert n_lsdub >= 5
 
 
@@ -103,5 +113,18 @@ def test_project_widgets_in_ui_order(pack):
         n = next(x for x in wf['nodes'] if x['type'] == 'LSDubProject')
         s = schemas(pack)['LSDubProject']
         ordered = [p for p in s.inputs if not p.optional] + [p for p in s.inputs if p.optional]
-        vals = dict(zip([p.id for p in ordered if p.io_type in WIDGET], n['widgets_values']))
+        names = [k for p in ordered if p.io_type in WIDGET
+                 for k in ((p.id, 'control_after_generate') if has_control(p) else (p.id,))]
+        vals = dict(zip(names, n['widgets_values']))
+        assert len(names) == len(n['widgets_values']), (f, n['widgets_values'])
+        assert vals['seed'] == 0 and vals['control_after_generate'] == 'fixed', (f, vals)
         assert vals['backend'] == 'local' and vals['force_shots'] == '', (f, vals)
+
+
+def test_the_check_catches_a_missing_seed_control(pack):
+    """the v0.1.1 bug: no control value after seed shifts every later value in the frontend."""
+    wf = json.load(open(WORKFLOWS[0]))
+    n = next(x for x in wf['nodes'] if x['type'] == 'LSDubProject')
+    n['widgets_values'].remove('fixed')
+    with pytest.raises(AssertionError):
+        check_workflow(wf, schemas(pack))

@@ -35,6 +35,12 @@ def ui_order(inputs):
     return [p for p in inputs if not p.optional] + [p for p in inputs if p.optional]
 
 
+def has_control(p):
+    """the frontend adds a 'control after generate' widget (value 'fixed') right after an input named seed or noise_seed,
+    or one declared with control_after_generate."""
+    return p.io_type in ('INT', 'COMBO') and (p.id in ('seed', 'noise_seed') or bool(p.kw.get('control_after_generate')))
+
+
 def schema(node_id):
     for cls in (*PACK.nodes_project.NODES, *PACK.nodes_audio.NODES, *PACK.nodes_vocal.NODES, *PACK.nodes_video.NODES,
                 *PACK.nodes_mouth.NODES, *PACK.nodes_qa.NODES):
@@ -64,6 +70,7 @@ class WF:
                 if t in WIDGET:
                     wv.append(w.get(p.id, p.kw.get('default', (p.kw.get('options') or [''])[0] if t == 'COMBO' else
                                                     {'STRING': '', 'INT': 0, 'FLOAT': 0.0, 'BOOLEAN': False}[t])))
+                    if has_control(p): wv.append('fixed')
                 else:
                     ins.append({'name': p.id, 'type': t, 'link': None})
             node = {'id': nid, 'type': ntype, 'pos': list(pos), 'size': [340, 60 + 26 * (len(ins) + len(wv))], 'flags': {},
@@ -74,8 +81,9 @@ class WF:
                     'color': LANE_COLOUR.get(s.category, '#333'), 'title': s.display_name}
         node['_api'] = dict(w)
         if ntype not in CORE:
-            names = [p.id for p in ui_order(schema(ntype).inputs) if p.io_type in WIDGET]
-            node['_api'] = dict(zip(names, node['widgets_values']))
+            names = [n for p in ui_order(schema(ntype).inputs) if p.io_type in WIDGET
+                     for n in ((p.id, None) if has_control(p) else (p.id,))]   # None = the frontend's control widget
+            node['_api'] = {k: v for k, v in zip(names, node['widgets_values']) if k is not None}
         elif ntype == 'SaveVideo':
             node['_api'] = {'filename_prefix': w.get('filename_prefix', 'video/LSDub'), 'format': 'mp4', 'format.codec': 'auto'}
         elif ntype == 'PreviewAny':

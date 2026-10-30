@@ -13,22 +13,12 @@ jobs:
       - uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9   # main, 2026-10
         env:
           COMFY_NODE_CHANGELOG: |
-            LSDub 0.1.1 (2026-10-29)
+            LSDub 0.1.2 (2026-10-30)
 
-            Docs, CI and hosted-run fixes.
-
-            - Runs anywhere ComfyUI runs: falls back to a bundled ffmpeg (imageio-ffmpeg) when none is installed, and loads
-              DINOv2 and Whisper straight from models/lsdub with no network call.
-            - Lip Kit accepts a zipped kit (so it travels with a job), with safe unpacking and size limits.
-            - Transcript and kit inputs resolve inside ComfyUI's input folder only.
-            - Save Cut, Verify, Scorecard, Sync QA and Triage report their files to ComfyUI, so the cut and reports come back
-              with every job (queue history and hosted runs).
-
-            - README rewritten around the tool: what it is and why, the three lanes (VIDEO, AUDIO, MOUTH, then QA), start here,
-              install, the four workflows, Test & Learn vs Run, Comfy Cloud, runtimes and troubleshooting.
-            - Model details (sizes, licences, folders, which workflow needs what, disk, first-use downloads) moved to MODELS.md.
-            - CI: installs the GLES/EGL libraries MediaPipe needs.
-            - Tests: the registration-ruler gate test skips when the face model is not present (clean CI runners).
+            - Example workflows load correctly in the ComfyUI frontend (seed control widget). The frontend adds a "control after
+              generate" value right after LSDub Project's seed; the shipped workflows now include it, so no value is shifted.
+            - Tests model the frontend rule, and the workflow generator writes the control value.
+            - Issue forms for bugs and suggestions, CONTRIBUTING and SECURITY.
         with:
           personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}   # set this secret in the repo settings
           skip_checkout: 'true'

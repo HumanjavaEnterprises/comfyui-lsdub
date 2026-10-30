@@ -1,7 +1,7 @@
 [project]
 name = "lsdub"
 description = "Lip-sync for music videos in ComfyUI: dub the singers' mouths to the song, shot by shot, with QA. Every input is a slot (bring a clip and song, or generate them with LTX-2.5, Qwen-Image-Edit and ACE-Step); vocal split, lyric alignment, lip kits, sync QA."
-version = "0.1.1"
+version = "0.1.2"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 readme = "README.md"
@@ -37,8 +37,8 @@ Homepage = "https://lsdub.vidbnch.app"
 [tool.comfy]
 PublisherId = "vveerrgg"
 DisplayName = "LSDub"
-Icon = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/v0.1.1/assets/icon.png"
-Banner = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/v0.1.1/assets/banner.png"
+Icon = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/v0.1.2/assets/icon.png"
+Banner = "https://raw.githubusercontent.com/HumanjavaEnterprises/comfyui-lsdub/v0.1.2/assets/banner.png"
 requires-comfyui = ">=0.3.48"   # the first upstream tag with comfy_api.v0_0_2 (checked 2026-10-29); tested on 0.34
 includes = []
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 (2026-10-30)
+
+- Example workflows load correctly in the ComfyUI frontend (seed control widget). The frontend adds a "control after
+  generate" value right after LSDub Project's seed; the shipped workflows now include it, so no value is shifted.
+- Tests model the frontend rule, and the workflow generator writes the control value.
+- Issue forms for bugs and suggestions, CONTRIBUTING and SECURITY.
+
 ## 0.1.1 (2026-10-29)
 
 Docs, CI and hosted-run fixes.
