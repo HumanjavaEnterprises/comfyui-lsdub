@@ -1,9 +1,10 @@
-# LSDub runtime dependencies (torch / torchaudio come with ComfyUI). ffmpeg must be on PATH.
+# LSDub runtime dependencies (torch / torchaudio come with ComfyUI). ffmpeg: PATH first, else the imageio-ffmpeg static binary.
 numpy>=1.24
 opencv-python-headless>=4.8
 scipy>=1.10
 mediapipe>=0.10.14,<0.11
 pillow>=10
+imageio-ffmpeg>=0.5
 # lyric alignment (LSDub Align)
 faster-whisper>=1.0
 soundswallower>=0.6

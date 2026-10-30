@@ -186,6 +186,41 @@ def test_save_cut_execute(pack, tmp_path, monkeypatch):
     assert out2 != out and len(marked) == 1                                          # no watermark asked: none applied
 
 
+def test_save_cut_reports_the_cut_as_a_ui_video(pack, tmp_path, monkeypatch):
+    """ComfyUI history (and so `comfy deploy run`'s job outputs) only lists ui results: the cut must be one, the way
+    core SaveVideo reports its file (type output, subfolder relative to the output folder)."""
+    import sys
+    fp = sys.modules['folder_paths']
+    monkeypatch.setattr(fp, 'get_output_directory', lambda: str(tmp_path))
+    WM = _mod(pack, 'lsdub_engine.watermark')
+    monkeypatch.setattr(WM, 'apply_inplace', lambda path, crf=18: None)
+    cut = tmp_path / 'cut.mp4'
+    cut.write_bytes(b'video')
+    p = _proj(pack, tmp_path)
+    r = pack.nodes_qa.LSDubSaveCut.execute(p, pack.lsdub_types.Render(shots={}, cut=str(cut), hash='r2'), True, 18)
+    out = r.args[1]
+    assert r.ui['animated'] == (True,)
+    assert r.ui['images'] == [{'filename': os.path.basename(out),
+                               'subfolder': os.path.relpath(os.path.dirname(out), tmp_path).replace(os.sep, '/'),
+                               'type': 'output'}]
+
+
+def test_ui_outputs_shapes(pack, tmp_path, monkeypatch):
+    import sys
+    media = _mod(pack, 'media')
+    monkeypatch.setattr(sys.modules['folder_paths'], 'get_output_directory', lambda: str(tmp_path / 'output'))
+    (tmp_path / 'output' / 'lsdub' / 'x').mkdir(parents=True)
+    md, js, png = (tmp_path / 'output' / 'lsdub' / 'x' / n for n in ('r.md', 'r.json', 'sheet.jpg'))
+    for f in (md, js, png): f.write_text('x')
+    outside = tmp_path / 'elsewhere.md'
+    outside.write_text('x')
+    ui = media.ui_outputs(images=(str(png),), files=(str(md), str(js), str(outside)))
+    assert ui == {'images': [{'filename': 'sheet.jpg', 'subfolder': 'lsdub/x', 'type': 'output'}],
+                  'files': [{'filename': 'r.md', 'subfolder': 'lsdub/x', 'type': 'output'},
+                            {'filename': 'r.json', 'subfolder': 'lsdub/x', 'type': 'output'}]}
+    assert media.ui_outputs(files=(str(outside),)) is None
+
+
 # ---------------------------------------------------------------------------------------------------- Sync QA --
 def test_sync_qa_execute(pack, tmp_path, monkeypatch):
     Q = _mod(pack, 'lsdub_engine.audits.sync_qa')

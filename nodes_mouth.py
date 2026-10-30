@@ -16,6 +16,7 @@ from comfy_api.v0_0_2 import io
 
 from . import lsdub_types as T
 from . import media
+from .media import kit_folder
 from .lsdub_engine import presets
 from .lsdub_engine._inproc import call
 from .project import file_hash, shots_todo, stage_key, text_hash
@@ -33,16 +34,6 @@ def _kit_flags(project, identity):
     return f
 
 
-def _resolve_dir(d):
-    """a kit folder: absolute, or relative to ComfyUI's input folder (where the demo assets are unzipped)."""
-    if os.path.isabs(d): return d
-    try:
-        import folder_paths
-        return os.path.join(folder_paths.get_input_directory(), d)
-    except ImportError:
-        return os.path.abspath(d)
-
-
 class LSDubBuildLipKit(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -55,7 +46,8 @@ class LSDubBuildLipKit(io.ComfyNode):
             inputs=[
                 T.LSDubProject.Input('project', tooltip='The LSDub project.'),
                 io.String.Input('identity', default='', tooltip='Who this kit is for: the singer\'s cast name.'),
-                io.String.Input('kit_dir', default='', tooltip='A finished kit folder. Leave empty to build one from the source.'),
+                io.String.Input('kit_dir', default='', tooltip='A finished kit folder, or a .zip of one (a zip travels with '
+                                '`comfy deploy run`; a folder does not). Leave empty to build one from the source.'),
                 T.LSDubSource.Input('source', optional=True, tooltip='Build from this video: the frame with the most closed '
                                                                     'mouth of the chosen shot is the base face.'),
                 T.LSDubShots.Input('shots', optional=True, tooltip='The shots, to pick shot_id from.'),
@@ -89,7 +81,7 @@ class LSDubBuildLipKit(io.ComfyNode):
 
     @classmethod
     def fingerprint_inputs(cls, project, identity, kit_dir, source=None, shots=None, shot_id=-1, keep='', seeds=3):
-        kit_dir = _resolve_dir(kit_dir) if kit_dir else kit_dir
+        kit_dir = kit_folder(kit_dir) if kit_dir else kit_dir
         if kit_dir: return stage_key('LSDubBuildLipKit', {'id': identity, 'dir': kit_dir,
                                                           'h': cls._hash(kit_dir) if os.path.isdir(kit_dir) else ''})
         return cls._build_key(project, identity, source, shots, shot_id, keep, seeds) if source is not None else 'none'
@@ -101,7 +93,7 @@ class LSDubBuildLipKit(io.ComfyNode):
         _dev.ensure_face_models()
         if not identity.strip(): raise ValueError('LSDub Lip Kit: set identity (the singer\'s cast name)')
         if kit_dir:
-            kit_dir = _resolve_dir(kit_dir)
+            kit_dir = kit_folder(kit_dir)
             if not os.path.isdir(kit_dir): raise FileNotFoundError(f'LSDub Lip Kit: no folder {kit_dir}')
             return io.NodeOutput(T.Kit(dir=kit_dir, identity=identity.strip(), hash=cls._hash(kit_dir)))
         if source is None: raise ValueError('LSDub Lip Kit: set kit_dir, or connect a source to build a kit from')

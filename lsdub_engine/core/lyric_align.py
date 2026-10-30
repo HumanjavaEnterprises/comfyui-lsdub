@@ -207,8 +207,22 @@ def fill_voiced(final, lines, env, thr, t0, t1, extra=None, min_len=FILL_MIN, sy
     return added
 
 
+def whisper_source(model, download_root=None):
+    """a faster-whisper model name -> its local folder under download_root when the files are there (loads by path:
+    no hub call, works offline even without refs/main), else the name (faster-whisper downloads it)."""
+    if not download_root or os.path.isdir(model): return model
+    from .._models import hf_snapshot
+    try:
+        from faster_whisper.utils import _MODELS as names
+    except ImportError:
+        names = {}
+    repo = model if '/' in model else names.get(model, f'Systran/faster-whisper-{model}')
+    return hf_snapshot(download_root, repo, ('model.bin', 'config.json', 'tokenizer.json')) or model
+
+
 def stt(audio, t0, t1, model='large-v3', prompt='', device='cpu', device_index=0, download_root=None):
     from faster_whisper import WhisperModel
+    model = whisper_source(model, download_root)
     with tempfile.TemporaryDirectory() as d:
         p = f'{d}/w.wav'
         ff.run(['ffmpeg', '-v', 'error', '-y', '-ss', str(t0), '-t', str(t1 - t0), '-i', audio, '-ac', '1', '-ar', '16000', p], check=True)

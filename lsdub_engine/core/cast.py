@@ -175,7 +175,9 @@ class TorchEmbedder:
         import torch
         from transformers import AutoModel
         self.torch, self.device, self.offload_device = torch, device, offload_device
-        self.m = AutoModel.from_pretrained(hf, cache_dir=cache_dir).eval().to(device)
+        from .._models import hf_snapshot
+        local = hf_snapshot(cache_dir, hf, ('config.json', 'model.safetensors'))     # by path when present: no hub call
+        self.m = AutoModel.from_pretrained(local or hf, cache_dir=cache_dir).eval().to(device)
 
     def __call__(self, crops):
         if not crops:
