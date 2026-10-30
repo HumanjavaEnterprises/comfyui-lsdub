@@ -306,6 +306,8 @@ def test_layers_off_candidate_and_the_candidate_order(clip_dir):
     assert keys == ['a', 'e', 'h']
 
 
+@pytest.mark.skipif(not os.path.exists(os.environ.get("LIPS_FACE_MODEL", os.path.expanduser("~/.cache/lsdub/face_landmarker.task"))),
+                    reason="needs the MediaPipe face model (downloaded on first use)")
 def test_gate_reports_the_registration_ruler(clip_dir):
     tmp, vid, frames, S = clip_dir
     n = len(frames)
