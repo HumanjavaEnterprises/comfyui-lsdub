@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 (2026-10-30)
+
+- Speech-to-text falls back to the CPU when the GPU runtime is missing (for example CUDA 12 cuBLAS on a CUDA 13 image), so Align works on hosted GPUs.
+
 ## 0.1.2 (2026-10-30)
 
 - Example workflows load correctly in the ComfyUI frontend (seed control widget). The frontend adds a "control after

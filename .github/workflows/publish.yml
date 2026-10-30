@@ -13,12 +13,9 @@ jobs:
       - uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9   # main, 2026-10
         env:
           COMFY_NODE_CHANGELOG: |
-            LSDub 0.1.2 (2026-10-30)
+            LSDub 0.1.3 (2026-10-30)
 
-            - Example workflows load correctly in the ComfyUI frontend (seed control widget). The frontend adds a "control after
-              generate" value right after LSDub Project's seed; the shipped workflows now include it, so no value is shifted.
-            - Tests model the frontend rule, and the workflow generator writes the control value.
-            - Issue forms for bugs and suggestions, CONTRIBUTING and SECURITY.
+            - Speech-to-text falls back to the CPU when the GPU runtime is missing (for example CUDA 12 cuBLAS on a CUDA 13 image), so Align works on hosted GPUs.
         with:
           personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}   # set this secret in the repo settings
           skip_checkout: 'true'
