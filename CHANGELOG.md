@@ -2,7 +2,14 @@
 
 ## 0.1.1 (2026-10-29)
 
-Docs and CI.
+Docs, CI and hosted-run fixes.
+
+- Runs anywhere ComfyUI runs: falls back to a bundled ffmpeg (imageio-ffmpeg) when none is installed, and loads
+  DINOv2 and Whisper straight from models/lsdub with no network call.
+- Lip Kit accepts a zipped kit (so it travels with a job), with safe unpacking and size limits.
+- Transcript and kit inputs resolve inside ComfyUI's input folder only.
+- Save Cut, Verify, Scorecard, Sync QA and Triage report their files to ComfyUI, so the cut and reports come back
+  with every job (queue history and hosted runs).
 
 - README rewritten around the tool: what it is and why, the three lanes (VIDEO, AUDIO, MOUTH, then QA), start here,
   install, the four workflows, Test & Learn vs Run, Comfy Cloud, runtimes and troubleshooting.
