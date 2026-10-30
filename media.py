@@ -113,6 +113,78 @@ def to_wav(src, dst):
     return dst
 
 
+def input_dir():
+    """ComfyUI's input folder (None outside ComfyUI)."""
+    try:
+        import folder_paths
+        return folder_paths.get_input_directory()
+    except (ImportError, AttributeError):
+        return None
+
+
+def input_file(p, what='file'):
+    """a file input given as a string: absolute, or relative to ComfyUI's input folder, the way LoadVideo/LoadAudio
+    name theirs. `comfy deploy run` uploads every string input with a file extension that names a local file and the
+    worker rewrites it to the uploaded file's name (optionally `subfolder/name`) in its input folder, so the same
+    widget value works locally and on a deployment. ComfyUI's ' [input]' annotation is accepted. '' -> ''.
+    Raises FileNotFoundError (naming where it looked) when the file is not there."""
+    if not p: return p
+    p = p.strip()
+    if p.endswith(' [input]'): p = p[:-len(' [input]')]
+    tried = []
+    if os.path.isabs(p):
+        tried.append(p)
+    else:
+        d = input_dir()
+        if d: tried += [os.path.join(d, p), os.path.join(d, os.path.basename(p))]
+        tried.append(os.path.abspath(p))
+    for q in tried:
+        if os.path.isfile(q): return q
+    raise FileNotFoundError(f'{what} {p!r} not found (looked in: {", ".join(dict.fromkeys(tried))})')
+
+
+def _safe_extract(zf, dst):
+    root = os.path.realpath(dst)
+    for m in zf.infolist():
+        if (m.external_attr >> 16) & 0o170000 == 0o120000:
+            raise ValueError(f'zip member {m.filename!r} is a symlink; refusing')
+        out = os.path.realpath(os.path.join(dst, m.filename))
+        if out != root and not out.startswith(root + os.sep):
+            raise ValueError(f'zip member {m.filename!r} escapes the folder; refusing')
+    zf.extractall(dst)
+
+
+def kit_folder(p):
+    """a lip-kit input: a folder, or a .zip of one (a single file, so `comfy deploy run` uploads it like any LoadImage
+    input; a folder never travels). A zip is unpacked once into <input>/lsdub_kits_unpacked/<sha1>/ and the folder
+    holding library.json (or base.png) inside it is returned."""
+    import tempfile
+    import zipfile
+    q = p.strip()
+    if q.endswith(' [input]'): q = q[:-len(' [input]')]
+    d = input_dir()
+    base = q if os.path.isabs(q) else os.path.join(d, q) if d else os.path.abspath(q)
+    if not q.lower().endswith('.zip'): return base
+    z = input_file(q, 'LSDub Lip Kit: kit zip')
+    h = hashlib.sha1()
+    with open(z, 'rb') as f:
+        for b in iter(lambda: f.read(1 << 20), b''): h.update(b)
+    dst = os.path.join(d or os.path.dirname(z), 'lsdub_kits_unpacked', h.hexdigest()[:16])
+    if not os.path.isdir(dst):
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        tmp = tempfile.mkdtemp(prefix='.unpack-', dir=os.path.dirname(dst))
+        try:
+            with zipfile.ZipFile(z) as zf: _safe_extract(zf, tmp)
+            try: os.replace(tmp, dst)
+            except OSError:                                              # another run unpacked it first
+                if not os.path.isdir(dst): raise
+        finally:
+            if os.path.isdir(tmp): shutil.rmtree(tmp, ignore_errors=True)
+    for r, _, fs in sorted(os.walk(dst)):
+        if 'library.json' in fs or 'base.png' in fs: return r
+    raise FileNotFoundError(f'LSDub Lip Kit: {q!r} holds no kit (no library.json or base.png inside)')
+
+
 def hidden_api_key(cls):
     """the comfy.org API key ComfyUI hands a node that declares Hidden.api_key_comfy_org (None outside ComfyUI)."""
     h = getattr(cls, 'hidden', None)

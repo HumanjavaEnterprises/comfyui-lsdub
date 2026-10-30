@@ -20,14 +20,9 @@ MATCH_WARN, MATCH_FAIL = 0.5, 0.2      # lyric match ratio: below WARN the lyric
 
 
 def _input_path(p):
-    """a file path: absolute, or relative to ComfyUI's input folder (where the demo transcript is unzipped)."""
-    if not p or os.path.isabs(p): return p
-    try:
-        import folder_paths
-        q = os.path.join(folder_paths.get_input_directory(), p)
-        return q if os.path.exists(q) else p
-    except ImportError:
-        return p
+    """a file path: absolute, or relative to ComfyUI's input folder (where the demo transcript is unzipped, and where a
+    deployment puts the uploaded file); raises FileNotFoundError when it names no file."""
+    return media.input_file(p, 'LSDub Align: transcript_json')
 
 
 def lyric_prompt(path, limit=600):

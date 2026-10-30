@@ -53,3 +53,26 @@ def face_landmarker_path():
 def fetch_face_landmarker(force=False):
     dst = face_landmarker_path()
     return dst if os.path.exists(dst) and not force else _fetch(FACE_URL, dst, FACE_SHA256)
+
+
+def hf_snapshot(cache_dir, repo_id, need=("config.json",)):
+    """the local folder of a Hugging Face model under cache_dir, so it loads by PATH (no hub call, works offline):
+    the cache layout's snapshot named by refs/main, else any snapshot holding every file in `need` (newest first; a
+    build that places only snapshots/<rev>/ files has no refs/main), else a flat local_dir layout <cache_dir>/<name>/.
+    None when the files are not there (the caller then loads by repo id, which may download)."""
+    if not cache_dir: return None
+    root = os.path.join(cache_dir, "models--" + repo_id.replace("/", "--"))
+    snaps, cands = os.path.join(root, "snapshots"), []
+    try:
+        with open(os.path.join(root, "refs", "main"), encoding="utf-8") as f:
+            cands.append(os.path.join(snaps, f.read().strip()))
+    except OSError:
+        pass
+    try:
+        cands += sorted((os.path.join(snaps, d) for d in os.listdir(snaps)), key=os.path.getmtime, reverse=True)
+    except OSError:
+        pass
+    cands.append(os.path.join(cache_dir, repo_id.split("/")[-1]))
+    for c in cands:
+        if os.path.isdir(c) and all(os.path.isfile(os.path.join(c, n)) for n in need): return c
+    return None

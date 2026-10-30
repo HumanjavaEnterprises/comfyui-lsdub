@@ -54,6 +54,9 @@ def main():
         shutil.rmtree(kits, ignore_errors=True)
         shutil.copytree(os.path.join(root, 'kits'), kits)
         print('->', kits)
+        for k in sorted(os.listdir(kits)):                    # each kit also as a .zip: the form `comfy deploy run` uploads
+            if os.path.isdir(os.path.join(kits, k)):
+                print('->', shutil.make_archive(os.path.join(kits, k), 'zip', kits, k))
 
 
 if __name__ == '__main__':
