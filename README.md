@@ -207,27 +207,27 @@ Re-runs are cache hits.
 
 - [ComfyUI V3 node API](https://docs.comfy.org/custom-nodes/v3_migration): the node schema, tooltips and extension
   entry point the pack is written in (GPL-3.0 host; the pack only imports its API).
+- [Comfy Python SDK](https://github.com/Comfy-Org/comfy-python-sdk): the opt-in Comfy Cloud backend (MIT).
 - [cookiecutter-comfy-extension](https://github.com/Comfy-Org/cookiecutter-comfy-extension): the pack layout, tests
   and CI shape (MIT).
-- [Mel-Band RoFormer](https://arxiv.org/abs/2310.01809) (Wang et al., 2023): the vocal split architecture,
-  reimplemented from the paper. It loads the MIT-licensed
-  [MelBandRoformer_kim_vocals.ckpt](https://huggingface.co/KimberleyJSN/melbandroformer) checkpoint.
-- [MediaPipe Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker): the 478-point
-  face mesh every mouth measurement runs on (Apache-2.0).
-- [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet): face detection at any scale
-  (MIT).
-- [DINOv2](https://github.com/facebookresearch/dinov2): the identity embedding behind Cast and Triage (Apache-2.0).
-- [Whisper](https://github.com/openai/whisper) via [faster-whisper](https://github.com/SYSTRAN/faster-whisper): the
-  speech-to-text stage of alignment (MIT).
-- [SoundSwallower](https://github.com/dhdaines/soundswallower) + CMUdict, [g2p](https://github.com/roedoejet/g2p):
-  phone-level forced alignment and pronunciations (BSD / MIT).
-- [Florence-2](https://huggingface.co/microsoft/Florence-2-large) and
-  [SAM 2.1](https://github.com/facebookresearch/sam2): occluder grounding and video masks (MIT / Apache-2.0).
 - [LTX-2.5](https://github.com/Lightricks/LTX-Video): the Video slot generator (LTX-2.x Community License Agreement).
 - [Qwen-Image-Edit-2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511): the Still slot and the lip-kit mouth
   shapes (Apache-2.0).
+- [MediaPipe Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker): the 478-point
+  face mesh every mouth measurement runs on (Apache-2.0).
+- [DINOv2](https://github.com/facebookresearch/dinov2): the identity embedding behind Cast and Triage (Apache-2.0).
+- [Florence-2](https://huggingface.co/microsoft/Florence-2-large) and
+  [SAM 2.1](https://github.com/facebookresearch/sam2): occluder grounding and video masks (MIT / Apache-2.0).
+- [Whisper](https://github.com/openai/whisper) via [faster-whisper](https://github.com/SYSTRAN/faster-whisper): the
+  speech-to-text stage of alignment (MIT).
+- [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet): face detection at any scale
+  (MIT).
 - [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5): the Song slot generator; it also made the demo songs (MIT).
-- [Comfy Python SDK](https://github.com/Comfy-Org/comfy-python-sdk): the opt-in Comfy Cloud backend (MIT).
+- [Mel-Band RoFormer](https://arxiv.org/abs/2310.01809) (Wang et al., 2023): the vocal split architecture,
+  reimplemented from the paper. It loads the MIT-licensed
+  [MelBandRoformer_kim_vocals.ckpt](https://huggingface.co/KimberleyJSN/melbandroformer) checkpoint.
+- [SoundSwallower](https://github.com/dhdaines/soundswallower) + CMUdict, [g2p](https://github.com/roedoejet/g2p):
+  phone-level forced alignment and pronunciations (BSD / MIT).
 
 ## Licence and responsible use
 
