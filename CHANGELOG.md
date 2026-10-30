@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 (2026-10-29)
+
+Docs and CI.
+
+- README rewritten around the tool: what it is and why, the three lanes (VIDEO, AUDIO, MOUTH, then QA), start here,
+  install, the four workflows, Test & Learn vs Run, Comfy Cloud, runtimes and troubleshooting.
+- Model details (sizes, licences, folders, which workflow needs what, disk, first-use downloads) moved to MODELS.md.
+- CI: installs the GLES/EGL libraries MediaPipe needs.
+- Tests: the registration-ruler gate test skips when the face model is not present (clean CI runners).
+
 ## 0.1.0 (2026-10-29)
 
 The whole rack: lip-sync for music videos in ComfyUI.
