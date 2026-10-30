@@ -1,0 +1,64 @@
+name: Bug report
+description: Something broke, or a shot came out wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for throwing real clips at LSDub. The more of this you fill in, the faster we can fix it.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Which workflow
+      options:
+        - 1 Prompt Everything
+        - 2 BYO Clip and Song
+        - 3 Test and Learn
+        - 4 Make Your Character Sing
+        - My own graph
+    validations:
+      required: true
+  - type: dropdown
+    id: node
+    attributes:
+      label: Node that failed (if any)
+      options: [Project, Video/Still/Song/Lyrics slot, Shot Split, Cast, Triage, Vocal Split, Lead Vocal, Align, Build Lip Kit, Occluders, Tweaks, Dub, Continuity, Verify, Scorecard, Sync QA, Fix-It, Save Cut, Performance, Not sure]
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: LSDub version, ComfyUI version, ComfyUI Desktop or portable or git install.
+      placeholder: "LSDub 0.1.1, ComfyUI 0.3.x, Desktop on Windows"
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Where it ran
+      placeholder: "RTX 4090 24 GB / CPU only / Comfy Cloud"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: qa
+    attributes:
+      label: Verify / Fix-It / Triage output
+      description: Paste the Verify or Fix-It markdown if you have it. It tells us a lot.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console log
+      description: The ComfyUI console around the error. Remove any paths or info you don't want public.
+      render: text
+  - type: textarea
+    id: media
+    attributes:
+      label: Clips or screenshots
+      description: Drag in a short clip or a frame grab of the problem shot (only media you have the rights to share).

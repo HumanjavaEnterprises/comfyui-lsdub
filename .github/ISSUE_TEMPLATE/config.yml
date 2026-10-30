@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Project page
+    url: https://lsdub.vidbnch.app
+    about: What LSDub is, the demo, and the QA suite.
+  - name: Security issue
+    url: https://github.com/HumanjavaEnterprises/comfyui-lsdub/security/advisories/new
+    about: Please report security problems privately, not as a public issue.

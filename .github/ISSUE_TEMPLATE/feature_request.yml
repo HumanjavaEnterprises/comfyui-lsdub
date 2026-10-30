@@ -1,0 +1,20 @@
+name: Suggestion
+description: An idea, a workflow you want, or a shot type LSDub should handle.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+      description: The music video or shot that made you want it.
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: A clip, a frame, or a link that shows what you mean.
