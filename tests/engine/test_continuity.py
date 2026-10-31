@@ -12,7 +12,7 @@ def _shot(n=12):
     R = []
     for i in range(n):
         r = base.copy()
-        r[24:40, 20:44] = (60, 60, 160)            # a steady painted mouth
+        r[24:40, 20:44] = (60, 60, 160)  # a steady painted mouth
         R.append(r)
     return T, R
 
@@ -35,8 +35,8 @@ def test_blue_ghost_ruler():
 
 
 def test_squeeze_frames(tmp_path):
-    p = tmp_path / 'w.json'
-    json.dump(dict(range=dict(g_hi=20.0), frames=[dict(gap=12, egap=2), dict(gap=12, egap=10), dict(gap=3, egap=0.5)]), open(p, 'w'))
+    p = tmp_path / "w.json"
+    json.dump(dict(range=dict(g_hi=20.0), frames=[dict(gap=12, egap=2), dict(gap=12, egap=10), dict(gap=3, egap=0.5)]), open(p, "w"))
     assert c.squeeze_frames(str(p), 3).tolist() == [True, False, False]
 
 
@@ -57,7 +57,7 @@ def test_texture_pop_is_a_short_burst_not_a_ramp():
     A = [r.copy() for r in R]
     for i in (6, 7, 8):
         R[i] = R[i].copy()
-        R[i][24:40:2, 20:44] = 0   # striped slab on 3 frames
+        R[i][24:40:2, 20:44] = 0  # striped slab on 3 frames
     M = [np.ones((64, 64), bool)] * 20
     assert c.texture_pops(T, R, A, M) == [(6, 3)]
 
@@ -74,12 +74,12 @@ def test_blue_ruler_ignores_cool_lit_teeth_but_keeps_a_ghost():
     ghost = t.copy()
     ghost[5:15, 5:15] = (124, 118, 100)
     faint = t.copy()
-    faint[5:15, 5:15] = (160, 146, 152)          # shot B f91: B - R 8, B - G 14 (a true blue-grey)
+    faint[5:15, 5:15] = (160, 146, 152)  # shot B f91: B - R 8, B - G 14 (a true blue-grey)
     assert c.blue_px(t, teeth, m) == 0 and c.blue_px(t, ghost, m) == 100 and c.blue_px(t, faint, m) == 100
     T = [t] * 8
-    R = [teeth] * 8                                   # a steady open mouth is not flagged on colour
+    R = [teeth] * 8  # a steady open mouth is not flagged on colour
     flag, s, _ = c.check(T, R, M=[m] * 8)
-    assert int(s['blue'].max()) == 0 and not flag.any()
+    assert int(s["blue"].max()) == 0 and not flag.any()
 
 
 def test_fix_alt_keeps_a_clean_grown_frame_and_drops_a_desynced_take():
@@ -88,16 +88,18 @@ def test_fix_alt_keeps_a_clean_grown_frame_and_drops_a_desynced_take():
     t = np.full((20, 20, 3), (90, 120, 180), np.uint8)
     m = np.ones((20, 20), bool)
     R = [t.copy() for _ in range(7)]
-    for i in range(7): R[i][8:12, 8:12] = (60, 60, 200)              # our mouth: red-dark, not blue
+    for i in range(7):
+        R[i][8:12, 8:12] = (60, 60, 200)  # our mouth: red-dark, not blue
     A = [x.copy() for x in R]
-    for i in range(7): A[i][2:8, 2:8] = (160, 146, 152)              # the alternate carries a faint ghost
+    for i in range(7):
+        A[i][2:8, 2:8] = (160, 146, 152)  # the alternate carries a faint ghost
     flag = np.array([0, 0, 1, 1, 0, 0, 0], bool)
     keep = np.array([1, 1, 1, 0, 1, 1, 1], bool)
     out, w, src = c.fix_alt([t] * 7, R, A, flag, [m] * 7, keep=keep)
-    assert src[2] == 'render' and np.array_equal(out[2], R[2])
-    assert src[3] == 'take' and np.array_equal(out[3][8:12, 8:12], np.full((4, 4, 3), (90, 120, 180), np.uint8))
-    assert np.array_equal(out[0], R[0])                             # nothing eased in from the kept frame 2
-    assert np.array_equal(out[1], R[1])                             # nor into a frame beside a kept one (no half blend)
+    assert src[2] == "render" and np.array_equal(out[2], R[2])
+    assert src[3] == "take" and np.array_equal(out[3][8:12, 8:12], np.full((4, 4, 3), (90, 120, 180), np.uint8))
+    assert np.array_equal(out[0], R[0])  # nothing eased in from the kept frame 2
+    assert np.array_equal(out[1], R[1])  # nor into a frame beside a kept one (no half blend)
 
 
 def test_remake_still_offers_the_take_where_it_follows_the_plan():
@@ -109,9 +111,9 @@ def test_remake_still_offers_the_take_where_it_follows_the_plan():
         R[i][24:40, 20:44] = (240, 240, 240)
     M = c.paint_region(T, R)
     out, log = c.remake(T, R, [(9, 2, 9.0)], M, desync=np.zeros(20, bool))
-    assert log[0]['used'] in ('take', 'interp')
+    assert log[0]["used"] in ("take", "interp")
     out2, log2 = c.remake(T, R, [(9, 2, 9.0)], M, desync=np.ones(20, bool))
-    assert log2[0]['used'] != 'take'
+    assert log2[0]["used"] != "take"
     assert 0 < c.DESYNC_FRAC < 1
 
 
@@ -124,9 +126,9 @@ def test_squeeze_reverts_only_runs_that_show_a_lip_ghost():
     clean = t.copy()
     clean[12:16, 10:30] = (60, 60, 200)
     lip_ghost = clean.copy()
-    lip_ghost[8:14, 10:30] = (160, 146, 152)      # top of the region: a lip ghost
+    lip_ghost[8:14, 10:30] = (160, 146, 152)  # top of the region: a lip ghost
     prop = clean.copy()
-    prop[28:34, 10:30] = (160, 146, 152)               # bottom of the region: a revealed mic
+    prop[28:34, 10:30] = (160, 146, 152)  # bottom of the region: a revealed mic
     sq = np.array([1, 1, 1, 0, 1, 1, 0], bool)
     T = [t] * 7
     R = [clean, clean, lip_ghost, clean, prop, prop, clean]

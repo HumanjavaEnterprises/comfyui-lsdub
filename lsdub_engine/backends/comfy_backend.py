@@ -10,6 +10,7 @@ LSDub runs the SAME static workflow JSON three ways; only the execution target d
 
 Select with --backend / LSDUB_BACKEND.
 """
+
 import json
 import os
 import re
@@ -24,13 +25,15 @@ def resolve_backend(name=None):
 
 def _substitute_str(s, subs):
     """Substitute {KEY} / {key} placeholders in a string."""
+
     def repl(m):
         key = m.group(1)
         for k, v in subs.items():
             if k == key or k.lower() == key:
                 return str(v)
         return m.group(0)
-    return re.sub(r'\{(\w+)\}', repl, s)
+
+    return re.sub(r"\{(\w+)\}", repl, s)
 
 
 def _substitute(obj, subs):
@@ -63,8 +66,7 @@ def _local_run(url, graph, out_node_id, out_dir, upload_paths=None):
     # Upload files and replace {UPLOAD_N} placeholders
     for i, up in enumerate(upload_paths or []):
         server_name = cf.upload(url, up)
-        graph = _substitute(graph, {f"UPLOAD_{i}": server_name,
-                                     f"upload_{i}": server_name})
+        graph = _substitute(graph, {f"UPLOAD_{i}": server_name, f"upload_{i}": server_name})
 
     pid = cf.queue(url, graph, client_id="lsdub")
     entry = cf.wait(url, pid, timeout=1800)
@@ -124,11 +126,12 @@ def make_client(backend=None):
         label = f"cloud ({base})"
 
         def run(path, out_node_id, out_dir=".", upload_paths=None, **subs):
-            from comfy_sdk import Comfy
+            from comfy_sdk import Comfy, Asset  # noqa: F401 - fail here, before upload, on an SDK without the Asset API
 
             import inspect
-            kw = {'base_url': base} if 'base_url' in inspect.signature(Comfy).parameters else {}
-            c = Comfy(api_key=key, **kw)   # never writes os.environ: this runs inside the ComfyUI process
+
+            kw = {"base_url": base} if "base_url" in inspect.signature(Comfy).parameters else {}
+            c = Comfy(api_key=key, **kw)  # never writes os.environ: this runs inside the ComfyUI process
             try:
                 wf_path = _resolve_wf_path(path)
                 with open(wf_path) as f:

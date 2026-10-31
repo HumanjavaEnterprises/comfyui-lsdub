@@ -2,6 +2,14 @@
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """lsdub — photoreal sung lip-sync from words: forced alignment -> visemes -> a mouth library -> paint -> refine.
 
+`lsdub --help` lists the commands. SHIP is what every build carries, DEV is the workbench (a vendored build has none of it)."""
+
+import importlib
+import os
+import sys
+
+DOCS_URL = "https://github.com/HumanjavaEnterprises/lsdub/blob/main/docs"
+HELP_SHIP = """
   lsdub align     lyrics + vocal -> word/phone timings (sphinx | mfa | best)
   lsdub visemes   timings -> per-frame viseme track (min-hold 3)
   lsdub rhubarb   Rhubarb Lip Sync cues (cross-check / fallback)
@@ -10,6 +18,8 @@
   lsdub mouths    mouth library from one frame (prep | gen | sheet; gen needs ComfyUI + Qwen-Image-Edit-2511)
   lsdub animate   animator pass: phones + vocal -> eased, coarticulated track (jaw/lip split, G gain)
   lsdub paint     paint the viseme track onto a take (morph, tame, open cap 0.85)          [watermarked]
+  lsdub interior  one steady mouth interior per shot (upper teeth hang from the upper lip)     [watermarked]
+  lsdub calm      flow-guided temporal calm inside the mouth (kills per-frame texture boil)  [watermarked]
   lsdub motion-audit  in-motion metrics: boil, ghost, slide, step; frame-by-frame mouth crops
   lsdub pin       pin the painted lower face to the take's REAL skin motion (dense flow), so the mouth never swims  [watermarked]
   lsdub slip-audit  does the painted mouth stay pinned? philtrum / lip slip vs the nose, in px, and its lag
@@ -17,7 +27,7 @@
   lsdub track     v10a: skip = mark a viseme track's vocalisations (uh uh, ah, da da, mm, hey) for the warp; scan = list a song's spans
   lsdub annotate  v10a: per-frame card in a corner: the sung word, its mouth shape (a line glyph), openness, the next second of visemes
   lsdub skull-lock  put the mouth back on the skull: one midline, mouth line parallel to the pupils, rigid upper lip  [watermarked]
-  lsdub constraints anatomy-rule violations per video vs the character's own take (docs/FACE_CONSTRAINTS.md)
+  lsdub constraints anatomy-rule violations per video vs the character's own take
   lsdub skull-audit midline / axis / teeth-plane alignment metrics
   lsdub plane-fit  is the mouth on the face's 3D plane? upper-lip arc vs the take's own lip rotated into each frame's pose
   lsdub posemix   blend paints from several per-pose libraries by head pose                  [watermarked]
@@ -32,6 +42,7 @@
   lsdub sing      THE standard path for every sung cut: cast -> 512 px crop -> snappy 2x-fps warp -> lower-face paste -> measured gate  [watermarked]
   lsdub qa        general QA for a contributed video: `qa triage` (auto shots -> DUB / DUB-MEDIUM / NO + reason) and `qa verify` (likely success per dubbed shot)
   lsdub scorecard score a delivered film SHOT BY SHOT (0-100, worst first): sync, silence, snap, tier, mouth, canon, motion, pops, sharpness  [--compare old.mp4]
+  lsdub mouth-ruler  natural-mouth baseline: take vs render stats, per-stage sharpness, null test, mouth vs cheek spectrum and grain
   lsdub snap      snap metrics of a mouth-opening series: rise time vs vocal onsets, p/b/m closure hit-rate, open-in-silence
   lsdub reel      before/after reel                                                           [watermarked]
   lsdub cutout    NON-HUMAN mode: dub a rock / object / muppet via a fixed 2D mouth anchor (--mode cutout|puppet), no face tracking  [watermarked]
@@ -43,28 +54,74 @@
 Output of the [watermarked] commands carries an invisible watermark and a metadata tag. --no-watermark turns it off
 and prints a responsible-use warning. `lips` is a short alias.
 """
-import importlib
-import os
-import sys
+HELP_DEV = ""
+HELP = HELP_SHIP + HELP_DEV
 
-CMDS = {
-    "naturalness": "audits.naturalness",   # v10c
-    "align": "core.lyric_align", "visemes": "core.viseme_track", "rhubarb": "core.rhubarb_cues", "scan": "core.face_scan", "cone": "core.cone",
-    "mouths": "core.mouth_library", "paint": "core.mouth_paint", "posemix": "core.pose_mix", "check": "audits.lipsync_check", "jerk": "audits.lipsync_temporal", "reel": "audits.reel",
+SHIP = {
+    "naturalness": "audits.naturalness",  # v10c
+    "align": "core.lyric_align",
+    "visemes": "core.viseme_track",
+    "rhubarb": "core.rhubarb_cues",
+    "scan": "core.face_scan",
+    "cone": "core.cone",
+    "mouths": "core.mouth_library",
+    "paint": "core.mouth_paint",
+    "posemix": "core.pose_mix",
+    "check": "audits.lipsync_check",
+    "jerk": "audits.lipsync_temporal",
+    "reel": "audits.reel",
     "watermark": "watermark",
-    "animate": "core.animator_pass", "motion-audit": "audits.temporal_audit",
-    "skull-lock": "core.skull_lock", "constraints": "core.face_constraints", "skull-audit": "audits.skull_audit", "plane-fit": "audits.plane_fit", "pin": "core.mouth_pin", "slip-audit": "audits.slip_audit",
-    "cutout": "anchors.mouth_paint_cutout", "frame-gate": "audits.frame_gate",
-    "track": "core.vocalisations", "annotate": "audits.viseme_overlay", "strip": "audits.sync_strip", "cadence": "audits.cadence", "sync-qa": "audits.sync_qa", "retime": "core.retime", "occluders": "core.occluders", "continuity": "core.continuity", "cast": "core.cast",
-    "grammar": "core.grammar", "medium": "core.medium", "sing": "core.sing", "snap": "audits.snap", "scorecard": "audits.scorecard", "qa": "audits.qa",   # research reco 1 + 4 (singer lipsync in wide shots)
-    "layer-reg": "audits.layer_reg",      # v11
+    "animate": "core.animator_pass",
+    "interior": "core.mouth_interior",
+    "calm": "core.temporal_stab",
+    "motion-audit": "audits.temporal_audit",
+    "skull-lock": "core.skull_lock",
+    "constraints": "core.face_constraints",
+    "skull-audit": "audits.skull_audit",
+    "plane-fit": "audits.plane_fit",
+    "pin": "core.mouth_pin",
+    "slip-audit": "audits.slip_audit",
+    "cutout": "anchors.mouth_paint_cutout",
+    "frame-gate": "audits.frame_gate",
+    "track": "core.vocalisations",
+    "annotate": "audits.viseme_overlay",
+    "strip": "audits.sync_strip",
+    "cadence": "audits.cadence",
+    "sync-qa": "audits.sync_qa",
+    "retime": "core.retime",
+    "occluders": "core.occluders",
+    "continuity": "core.continuity",
+    "cast": "core.cast",
+    "grammar": "core.grammar",
+    "medium": "core.medium",
+    "sing": "core.sing",
+    "snap": "audits.snap",
+    "scorecard": "audits.scorecard",
+    "qa": "audits.qa",
+    "mouth-ruler": "audits.mouth_ruler",
+    "layer-reg": "audits.layer_reg",  # v11
     "tooth-scale": "audits.tooth_scale",  # v13
 }
+DEV = {}
+CMDS = {**SHIP, **DEV}
 # command -> how to find the file it wrote (None = no final video output)
-WATERMARKED = {"pin": "--out", "skull-lock": "--out", "paint": "--out", "posemix": "--out", "reel": "--out", "cutout": "--out", "medium": "--out", "sing": "--out"}
+WATERMARKED_SHIP = {
+    "pin": "--out",
+    "skull-lock": "--out",
+    "paint": "--out",
+    "interior": "--out",
+    "calm": "--out",
+    "posemix": "--out",
+    "reel": "--out",
+    "cutout": "--out",
+    "medium": "--out",
+    "sing": "--out",
+}
+WATERMARKED_DEV = {}
+WATERMARKED = {**WATERMARKED_SHIP, **WATERMARKED_DEV}
 
 DRY = """A dry (dereverbed, lead-only) vocal makes alignment and the jaw curve far better. Any tool works; what we used:
-  1. stem split (e.g. Demucs htdemucs_ft, MIT) to get the vocal stem;
+  1. stem split (e.g. Demucs htdemucs_ft) to get the vocal stem;
   2. dereverb + lead/backing split (we used our own WPE + late-reverb subtraction + stereo-centre DSP).
 Then pass the dry lead as --audio to `lsdub align` and `lsdub check`."""
 
@@ -87,7 +144,7 @@ def _out_path(cmd, argv):
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help", "help"):
-        print(__doc__)
+        print(HELP)
         return 0
     cmd, rest = argv[0], argv[1:]
     no_wm = "--no-watermark" in rest
@@ -97,30 +154,36 @@ def main(argv=None):
         return 0
     if cmd == "fetch-models":
         from ._models import fetch_face_landmarker, fetch_yunet
+
         print("face landmarker ->", fetch_face_landmarker())
         print("face detector ->", fetch_yunet())
-        print("Rhubarb / MFA / ComfyUI models are installed separately: see docs/INSTALL.md")
+        print(f"Rhubarb / MFA / ComfyUI models are installed separately: see {DOCS_URL}/INSTALL.md")
         return 0
     if cmd == "verify-watermark":
         from . import watermark
+
         return watermark.main(["verify", *rest])
     if cmd not in CMDS:
         print(f"unknown command {cmd!r}\n", file=sys.stderr)
-        print(__doc__, file=sys.stderr)
+        print(HELP, file=sys.stderr)
         return 2
     mod = importlib.import_module(f".{CMDS[cmd]}", __package__)
+    if cmd == "run" and no_wm:
+        rest = rest + ["--no-watermark"]
     ret = mod.main(rest)
     out = _out_path(cmd, rest)
     if out and os.path.exists(out):
         from . import watermark
+
         if no_wm:
             print(watermark.NO_WM_WARNING, file=sys.stderr)
         elif not watermark.verify(out, frames=8)["watermark"]:
             watermark.apply_inplace(out)
             print(f"watermarked {out}", file=sys.stderr)
-    if cmd == "paint" and out and "--annotate" in rest and not no_wm:   # v12: paint --annotate's card video, marked as the clean one
+    if cmd == "paint" and out and "--annotate" in rest and not no_wm:  # v12: paint --annotate's card video, marked as the clean one
         from .core.mouth_card import annotated_path
         from . import watermark
+
         ann = annotated_path(out)
         if os.path.exists(ann) and not watermark.verify(ann, frames=8)["watermark"]:
             watermark.apply_inplace(ann)

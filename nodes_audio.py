@@ -10,7 +10,7 @@ from comfy_api.v0_0_2 import io
 from . import generate, graphs
 from . import lsdub_types as T
 from . import media
-from .lsdub_engine._inproc import call
+from .lsdub_engine.core.steps import call
 from .project import file_hash, stage_key, text_hash
 
 GENERATION_LATER = ('{node}: generating from a prompt arrives in a later LSDub release. For now connect a finished '

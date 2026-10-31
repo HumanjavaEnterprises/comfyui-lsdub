@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v4 layering (lip_layers.py + the warp hooks): size cap, mouth scale, lip erase, lip colour lock. Synthetic, CPU only."""
+
 import numpy as np, cv2
 
 from lsdub_engine.core import lip_layers as ll, mouth_warp as mw, mouth_paint
 
-SKIN = (120, 155, 205)       # BGR, warm skin (skin_px true)
-LIP = (45, 40, 185)          # BGR, lipstick red
+SKIN = (120, 155, 205)  # BGR, warm skin (skin_px true)
+LIP = (45, 40, 185)  # BGR, lipstick red
 
 
 def _face(c=(160, 130), hw=40, hh=14, gap=0.0, H=260, W=320):
@@ -24,7 +25,8 @@ def _face(c=(160, 130), hw=40, hh=14, gap=0.0, H=260, W=320):
     img = np.zeros((H, W, 3), np.uint8)
     img[:] = SKIN
     cv2.ellipse(img, (int(c[0]), int(c[1])), (hw, hh), 0, 0, 360, LIP, -1)
-    if gap > 0: cv2.ellipse(img, (int(c[0]), int(c[1])), (int(0.7 * hw), int(gap / 2)), 0, 0, 360, (150, 150, 150), -1)
+    if gap > 0:
+        cv2.ellipse(img, (int(c[0]), int(c[1])), (int(0.7 * hw), int(gap / 2)), 0, 0, 360, (150, 150, 150), -1)
     rng = np.random.default_rng(0)
     img = np.clip(img + rng.normal(0, 2, img.shape), 0, 255).astype(np.uint8)
     return img, P
@@ -34,9 +36,9 @@ def test_size_cap_never_past_take_p95_unless_take_is():
     own = np.array([10, 10, 10, 30, 10, 10, 10.0])
     tgt = np.array([10, 25, 10, 32, 10, 10, 12.0])
     t = ll.size_cap(tgt, own, hi=20.0, sigma=0)
-    assert t[1] == 20.0                       # capped at the take's p95
-    assert t[3] == 30.0                       # the take's own frame (30 > p95) is the face's own mouth: not shrunk below it
-    assert t[6] == 12.0                       # under the cap: untouched
+    assert t[1] == 20.0  # capped at the take's p95
+    assert t[3] == 30.0  # the take's own frame (30 > p95) is the face's own mouth: not shrunk below it
+    assert t[6] == 12.0  # under the cap: untouched
     lo = ll.size_cap(np.array([5.0, 9.0]), np.array([10.0, 10.0]), hi=20.0, lo=8.0, sigma=0)
     assert lo.tolist() == [8.0, 9.0]
     te = ll.size_cap(tgt, own, hi=20.0, sigma=1.0)
@@ -53,7 +55,7 @@ def test_mouth_scale_shrinks_lips_keeps_far_points():
     w0, w1 = np.linalg.norm(far[61] - far[291]), np.linalg.norm(L[61] - L[291])
     assert abs(w1 / w0 - 0.8) < 0.02
     assert abs(np.linalg.norm(L[0] - L[17]) / np.linalg.norm(far[0] - far[17]) - 0.7) < 0.02
-    assert np.allclose(L[5], far[5])          # far from the mouth: unchanged (smooth falloff to none)
+    assert np.allclose(L[5], far[5])  # far from the mouth: unchanged (smooth falloff to none)
 
 
 def test_erase_lips_leaves_only_skin():
@@ -63,17 +65,17 @@ def test_erase_lips_leaves_only_skin():
     sk = cv2.cvtColor(np.uint8([[SKIN]]), cv2.COLOR_BGR2LAB)[0, 0].astype(float)
     hull = mouth_paint.hull_mask(P[ll.LIP_OUT], img.shape, 0.0, 3) > 0.5
     assert m[hull].all()
-    assert np.abs(lab[hull][:, 1] - sk[1]).max() < 6 and np.abs(lab[hull][:, 0] - sk[0]).mean() < 4   # no red, no teeth
-    assert np.array_equal(bald[~m], img[~m])                                                           # outside: untouched
+    assert np.abs(lab[hull][:, 1] - sk[1]).max() < 6 and np.abs(lab[hull][:, 0] - sk[0]).mean() < 4  # no red, no teeth
+    assert np.array_equal(bald[~m], img[~m])  # outside: untouched
 
 
 def test_harmonic_fill_meets_boundary():
     img = np.zeros((40, 40, 3))
-    img[..., 0] = np.linspace(0, 100, 40)[None]   # a horizontal ramp
+    img[..., 0] = np.linspace(0, 100, 40)[None]  # a horizontal ramp
     m = np.zeros((40, 40), bool)
     m[10:30, 10:30] = True
     f = ll.harmonic_fill(np.where(m[..., None], 255.0, img), m)
-    assert np.abs(f[..., 0] - img[..., 0]).max() < 1.0                         # a linear ramp is harmonic: recovered
+    assert np.abs(f[..., 0] - img[..., 0]).max() < 1.0  # a linear ramp is harmonic: recovered
 
 
 def test_lip_lock_moves_ab_keeps_L_and_skin():
@@ -84,13 +86,13 @@ def test_lip_lock_moves_ab_keeps_L_and_skin():
     lk = ll.LipLock(ref, sigma=0).fit([st])
     out, w = lk.apply(img, P, 0)
     st2 = ll.lip_stats(out, P)
-    assert abs(st2[1] - ref[1]) < 1.5 and abs(st2[2] - ref[2]) < 1.5           # a*/b* locked to the reference
-    tissue = (w > 0.9)
+    assert abs(st2[1] - ref[1]) < 1.5 and abs(st2[2] - ref[2]) < 1.5  # a*/b* locked to the reference
+    tissue = w > 0.9
     L0 = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)[..., 0].astype(float)
     L1 = cv2.cvtColor(out, cv2.COLOR_BGR2LAB)[..., 0].astype(float)
-    assert np.abs(L1[tissue] - L0[tissue]).mean() < 2.0                         # L follows the shot
-    assert np.array_equal(out[w <= 0.002], img[w <= 0.002])                     # skin, teeth: bit-identical
-    teeth = (np.abs(img.astype(int) - 150).max(2) < 12)
+    assert np.abs(L1[tissue] - L0[tissue]).mean() < 2.0  # L follows the shot
+    assert np.array_equal(out[w <= 0.002], img[w <= 0.002])  # skin, teeth: bit-identical
+    teeth = np.abs(img.astype(int) - 150).max(2) < 12
     assert np.abs(out[teeth].astype(int) - img[teeth]).max() <= 2
 
 
@@ -98,7 +100,7 @@ def test_lip_lock_eases_and_resists_a_mistracked_frame():
     img, P = _face(gap=8.0)
     st = ll.lip_stats(img, P)
     bad = st.copy()
-    bad[1] -= 20                                               # one frame's mask landed on skin
+    bad[1] -= 20  # one frame's mask landed on skin
     lk = ll.LipLock([100, st[1], st[2]], sigma=2.0, clip=3.0).fit([st] * 5 + [bad] + [st] * 5)
     assert abs(lk.shift(5)[1]) < 3.0 + 1e-6 and abs(lk.shift(0)[1]) < 1.0
 
@@ -110,10 +112,12 @@ def test_erase_alpha_only_on_closures_over_an_open_take():
 
 
 def test_v4_flags_parse(capsys):
-    try: mouth_paint.main(['--help'])
-    except SystemExit: pass
+    try:
+        mouth_paint.main(["--help"])
+    except SystemExit:
+        pass
     out = capsys.readouterr().out
-    for f in ('--warp-size-cap', '--warp-erase', '--warp-lip-lock', '--lip-erase', '--mouth-scale', '--mouth-open-cap'):
+    for f in ("--warp-size-cap", "--warp-erase", "--warp-lip-lock", "--lip-erase", "--mouth-scale", "--mouth-open-cap"):
         assert f in out
 
 
@@ -123,5 +127,5 @@ def test_mouth_dims_and_take_size_rest_vs_p95():
         _, P = _face(gap=gap)
         frames.append(P)
     ts = ll.take_size(np.array(frames))
-    assert abs(ts['rest'][1]) < 1e-6 and ts['p95'][1] > 0.2      # rest = closed, p95 = its own big opening (IOD units)
-    assert abs(ts['rest'][0] - 80 / 120) < 1e-6                     # width 2*hw over the 120 px inter-ocular distance
+    assert abs(ts["rest"][1]) < 1e-6 and ts["p95"][1] > 0.2  # rest = closed, p95 = its own big opening (IOD units)
+    assert abs(ts["rest"][0] - 80 / 120) < 1e-6  # width 2*hw over the 120 px inter-ocular distance

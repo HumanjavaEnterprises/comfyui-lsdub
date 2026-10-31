@@ -1,6 +1,7 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
+#!/usr/bin/env python3
+# fmt: off
 """lip_layers.py: v4 mouth layering helpers, shared by --mode warp and --mode morph (all CPU, opt-in by flags).
 
   SIZE     the new mouth is calibrated to the TAKE's own mouth: its rest width / lip thickness and its natural opening
@@ -17,6 +18,7 @@
            between the frame's skin and lip colour, so the lip edge blends and skin / teeth / tongue are not tinted);
            the per-frame shift is eased zero-phase over time.
 """
+# fmt: on
 import numpy as np, cv2
 from scipy.ndimage import gaussian_filter1d
 
@@ -54,9 +56,12 @@ def size_cap(target, own, hi, lo=None, sigma=1.0):
     cap: it IS the face's own mouth), and with lo given never below min(lo, own). The cut is eased zero-phase
     (gaussian sigma frames on the removed amount, max-filtered first so a peak is not let back through)."""
     from scipy.ndimage import maximum_filter1d
+
     def ease(x):
-        if sigma <= 0 or not x.any(): return x
-        return np.maximum(x, gaussian_filter1d(maximum_filter1d(x, 3, mode='nearest'), sigma, mode='nearest'))
+        if sigma <= 0 or not x.any():
+            return x
+        return np.maximum(x, gaussian_filter1d(maximum_filter1d(x, 3, mode="nearest"), sigma, mode="nearest"))
+
     t = np.asarray(target, float).copy()
     own = np.asarray(own, float)
     top = np.maximum(hi, own)
@@ -91,13 +96,15 @@ def harmonic_fill(img, mask):
     its boundary: the smoothest surface that meets the surrounding skin exactly (a membrane; no streaks like Telea)."""
     from scipy.sparse import lil_matrix, csr_matrix
     from scipy.sparse.linalg import splu
+
     img = np.asarray(img, np.float64)
     out = img.copy()
     m = np.asarray(mask, bool).copy()
     m[0, :] = m[-1, :] = False
     m[:, 0] = m[:, -1] = False
     ys, xs = np.nonzero(m)
-    if len(ys) == 0: return out
+    if len(ys) == 0:
+        return out
     idx = -np.ones(m.shape, int)
     idx[ys, xs] = np.arange(len(ys))
     n = len(ys)
@@ -109,8 +116,10 @@ def harmonic_fill(img, mask):
         A[k, k] = 4.0
         for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             j = idx[y + dy, x + dx]
-            if j >= 0: A[k, j] = -1.0
-            else: B[k] += flat[y + dy, x + dx]
+            if j >= 0:
+                A[k, j] = -1.0
+            else:
+                B[k] += flat[y + dy, x + dx]
     sol = splu(csr_matrix(A).tocsc()).solve(B)
     o = out.reshape(img.shape[0], img.shape[1], C)
     o[ys, xs] = sol
@@ -123,7 +132,8 @@ def corner_points(q, c, corner):
     q = np.asarray(q, float)
     e = q[LIP_OUT.index(291)] - q[LIP_OUT.index(61)]
     L = float(np.linalg.norm(e))
-    if L < 1e-6: return q
+    if L < 1e-6:
+        return q
     e = e / L
     u = ((q - c) @ e) / (0.5 * L)
     g = np.where(u < 0, corner[0], corner[1]) * np.clip(np.abs(u), 0, 1) ** 2
@@ -139,11 +149,14 @@ def lip_erase_mask(img, P, grow=0.22, key=True, lip_ab=None, skin_ab=None, corne
     H, W = img.shape[:2]
     q = P[LIP_OUT]
     c = q.mean(0)
-    if corner is not None and max(corner) > 0: q = corner_points(q, c, corner)
+    if corner is not None and max(corner) > 0:
+        q = corner_points(q, c, corner)
+
     def hull(g):
         m = np.zeros((H, W), np.uint8)
         cv2.fillConvexPoly(m, cv2.convexHull(np.round(c + (q - c) * (1 + g)).astype(np.int32)), 1)
         return m > 0
+
     m = hull(grow)
     if key:
         wide = hull(grow + 0.25)
@@ -152,7 +165,8 @@ def lip_erase_mask(img, P, grow=0.22, key=True, lip_ab=None, skin_ab=None, corne
         ring = wide & ~hull(grow + 0.1)
         if lipm.sum() > 20 and ring.sum() > 20:
             la, sa = np.median(lab[..., 1][lipm]), np.median(lab[..., 1][ring])
-            if la - sa > 4: m |= wide & (lab[..., 1] > sa + 0.35 * (la - sa))
+            if la - sa > 4:
+                m |= wide & (lab[..., 1] > sa + 0.35 * (la - sa))
     if lip_ab is not None and skin_ab is not None:
         # v8: any lip-coloured pixel (vs the SHOT's lip / skin colour) within a wide hull joins the hole, so the membrane's
         # boundary never sits on lip and the fill never turns pink (a wide-open or lipsticked mouth outgrows the landmark hull)
@@ -163,22 +177,24 @@ def lip_erase_mask(img, P, grow=0.22, key=True, lip_ab=None, skin_ab=None, corne
         add = cv2.morphologyEx(add, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         nl, lbl, cc, _ = cv2.connectedComponentsWithStats(add)
         touch = set(np.unique(lbl[cv2.dilate(m.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0])) - {0}
-        m |= np.isin(lbl, list(touch))          # only blobs connected to the lips, not a rosy cheek
+        m |= np.isin(lbl, list(touch))  # only blobs connected to the lips, not a rosy cheek
     k = max(3, int(round(0.04 * np.ptp(q[:, 0]))) | 1)
     return cv2.dilate(m.astype(np.uint8), np.ones((k, k), np.uint8)) > 0
 
 
-def erase_lips(img, P, grow=0.22, texture=1.0, seed=7, source='grain', lip_ab=None, skin_ab=None, corner=None):
+def erase_lips(img, P, grow=0.22, texture=1.0, seed=7, source="grain", lip_ab=None, skin_ab=None, corner=None):
     """the face in img (BGR) with its lips removed: the lip region (lip_erase_mask) is filled with the harmonic membrane
     of the surrounding skin plus grain: source 'grain' (default) = static gaussian grain matched to the std of the
     take's own skin high-pass around the hole (the bald frame is ONE image carried by the pose, so the grain rides the
     skull, no boil); 'patch' = the take's own high-pass skin texture from the same-shaped patch below (chin) or above,
     creases clipped (it can still print a faint chin contour). Returns (bald image uint8, mask bool)."""
     from . import mouth_morph as mm
+
     img = np.asarray(img)
     m = lip_erase_mask(img, P, grow, lip_ab=lip_ab, skin_ab=skin_ab, corner=corner)
     ys, xs = np.nonzero(m)
-    if len(ys) == 0: return img.copy(), m
+    if len(ys) == 0:
+        return img.copy(), m
     y0, y1, x0, x1 = max(0, ys.min() - 3), min(img.shape[0], ys.max() + 4), max(0, xs.min() - 3), min(img.shape[1], xs.max() + 4)
     sub = img[y0:y1, x0:x1].astype(np.float64)
     ms = m[y0:y1, x0:x1]
@@ -189,13 +205,14 @@ def erase_lips(img, P, grow=0.22, texture=1.0, seed=7, source='grain', lip_ab=No
         hh = y1 - y0
         tex = None
         skin = mm.skin_px(img)
-        for dy in ((int(hh * 1.05), -int(hh * 1.05), int(hh * 0.8)) if source == 'patch' else ()):
+        for dy in (int(hh * 1.05), -int(hh * 1.05), int(hh * 0.8)) if source == "patch" else ():
             a0, a1 = y0 + dy, y1 + dy
-            if a0 < 0 or a1 > img.shape[0]: continue
+            if a0 < 0 or a1 > img.shape[0]:
+                continue
             if skin[a0:a1, x0:x1][ms].mean() > 0.7 and not lip_erase_mask(img, P, grow)[a0:a1, x0:x1][ms].any():
                 tex = hp[a0:a1, x0:x1].astype(np.float64)
                 break
-        if tex is None:   # matched grain from the skin ring around the hole
+        if tex is None:  # matched grain from the skin ring around the hole
             ring = cv2.dilate(ms.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool) & ~ms
             sd = float(hp[y0:y1, x0:x1][ring].std()) if ring.sum() > 20 else 1.0
             g = cv2.GaussianBlur(np.random.default_rng(seed).normal(0, 1, sub.shape[:2]).astype(np.float32), (0, 0), 0.6)
@@ -218,10 +235,13 @@ def erase_lips(img, P, grow=0.22, texture=1.0, seed=7, source='grain', lip_ab=No
 def parse_lip_ref(s):
     """'L,a,b' (OpenCV 8-bit Lab, a/b offset 128) -> np.array(3); a path to a PNG -> its lip-tissue mean (MediaPipe)."""
     try:
-        v = [float(x) for x in str(s).split(',')]
-        if len(v) == 3: return np.array(v)
-    except ValueError: pass
+        v = [float(x) for x in str(s).split(",")]
+        if len(v) == 3:
+            return np.array(v)
+    except ValueError:
+        pass
     from . import mouth_morph as mm
+
     img = cv2.imread(s)
     return mm.lip_ref_stats(img)[:, 0]
 
@@ -239,6 +259,7 @@ def lip_masks(P, shape, grow=0.12):
     """(region, inner) for 478 landmarks P: the outer-lip hull grown by `grow`, feathered (float 0..1), and the inner-lip
     hull slightly shrunk (bool: teeth / tongue / cavity, never recoloured)."""
     from . import mouth_paint as mp_
+
     P = np.asarray(P, float)[:, :2]
     lw = np.linalg.norm(P[61] - P[291])
     reg = mp_.hull_mask(P[LIP_OUT], shape, grow, max(3, lw * 0.08))
@@ -250,11 +271,13 @@ def lip_stats(img, P):
     """(lip mean L, a, b; skin mean a, b) of one frame: lips = lip tissue (outer minus inner hull), skin = a ring just
     outside the lips, skin-coloured pixels only. None when too few pixels."""
     from . import mouth_morph as mm, mouth_paint as mp_
+
     P = np.asarray(P, float)[:, :2]
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
     w = mm.lip_tissue_mask(P, img.shape)
     ring = (mp_.hull_mask(P[LIP_OUT], img.shape, 0.6, 3) > 0.5) & ~(mp_.hull_mask(P[LIP_OUT], img.shape, 0.25, 3) > 0.5) & mm.skin_px(img)
-    if w.sum() < 30 or ring.sum() < 30: return None
+    if w.sum() < 30 or ring.sum() < 30:
+        return None
     return np.array([lab[..., c][w].mean() for c in range(3)] + [lab[..., c][ring].mean() for c in (1, 2)])
 
 
@@ -262,8 +285,10 @@ def lip_fit(img, P, lip_ab, skin_ab):
     """0..1: how well landmarks P sit on img's lips = mean lip-ness (vs the SHOT's median lip / skin colour) over the lip
     tissue mask. A mistracked frame (mask on skin) scores low; layers that paste pixels at the landmarks skip it."""
     from . import mouth_morph as mm
+
     w = mm.lip_tissue_mask(np.asarray(P, float)[:, :2], img.shape)
-    if w.sum() < 30: return 0.0
+    if w.sum() < 30:
+        return 0.0
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
     return float(lipness(lab, lip_ab, skin_ab)[w].mean())
 
@@ -290,12 +315,14 @@ class LipLock:
             return self
         A = np.array([s if s is not None else np.full(5, np.nan) for s in stats], float)
         ii = np.arange(n)
-        for c in range(5): A[:, c] = np.interp(ii, ii[ok], A[ok, c])
+        for c in range(5):
+            A[:, c] = np.interp(ii, ii[ok], A[ok, c])
         # a mistracked frame (mask on skin) must not set its own lip colour: per-frame stats stay within +-clip of the
         # shot's median lip / skin colour (the take's lipstick does not change inside a shot)
         med = np.median(A[ok], 0)
         A = med + np.clip(A - med, -self.clip, self.clip)
-        if self.sigma > 0: A = gaussian_filter1d(A, self.sigma, axis=0, mode='nearest')
+        if self.sigma > 0:
+            A = gaussian_filter1d(A, self.sigma, axis=0, mode="nearest")
         self.st = A
         return self
 
@@ -303,7 +330,8 @@ class LipLock:
         """the lips' chroma map for frame i as a complex factor on (a*-128) + j(b*-128): it takes the frame's mean lip
         chroma onto the reference's. A gain + rotation about neutral keeps the lips' own hue relations (an additive
         a*/b* shift turns the lighter, less saturated lip pixels pink / purple)."""
-        if self.st is None: return 1.0 + 0j
+        if self.st is None:
+            return 1.0 + 0j
         s = self.st[min(i, len(self.st) - 1)]
         m = complex(s[1] - 128, s[2] - 128)
         r = complex(self.ref[1] - 128, self.ref[2] - 128)
@@ -311,29 +339,33 @@ class LipLock:
 
     def shift(self, i):
         """(dL, da, db) at a fully lip pixel of frame i's MEAN lip colour (for the log)."""
-        if self.st is None: return np.zeros(3)
+        if self.st is None:
+            return np.zeros(3)
         s = self.st[min(i, len(self.st) - 1)]
         return np.array([self.l_share * (self.ref[0] - s[0]), self.ref[1] - s[1], self.ref[2] - s[2]])
 
     def weight(self, img, P, i):
-        if self.st is None: return None
+        if self.st is None:
+            return None
         s = self.st[min(i, len(self.st) - 1)]
         lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
         reg, inner = lip_masks(P, img.shape, self.grow)
         lp = lipness(lab, s[1:3], s[3:5])
         # inside the inner lip only clearly-lip pixels move (lp^3): teeth stay grey and the tongue keeps most of its pink,
         # but a closure's lips laid across the inner loop are still locked
-        return (reg * np.where(inner, lp ** 3, lp)).astype(np.float32), lab
+        return (reg * np.where(inner, lp**3, lp)).astype(np.float32), lab
 
     def apply(self, img, P, i):
         """img (BGR uint8) with its lips moved to the reference colour; P = this frame's 478 landmarks (where the lips
         ARE in img). Returns (image, weight map)."""
         r = self.weight(img, P, i)
-        if r is None: return img, None
+        if r is None:
+            return img, None
         w, lab = r
         d = self.shift(i)
         gn = self.gain(i)
-        if not (w > 0.002).any(): return img, w
+        if not (w > 0.002).any():
+            return img, w
         ys, xs = np.nonzero(w > 0.002)
         y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
         sub = lab[y0:y1, x0:x1].copy()
@@ -345,5 +377,5 @@ class LipLock:
         out = img.copy()
         out[y0:y1, x0:x1] = cv2.cvtColor(np.clip(sub + 0.5, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
         keep = w[y0:y1, x0:x1] <= 0.002
-        out[y0:y1, x0:x1][keep] = img[y0:y1, x0:x1][keep]   # bit-identical outside
+        out[y0:y1, x0:x1][keep] = img[y0:y1, x0:x1][keep]  # bit-identical outside
         return out, w

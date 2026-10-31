@@ -11,8 +11,9 @@ adversary can remove it.
 
 The mp4 also carries a metadata tag (comment = TAG) on every file we write.
 """
-import argparse
+
 from .io import ff
+import argparse
 import hashlib
 import json
 import sys
@@ -63,8 +64,12 @@ def detect_frame(bgr, key=KEY, decoys=24):
 
 
 def _probe(path):
-    out = ff.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,r_frame_rate",
-                          "-of", "json", path], capture_output=True, text=True, check=True).stdout
+    out = ff.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,r_frame_rate", "-of", "json", path],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
     s = json.loads(out)["streams"][0]
     n, d = s["r_frame_rate"].split("/")
     return int(s["width"]), int(s["height"]), float(n) / float(d)
@@ -75,9 +80,43 @@ def apply(src, dst, key=KEY, strength=3.0, crf=14):
     w, h, fps = _probe(src)
     pat = pattern(key, h, w)
     cap = cv2.VideoCapture(src)
-    p = ff.popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", str(fps), "-i", "-",
-                          "-i", src, "-map", "0:v", "-map", "1:a?", "-c:a", "copy", "-c:v", "libx264", "-crf", str(crf),
-                          "-pix_fmt", "yuv420p", "-metadata", f"comment={TAG}", "-shortest", dst], stdin=ff.PIPE)
+    p = ff.popen(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-s",
+            f"{w}x{h}",
+            "-r",
+            str(fps),
+            "-i",
+            "-",
+            "-i",
+            src,
+            "-map",
+            "0:v",
+            "-map",
+            "1:a?",
+            "-c:a",
+            "copy",
+            "-c:v",
+            "libx264",
+            "-crf",
+            str(crf),
+            "-pix_fmt",
+            "yuv420p",
+            "-metadata",
+            f"comment={TAG}",
+            "-shortest",
+            dst,
+        ],
+        stdin=ff.PIPE,
+    )
     n = 0
     while True:
         ok, fr = cap.read()
@@ -94,6 +133,7 @@ def apply(src, dst, key=KEY, strength=3.0, crf=14):
 
 def apply_inplace(path, **kw):
     import os
+
     tmp = path + ".wm.mp4"
     apply(path, tmp, **kw)
     os.replace(tmp, path)
@@ -112,15 +152,24 @@ def verify(path, key=KEY, frames=24, threshold=4.0):
             zs.append(detect_frame(fr, key))
         i += 1
     cap.release()
-    tag = ff.run(["ffprobe", "-v", "error", "-show_entries", "format_tags=comment", "-of", "default=nw=1:nk=1", path],
-                         capture_output=True, text=True).stdout.strip()
+    tag = ff.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format_tags=comment", "-of", "default=nw=1:nk=1", path], capture_output=True, text=True
+    ).stdout.strip()
     z = float(np.mean(zs)) if zs else 0.0
-    return {"file": path, "frames_checked": len(zs), "z_mean": round(z, 2), "z_min": round(float(np.min(zs)), 2) if zs else None,
-            "watermark": z >= threshold, "metadata_tag": tag or None}
+    return {
+        "file": path,
+        "frames_checked": len(zs),
+        "z_mean": round(z, 2),
+        "z_min": round(float(np.min(zs)), 2) if zs else None,
+        "watermark": z >= threshold,
+        "metadata_tag": tag or None,
+    }
 
 
-NO_WM_WARNING = ("WARNING: writing WITHOUT the invisible watermark. You are responsible for disclosing that this video's lip "
-                 "movement is synthetic, and for having consent from anyone whose likeness appears. See RESPONSIBLE_USE.md.")
+NO_WM_WARNING = (
+    "WARNING: writing WITHOUT the invisible watermark. You are responsible for disclosing that this video's lip "
+    "movement is synthetic, and for having consent from anyone whose likeness appears. See RESPONSIBLE_USE.md."
+)
 
 
 def main(argv=None):

@@ -9,7 +9,7 @@ from comfy_api.v0_0_2 import io
 from . import generate, graphs
 from . import lsdub_types as T
 from . import media
-from .lsdub_engine import presets
+from .lsdub_engine.core import presets
 from .project import file_hash, stage_key
 
 VERDICT_COLOUR = {'DUB': (60, 200, 60), 'DUB-MEDIUM': (0, 170, 255), 'NO': (60, 60, 210)}

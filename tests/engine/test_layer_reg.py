@@ -4,6 +4,7 @@
 the ruler on it (lsdub/audits/layer_reg.py: offsets of the teeth / cavity / tongue vs the lips in the skull-stabilised
 frame; jaw residual, jitter, the v9 gate's windowed slosh, the texture drift), plus the interior clip
 (--warp-interior-clip: no cavity or tooth pixel outside the warped lips). Synthetic, CPU only."""
+
 import os, sys
 import numpy as np, cv2
 
@@ -18,8 +19,20 @@ def _frames(off):
     """warp.json-like frames whose reg anchors produce the given up_lip offsets (n x 2), everything else static."""
     F = []
     for o in off:
-        F.append(dict(reg=dict(up=[[-0.18, 0.0], [o[0], o[1]], [0.18, 0.0]], lo=[[-0.18, 0.2], [0.0, 0.2], [0.18, 0.2]], cav=[0.0, 0.1], open=[0.0, 0.1],
-                               inner=[[0.0, 0.0], [0.0, 0.2], [-0.25, 0.1], [0.25, 0.1]], tip=[0.0, 0.25], jaw=5.0, pin_up_iod=[0.0, 0.0])))
+        F.append(
+            dict(
+                reg=dict(
+                    up=[[-0.18, 0.0], [o[0], o[1]], [0.18, 0.0]],
+                    lo=[[-0.18, 0.2], [0.0, 0.2], [0.18, 0.2]],
+                    cav=[0.0, 0.1],
+                    open=[0.0, 0.1],
+                    inner=[[0.0, 0.0], [0.0, 0.2], [-0.25, 0.1], [0.25, 0.1]],
+                    tip=[0.0, 0.25],
+                    jaw=5.0,
+                    pin_up_iod=[0.0, 0.0],
+                )
+            )
+        )
     return F
 
 
@@ -30,13 +43,13 @@ def test_slosh_counts_back_and_forth_not_net_motion():
     drift = np.stack([0.002 * t, 0 * t], 1)
     wobble = np.stack([0.01 * (-1) ** t, 0 * t], 1)
     E0, Ed, Ew = (lr.slosh(x, 4) for x in (still, drift, wobble))
-    assert np.nanmax(E0) == 0 and np.nanmax(Ed) < 1e-12                # one direction: no slosh
-    assert np.nanmean(Ew) > 0.015                                        # +-0.01 IOD every frame: ~0.02 IOD / frame of slosh
+    assert np.nanmax(E0) == 0 and np.nanmax(Ed) < 1e-12  # one direction: no slosh
+    assert np.nanmean(Ew) > 0.015  # +-0.01 IOD every frame: ~0.02 IOD / frame of slosh
     r = lr.measure(_frames(wobble), texture=False)
-    assert r['offsets']['up_lip']['slosh_mean'] > 0.015 and r['offsets']['lo_lip']['slosh_mean'] == 0
+    assert r["offsets"]["up_lip"]["slosh_mean"] > 0.015 and r["offsets"]["lo_lip"]["slosh_mean"] == 0
     # the wobbling upper edge sloshes against the upper lip AND against the lower edge (the bite); nothing else moves
-    assert abs(r['summary']['slosh_sum'] - r['offsets']['up_lip']['slosh_mean'] - r['offsets']['bite']['slosh_mean']) < 1e-9
-    assert r['offsets']['cav_open']['slosh_mean'] == 0 and r['offsets']['tip_lo']['slosh_mean'] == 0
+    assert abs(r["summary"]["slosh_sum"] - r["offsets"]["up_lip"]["slosh_mean"] - r["offsets"]["bite"]["slosh_mean"]) < 1e-9
+    assert r["offsets"]["cav_open"]["slosh_mean"] == 0 and r["offsets"]["tip_lo"]["slosh_mean"] == 0
 
 
 def test_jaw_residual_removes_what_the_jaw_explains():
@@ -55,8 +68,8 @@ def test_gate_report_flags_a_sloshing_window_only():
     off = np.zeros((n, 2))
     off[15:23, 1] = 0.03 * (-1) ** np.arange(8)
     g = lr.gate_report(_frames(off), 4, floor=0.01)
-    assert g['repaired'] is False and len(g['windows']) == 1 and g['windows'][0]['top'] == 'up_lip'
-    f0, f1 = g['windows'][0]['frames']
+    assert g["repaired"] is False and len(g["windows"]) == 1 and g["windows"][0]["top"] == "up_lip"
+    f0, f1 = g["windows"][0]["frames"]
     assert f0 <= 15 and f1 >= 22
 
 
@@ -77,24 +90,24 @@ def test_reg_entry_follows_every_layer_where_it_was_rendered():
     take = _frame(P)
     comp.layers(take, 2, S[2], P, 20.0)
     r0 = comp.reg[2]
-    for k in ('up', 'lo', 'cav', 'open', 'inner', 'contour', 'tip', 'jaw', 'pin_up', 'pin_up_iod', 'chin', 'kick', 'pose', 'stab'):
+    for k in ("up", "lo", "cav", "open", "inner", "contour", "tip", "jaw", "pin_up", "pin_up_iod", "chin", "kick", "pose", "stab"):
         assert k in r0, k
     io = layer.iod
     # the inner-lip top / bottom in the skull frame = the landmarks 13 / 14 (identity pose: canonical = frame px)
     org = np.asarray(comp.ref[:2], float)
-    assert np.allclose(r0['inner'][0], (P[13, :2] - org) / io, atol=1e-3) and np.allclose(r0['inner'][1], (P[14, :2] - org) / io, atol=1e-3)
+    assert np.allclose(r0["inner"][0], (P[13, :2] - org) / io, atol=1e-3) and np.allclose(r0["inner"][1], (P[14, :2] - org) / io, atol=1e-3)
     # a lip-root pin of +3 px down moves the upper edge (and the lower: the pin carries both arches) by 3 px in the skull
     # frame, and nothing of the lips; pin_up_iod logs it
     layer.pin[2] = np.array([0.0, 3.0])
     comp.layers(take, 2, S[2], P, 20.0)
     r1 = comp.reg[2]
-    assert np.allclose(np.subtract(r1['up'], r0['up'])[:, 1], 3.0 / io, atol=1e-3) and np.allclose(r1['inner'], r0['inner'])
-    assert np.allclose(r1['pin_up_iod'], [0.0, 3.0 / io], atol=1e-4)
+    assert np.allclose(np.subtract(r1["up"], r0["up"])[:, 1], 3.0 / io, atol=1e-3) and np.allclose(r1["inner"], r0["inner"])
+    assert np.allclose(r1["pin_up_iod"], [0.0, 3.0 / io], atol=1e-4)
     layer.pin[2] = np.zeros(2)
     # an opening jaw drops the lower incisal edge (the bite grows)
     comp.layers(take, 2, S[2], _P(gap=28.0), 28.0)
     r2 = comp.reg[2]
-    assert r2['jaw'] > r0['jaw'] and r2['lo'][1][1] > r0['lo'][1][1]
+    assert r2["jaw"] > r0["jaw"] and r2["lo"][1][1] > r0["lo"][1][1]
 
 
 def test_interior_clip_keeps_the_interior_inside_the_warped_lips():
@@ -107,9 +120,8 @@ def test_interior_clip_keeps_the_interior_inside_the_warped_lips():
     L1, box = comp.layers(take, 2, S[2], P, 20.0)
     L0, _ = base.layers(take, 2, S[2], P, 20.0)
     x0, y0, w, h = box
-    tl.poly_mask(P[ll.LIP_IN, :2] - [x0, y0], (h, w), 0.0) & ~tl.poly_mask(P[ll.LIP_IN, :2] - [x0, y0], (h, w), -0.15)
     core = tl.poly_mask(P[ll.LIP_IN, :2] - [x0, y0], (h, w), -0.15)
-    assert np.abs(L1['L2'][1][core] - L0['L2'][1][core]).max() < 0.02 and comp.reg[2]['clip'] < 0.05
+    assert np.abs(L1["L2"][1][core] - L0["L2"][1][core]).max() < 0.02 and comp.reg[2]["clip"] < 0.05
     out1, _ = comp.composite(take, 2, S[2], P, 20.0)
     out0, _ = base.composite(take, 2, S[2], P, 20.0)
     assert np.abs(out1.astype(int) - out0.astype(int)).mean() < 0.5
@@ -120,13 +132,14 @@ def test_interior_clip_keeps_the_interior_inside_the_warped_lips():
     Lu, bu = comp.layers(take, 2, S[2], Pu, 20.0)
     xu, yu, wu, hu = bu
     lips_real = tl.poly_mask(P[ll.LIP_OUT, :2] - [xu, yu], (hu, wu), 0.0)
-    for k in ('L2', 'L3', 'L4'): assert Lu[k][1][~lips_real].max() < 0.02, k
-    assert comp.reg[2]['clip'] > 0.9
+    for k in ("L2", "L3", "L4"):
+        assert Lu[k][1][~lips_real].max() < 0.02, k
+    assert comp.reg[2]["clip"] > 0.9
     outu, _ = comp.composite(take, 2, S[2], Pu, 20.0)
     bu_out = base.composite(take, 2, S[2], Pu, 20.0)[0]
     dark = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2LAB)[..., 0] < 60
     false_open = tl.poly_mask(Pu[ll.LIP_IN, :2], take.shape, 0.0)
-    assert dark(bu_out)[false_open].mean() > 0.5 and dark(outu)[false_open].mean() < 0.02       # v9: a cavity there; v11: none
+    assert dark(bu_out)[false_open].mean() > 0.5 and dark(outu)[false_open].mean() < 0.02  # v9: a cavity there; v11: none
 
 
 # ------------------------------------------------------------------------------ v11: the corner cover (step 4) --
@@ -140,38 +153,38 @@ def test_corner_points_push_only_the_corners():
     assert np.allclose(q2[iT], q[iT]) and np.allclose(q2[iB], q[iB])
     m0 = ll.lip_erase_mask(_frame(P), P, 0.22, key=False)
     m1 = ll.lip_erase_mask(_frame(P), P, 0.22, key=False, corner=(10.0, 4.0))
-    assert m1.sum() > m0.sum() and (m1 | m0).sum() == m1.sum()              # the cover only grows, at the corners
+    assert m1.sum() > m0.sum() and (m1 | m0).sum() == m1.sum()  # the cover only grows, at the corners
 
 
 def test_corner_cover_fills_old_mouth_moved_past_a_wider_corner():
     P_take = _P(gap=8.0, hw=34)
-    P_new = _P(gap=20.0, hw=46)                # the plan: wider (corners +12 px) and more open
-    _frame(P_take)
+    P_new = _P(gap=20.0, hw=46)  # the plan: wider (corners +12 px) and more open
     warped = _frame(P_new)
-    blob = (int(round(P_new[61, 0] - 6)), int(round(P_new[61, 1] + 3)))     # old lip the warp dragged past the new left corner
+    blob = (int(round(P_new[61, 0] - 6)), int(round(P_new[61, 1] + 3)))  # old lip the warp dragged past the new left corner
     cv2.circle(warped, blob, 4, LIP, -1)
     lab = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2LAB).astype(np.float32)
     lip_lab = lab(np.uint8([[LIP]]))[0, 0]
     skin_lab = lab(np.uint8([[SKIN]]))[0, 0]
-    near = lambda im, ref: np.linalg.norm(lab(im)[blob[1] - 1:blob[1] + 2, blob[0] - 1:blob[0] + 2] - ref, axis=2).max()
-    off, layer, frames, S = _comp(cover_mode='fill')
+    near = lambda im, ref: np.linalg.norm(lab(im)[blob[1] - 1 : blob[1] + 2, blob[0] - 1 : blob[0] + 2] - ref, axis=2).max()
+    off, layer, frames, S = _comp(cover_mode="fill")
     out0, _ = off.composite(warped, 2, P_take, P_new, 20.0)
-    on, *_ = _comp(cover_mode='fill', cover_corners=1.0)
+    on, *_ = _comp(cover_mode="fill", cover_corners=1.0)
     out1, _ = on.composite(warped, 2, P_take, P_new, 20.0)
-    assert near(out0, lip_lab) < 20                                         # v9: the old lip stays at the corner
-    assert near(out1, skin_lab) < 25 and on.corner_log[2] > 0               # v11: filled with skin
+    assert near(out0, lip_lab) < 20  # v9: the old lip stays at the corner
+    assert near(out1, skin_lab) < 25 and on.corner_log[2] > 0  # v11: filled with skin
     gl, gr = on.corner_growth(2, P_take[:, :2], P_new[:, :2], layer.iod)
-    assert gl > 12 and gr > 12                                              # grows with the corners' push (+ half the opening)
+    assert gl > 12 and gr > 12  # grows with the corners' push (+ half the opening)
     # off by default: the same frame as without the option
-    base, *_ = _comp(cover_mode='fill')
+    base, *_ = _comp(cover_mode="fill")
     assert np.array_equal(base.composite(warped, 2, P_take, P_new, 20.0)[0], out0)
 
 
 def test_frames_shown_as_the_take_are_not_measured():
     n = 30
     off = np.zeros((n, 2))
-    off[10:20, 1] = 0.03 * (-1) ** np.arange(10)       # a slosh inside a skipped vocalisation
+    off[10:20, 1] = 0.03 * (-1) ** np.arange(10)  # a slosh inside a skipped vocalisation
     F = _frames(off)
-    for i in range(10, 20): F[i]['vocal_s'] = 0.0                                       # (the take's own frames: no layers shown)
+    for i in range(10, 20):
+        F[i]["vocal_s"] = 0.0  # (the take's own frames: no layers shown)
     r = lr.measure(F, texture=False)
-    assert r['offsets']['up_lip']['slosh_mean'] == 0 and r['offsets']['up_lip']['n'] == n - 10
+    assert r["offsets"]["up_lip"]["slosh_mean"] == 0 and r["offsets"]["up_lip"]["n"] == n - 10

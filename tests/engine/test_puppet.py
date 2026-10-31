@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """Pytest: puppet-mode jaw-hinge timing. Skips cleanly if cv2 isn't installed in the test env."""
+
 import os, sys
 import numpy as np
 import pytest
@@ -12,8 +13,8 @@ from lsdub_engine.anchors.mouth_paint_cutout import puppet_jaw, jaw_openness_sca
 
 def _frame():
     f = np.full((200, 200, 3), 120, np.uint8)
-    f[:100] = 80            # upper head
-    f[100:] = 160           # lower jaw (distinct), hinge at y=100
+    f[:100] = 80  # upper head
+    f[100:] = 160  # lower jaw (distinct), hinge at y=100
     return f
 
 

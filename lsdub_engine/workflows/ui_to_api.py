@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
+#!/usr/bin/env python3
 """Convert ComfyUI UI-format workflow JSON to API-format JSON.
 
 UI format:  {"nodes": [...], "links": [...]}
@@ -8,6 +8,7 @@ API format: {"node_id": {"class_type": "X", "inputs": {field: value, ...}}}
 
 The API format is what ComfyUI's /prompt endpoint accepts.
 """
+
 import json
 import sys
 
@@ -87,6 +88,7 @@ if __name__ == "__main__":
         node_info = json.load(open(node_info_path))
     else:
         import requests
+
         r = requests.get("http://localhost:8188/object_info", timeout=120)
         node_info = r.json()
 

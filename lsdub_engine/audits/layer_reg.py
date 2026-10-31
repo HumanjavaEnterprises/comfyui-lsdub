@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
+#!/usr/bin/env python3
 """layer_reg.py: the inter-layer REGISTRATION ruler (v11). CPU.
 
 Founder on v10: "the sloppiness in the mouth has gone from the lips to the registration of the sub-elements of the mouth
@@ -47,19 +47,25 @@ on its open-mouth frames are the floor.
   lsdub layer-reg --pix --video V.mp4 --take-trk TRK.npz --frames N [--take TAKE.mp4] [--lm CACHE.npz] [--render DIR]
       [--ppi 200] [--json out.json] [--md out.md] [--label x]
 """
+
 import argparse, json, os, sys
 import numpy as np, cv2
 
-OFFSETS = (('up_lip', 'upper incisal edge - upper inner lip'), ('lo_lip', 'lower incisal edge - lower inner lip'),
-           ('cav_open', 'cavity centroid - opening centroid'), ('tip_lo', 'tongue tip - lower incisal edge'),
-           ('bite', 'upper - lower incisal edge'))
-FLOOR = 0.0528          # gate_report: a window whose summed slosh (5 offsets, IOD / frame) is >= this is reported: v9's own
-                        # p95 of the per-window sum over its 7 mv30 shots (re-rendered bit for bit with the reg log)
+OFFSETS = (
+    ("up_lip", "upper incisal edge - upper inner lip"),
+    ("lo_lip", "lower incisal edge - lower inner lip"),
+    ("cav_open", "cavity centroid - opening centroid"),
+    ("tip_lo", "tongue tip - lower incisal edge"),
+    ("bite", "upper - lower incisal edge"),
+)
+FLOOR = 0.0528  # gate_report: a window whose summed slosh (5 offsets, IOD / frame) is >= this is reported: v9's own
+# p95 of the per-window sum over its 7 mv30 shots (re-rendered bit for bit with the reg log)
 
 
 def _pt(r, k, j=None):
     v = r.get(k) if r else None
-    if v is None: return np.full(2, np.nan)
+    if v is None:
+        return np.full(2, np.nan)
     v = np.asarray(v, float)
     return v[j] if j is not None else v
 
@@ -69,20 +75,21 @@ def series(frames):
     the logged anchors (up / lo: n x 3 x 2, contour: n x 20 x 2, stab: n x 2 x 3)."""
     n = len(frames)
     # a frame shown as the take's own (a skipped vocalisation at strength 0, v10a) shows none of the layers: not measured
-    R = [f.get('reg') if float(f.get('vocal_s', 1.0) if f.get('vocal_s') is not None else 1.0) > 0 else None for f in frames]
-    up = np.array([_pt(r, 'up') if r else np.full((3, 2), np.nan) for r in R], float).reshape(n, 3, 2)
-    lo = np.array([_pt(r, 'lo') if r else np.full((3, 2), np.nan) for r in R], float).reshape(n, 3, 2)
-    inner = np.array([_pt(r, 'inner') if r else np.full((4, 2), np.nan) for r in R], float).reshape(n, 4, 2)   # 13, 14, 78, 308
-    cav = np.array([_pt(r, 'cav') for r in R])
-    op = np.array([_pt(r, 'open') for r in R])
-    tip = np.array([_pt(r, 'tip') for r in R])
-    O = dict(up_lip=up[:, 1] - inner[:, 0], lo_lip=lo[:, 1] - inner[:, 1], cav_open=cav - op, tip_lo=tip - lo[:, 1], bite=up[:, 1] - lo[:, 1])
-    jaw = np.array([r['jaw'] if r and r.get('jaw') is not None else np.nan for r in R], float)
-    pin = np.array([_pt(r, 'pin_up_iod') for r in R])
-    stab = np.array([np.asarray(r['stab'], float) if r and r.get('stab') else np.full((2, 3), np.nan) for r in R])
-    contour = np.array([np.asarray(r['contour'], float) if r and r.get('contour') else np.full((20, 2), np.nan) for r in R])
-    return dict(off=O, jaw=jaw, pin=pin, up=up, lo=lo, inner=inner, stab=stab, contour=contour, n=n,
-                layers=np.array([bool(r) for r in R]))
+    R = [f.get("reg") if float(f.get("vocal_s", 1.0) if f.get("vocal_s") is not None else 1.0) > 0 else None for f in frames]
+    up = np.array([_pt(r, "up") if r else np.full((3, 2), np.nan) for r in R], float).reshape(n, 3, 2)
+    lo = np.array([_pt(r, "lo") if r else np.full((3, 2), np.nan) for r in R], float).reshape(n, 3, 2)
+    inner = np.array([_pt(r, "inner") if r else np.full((4, 2), np.nan) for r in R], float).reshape(n, 4, 2)  # 13, 14, 78, 308
+    cav = np.array([_pt(r, "cav") for r in R])
+    op = np.array([_pt(r, "open") for r in R])
+    tip = np.array([_pt(r, "tip") for r in R])
+    O = dict(
+        up_lip=up[:, 1] - inner[:, 0], lo_lip=lo[:, 1] - inner[:, 1], cav_open=cav - op, tip_lo=tip - lo[:, 1], bite=up[:, 1] - lo[:, 1]
+    )
+    jaw = np.array([r["jaw"] if r and r.get("jaw") is not None else np.nan for r in R], float)
+    pin = np.array([_pt(r, "pin_up_iod") for r in R])
+    stab = np.array([np.asarray(r["stab"], float) if r and r.get("stab") else np.full((2, 3), np.nan) for r in R])
+    contour = np.array([np.asarray(r["contour"], float) if r and r.get("contour") else np.full((20, 2), np.nan) for r in R])
+    return dict(off=O, jaw=jaw, pin=pin, up=up, lo=lo, inner=inner, stab=stab, contour=contour, n=n, layers=np.array([bool(r) for r in R]))
 
 
 def jaw_residual(o, jaw):
@@ -90,7 +97,8 @@ def jaw_residual(o, jaw):
     o = np.asarray(o, float)
     res = np.full_like(o, np.nan)
     ok = np.isfinite(o).all(1) & np.isfinite(jaw)
-    if ok.sum() < 3: return res
+    if ok.sum() < 3:
+        return res
     X = np.stack([np.ones(ok.sum()), jaw[ok]], 1)
     for k in range(2):
         b, *_ = np.linalg.lstsq(X, o[ok, k], rcond=None)
@@ -111,14 +119,17 @@ def slosh(o, W=4):
     o = np.asarray(o, float)
     n = len(o)
     E = np.full(n, np.nan)
-    if o.ndim == 1: o = o[:, None]
+    if o.ndim == 1:
+        o = o[:, None]
     v = np.full_like(o, np.nan)
     v[1:] = np.diff(o, axis=0)
     for c in range(n):
         a0, a1 = max(1, c - W + 1), min(n - 1, c + W)
-        if a1 - a0 + 1 < max(3, W): continue
-        seg = v[a0:a1 + 1]
-        if (np.isfinite(seg).all(1)).sum() < 3: continue
+        if a1 - a0 + 1 < max(3, W):
+            continue
+        seg = v[a0 : a1 + 1]
+        if (np.isfinite(seg).all(1)).sum() < 3:
+            continue
         E[c] = sum(osc(seg[:, k]) for k in range(seg.shape[1])) / (a1 - a0 + 1)
     return E
 
@@ -132,7 +143,7 @@ def jitter(o):
 def _q(x, p):
     x = np.asarray(x, float)
     x = x[np.isfinite(x)]
-    return float(np.percentile(x, p)) if len(x) else float('nan')
+    return float(np.percentile(x, p)) if len(x) else float("nan")
 
 
 def stats(o, jaw, W=4):
@@ -140,30 +151,43 @@ def stats(o, jaw, W=4):
     rn = np.linalg.norm(res, axis=1)
     j = jitter(o)
     E = slosh(o, W)
-    return dict(n=int(np.isfinite(o).all(1).sum()), resid_rms=float(np.sqrt(np.nanmean(rn ** 2))) if np.isfinite(rn).any() else float('nan'),
-                resid_p95=_q(rn, 95), jit_p50=_q(j, 50), jit_p95=_q(j, 95), slosh_mean=float(np.nanmean(E)) if np.isfinite(E).any() else float('nan'),
-                slosh_p95=_q(E, 95), slosh_max=float(np.nanmax(E)) if np.isfinite(E).any() else float('nan'),
-                slosh_argmax=int(np.nanargmax(E)) if np.isfinite(E).any() else -1, resid_argmax=int(np.nanargmax(rn)) if np.isfinite(rn).any() else -1), E, res
+    return (
+        dict(
+            n=int(np.isfinite(o).all(1).sum()),
+            resid_rms=float(np.sqrt(np.nanmean(rn**2))) if np.isfinite(rn).any() else float("nan"),
+            resid_p95=_q(rn, 95),
+            jit_p50=_q(j, 50),
+            jit_p95=_q(j, 95),
+            slosh_mean=float(np.nanmean(E)) if np.isfinite(E).any() else float("nan"),
+            slosh_p95=_q(E, 95),
+            slosh_max=float(np.nanmax(E)) if np.isfinite(E).any() else float("nan"),
+            slosh_argmax=int(np.nanargmax(E)) if np.isfinite(E).any() else -1,
+            resid_argmax=int(np.nanargmax(rn)) if np.isfinite(rn).any() else -1,
+        ),
+        E,
+        res,
+    )
 
 
 # --------------------------------------------------------------------------------------------- texture drift --
 def stab_crops(video, S, meta, ppi=300.0, win=(-0.5, 0.5, -0.3, 0.25)):
     """skull-stabilised grey crops of every frame (the logged plane affine of each frame; window in IOD around the reg
     origin, ppi px per IOD) -> (list of float32 crops or None, the crop's origin offset in IOD)."""
-    org, io = np.asarray(meta['origin'], float), float(meta['iod'])
+    org, io = np.asarray(meta["origin"], float), float(meta["iod"])
     x0, x1, y0, y1 = win
     w, h = int(round((x1 - x0) * ppi)), int(round((y1 - y0) * ppi))
-    C = np.array([[io / ppi, 0, org[0] + x0 * io], [0, io / ppi, org[1] + y0 * io]], np.float64)      # crop px -> canonical
+    C = np.array([[io / ppi, 0, org[0] + x0 * io], [0, io / ppi, org[1] + y0 * io]], np.float64)  # crop px -> canonical
     cap = cv2.VideoCapture(video)
     out = []
-    for t in range(S['n']):
+    for t in range(S["n"]):
         ok, fr = cap.read()
-        if not ok: break
-        A = S['stab'][t]
+        if not ok:
+            break
+        A = S["stab"][t]
         if not np.isfinite(A).all():
             out.append(None)
             continue
-        M = np.vstack([A, [0, 0, 1]]) @ np.vstack([C, [0, 0, 1]])                                     # crop px -> frame px
+        M = np.vstack([A, [0, 0, 1]]) @ np.vstack([C, [0, 0, 1]])  # crop px -> frame px
         g = cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY).astype(np.float32)
         out.append(cv2.warpAffine(g, M[:2], (w, h), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_REFLECT))
     return out, (x0, y0), ppi
@@ -172,13 +196,14 @@ def stab_crops(video, S, meta, ppi=300.0, win=(-0.5, 0.5, -0.3, 0.25)):
 def teeth_mask(S, t, shape, off, ppi, margin=0.004):
     """visible upper teeth of frame t in the crop: inside the warped opening (the logged contour) and above the incisal
     edge line through the logged ends (+ margin IOD)."""
-    con = S['contour'][t]
-    up = S['up'][t]
-    if not (np.isfinite(con).all() and np.isfinite(up).all()): return None
+    con = S["contour"][t]
+    up = S["up"][t]
+    if not (np.isfinite(con).all() and np.isfinite(up).all()):
+        return None
     px = lambda p: (np.asarray(p, float) - np.asarray(off, float)) * ppi
     m = np.zeros(shape, np.uint8)
     cv2.fillPoly(m, [np.round(px(con)).astype(np.int32)], 1)
-    yy, xx = np.mgrid[0:shape[0], 0:shape[1]].astype(np.float32)
+    yy, xx = np.mgrid[0 : shape[0], 0 : shape[1]].astype(np.float32)
     a, c = px(up[0]), px(up[2])
     k = (c[1] - a[1]) / (c[0] - a[0]) if abs(c[0] - a[0]) > 1e-6 else 0.0
     line = a[1] + k * (xx - a[0])
@@ -188,29 +213,36 @@ def teeth_mask(S, t, shape, off, ppi, margin=0.004):
 def ncc_shift(a, b, mask, r):
     """the shift (dx, dy) px that maps b onto a best (NCC over mask, integer shifts within r, parabolic sub-pixel)."""
     ys, xs = np.nonzero(mask)
-    if len(ys) < 40: return None
+    if len(ys) < 40:
+        return None
     best = np.full((2 * r + 1, 2 * r + 1), -2.0)
     A = a[ys, xs]
     A = A - A.mean()
     na = np.linalg.norm(A)
-    if na < 1e-3: return None
+    if na < 1e-3:
+        return None
     H, W_ = b.shape
     for dy in range(-r, r + 1):
         for dx in range(-r, r + 1):
             y2, x2 = ys - dy, xs - dx
             ok = (y2 >= 0) & (y2 < H) & (x2 >= 0) & (x2 < W_)
-            if ok.sum() < 0.8 * len(ys): continue
+            if ok.sum() < 0.8 * len(ys):
+                continue
             B = b[y2[ok], x2[ok]]
             B = B - B.mean()
             Aa = a[ys[ok], xs[ok]]
             Aa = Aa - Aa.mean()
             nb = np.linalg.norm(B) * np.linalg.norm(Aa)
-            if nb > 1e-6: best[dy + r, dx + r] = float(Aa @ B) / nb
+            if nb > 1e-6:
+                best[dy + r, dx + r] = float(Aa @ B) / nb
     iy, ix = np.unravel_index(np.argmax(best), best.shape)
-    if best[iy, ix] < 0.3: return None
-    def sub(c_, p, m_):              # the parabola's vertex through (-1, m_), (0, c_), (+1, p)
+    if best[iy, ix] < 0.3:
+        return None
+
+    def sub(c_, p, m_):  # the parabola's vertex through (-1, m_), (0, c_), (+1, p)
         d = p - 2 * c_ + m_
         return 0.0 if abs(d) < 1e-9 else float(np.clip(0.5 * (m_ - p) / d, -0.5, 0.5))
+
     sx = sub(best[iy, ix], best[iy, ix + 1], best[iy, ix - 1]) if 0 < ix < 2 * r else 0.0
     sy = sub(best[iy, ix], best[iy + 1, ix], best[iy - 1, ix]) if 0 < iy < 2 * r else 0.0
     return np.array([ix - r + sx, iy - r + sy]), float(best[iy, ix])
@@ -221,15 +253,18 @@ def tex_drift(video, S, meta, ppi=300.0, r_iod=0.03):
     fewer than 40 visible tooth px or no confident match) and its NCC."""
     crops, off, ppi = stab_crops(video, S, meta, ppi)
     n = len(crops)
-    d = np.full((S['n'], 2), np.nan)
-    q = np.full(S['n'], np.nan)
+    d = np.full((S["n"], 2), np.nan)
+    q = np.full(S["n"], np.nan)
     r = max(2, int(round(r_iod * ppi)))
     for t in range(1, n):
-        if crops[t] is None or crops[t - 1] is None: continue
+        if crops[t] is None or crops[t - 1] is None:
+            continue
         m = teeth_mask(S, t, crops[t].shape, off, ppi)
-        if m is None: continue
+        if m is None:
+            continue
         got = ncc_shift(crops[t], crops[t - 1], m, r)
-        if got is None: continue
+        if got is None:
+            continue
         d[t] = got[0] / ppi
         q[t] = got[1]
     return d, q
@@ -238,26 +273,28 @@ def tex_drift(video, S, meta, ppi=300.0, r_iod=0.03):
 # ---------------------------------------------------------------------------------------------------- report --
 def measure(frames, video=None, meta=None, W=4, texture=True):
     S = series(frames)
-    out = dict(n=S['n'], frames_with_layers=int(S['layers'].sum()), W=W, offsets={}, per_frame={})
-    E_sum = np.zeros(S['n'])
-    any_ = np.zeros(S['n'], bool)
+    out = dict(n=S["n"], frames_with_layers=int(S["layers"].sum()), W=W, offsets={}, per_frame={})
+    E_sum = np.zeros(S["n"])
+    any_ = np.zeros(S["n"], bool)
     for k, _ in OFFSETS:
-        st, E, res = stats(S['off'][k], S['jaw'], W)
-        out['offsets'][k] = st
-        out['per_frame'][k] = dict(off=np.round(S['off'][k], 5).tolist(), resid=np.round(res, 5).tolist(), slosh=np.round(E, 5).tolist())
+        st, E, res = stats(S["off"][k], S["jaw"], W)
+        out["offsets"][k] = st
+        out["per_frame"][k] = dict(off=np.round(S["off"][k], 5).tolist(), resid=np.round(res, 5).tolist(), slosh=np.round(E, 5).tolist())
         ok = np.isfinite(E)
         E_sum[ok] += E[ok]
         any_ |= ok
     E_sum[~any_] = np.nan
-    out['per_frame']['slosh_sum'] = np.round(E_sum, 5).tolist()
-    out['summary'] = dict(slosh_sum=float(np.nansum([out['offsets'][k]['slosh_mean'] for k, _ in OFFSETS if np.isfinite(out['offsets'][k]['slosh_mean'])])),
-                          resid_rms_sum=float(np.nansum([out['offsets'][k]['resid_rms'] for k, _ in OFFSETS if np.isfinite(out['offsets'][k]['resid_rms'])])))
+    out["per_frame"]["slosh_sum"] = np.round(E_sum, 5).tolist()
+    out["summary"] = dict(
+        slosh_sum=float(np.nansum([out["offsets"][k]["slosh_mean"] for k, _ in OFFSETS if np.isfinite(out["offsets"][k]["slosh_mean"])])),
+        resid_rms_sum=float(np.nansum([out["offsets"][k]["resid_rms"] for k, _ in OFFSETS if np.isfinite(out["offsets"][k]["resid_rms"])])),
+    )
     if texture and video and meta:
         d, q = tex_drift(video, S, meta)
         pos = np.full_like(d, np.nan)
         acc = np.zeros(2)
         seen = False
-        for t in range(len(d)):                      # the texture's cumulative position (a gap restarts it)
+        for t in range(len(d)):  # the texture's cumulative position (a gap restarts it)
             if np.isfinite(d[t]).all():
                 acc = acc + d[t]
                 pos[t] = acc
@@ -266,15 +303,22 @@ def measure(frames, video=None, meta=None, W=4, texture=True):
                 acc = np.zeros(2)
                 seen = False
         dp = np.full_like(d, np.nan)
-        dp[1:] = np.diff(S['pin'], axis=0)
+        dp[1:] = np.diff(S["pin"], axis=0)
         dd = np.linalg.norm(d - dp, axis=1)
         jn = np.linalg.norm(d, axis=1)
         E = slosh(pos, W)
-        out['tex_drift'] = dict(n=int(np.isfinite(jn).sum()), jit_p50=_q(jn, 50), jit_p95=_q(jn, 95), slosh_mean=float(np.nanmean(E)) if np.isfinite(E).any() else float('nan'),
-                                slosh_p95=_q(E, 95), slosh_max=float(np.nanmax(E)) if np.isfinite(E).any() else float('nan'),
-                                vs_pin_rms=float(np.sqrt(np.nanmean(dd ** 2))) if np.isfinite(dd).any() else float('nan'), ncc_p50=_q(q, 50))
-        out['per_frame']['tex_drift'] = np.round(d, 5).tolist()
-        out['per_frame']['tex_ncc'] = np.round(q, 3).tolist()
+        out["tex_drift"] = dict(
+            n=int(np.isfinite(jn).sum()),
+            jit_p50=_q(jn, 50),
+            jit_p95=_q(jn, 95),
+            slosh_mean=float(np.nanmean(E)) if np.isfinite(E).any() else float("nan"),
+            slosh_p95=_q(E, 95),
+            slosh_max=float(np.nanmax(E)) if np.isfinite(E).any() else float("nan"),
+            vs_pin_rms=float(np.sqrt(np.nanmean(dd**2))) if np.isfinite(dd).any() else float("nan"),
+            ncc_p50=_q(q, 50),
+        )
+        out["per_frame"]["tex_drift"] = np.round(d, 5).tolist()
+        out["per_frame"]["tex_ncc"] = np.round(q, 3).tolist()
     return out
 
 
@@ -283,58 +327,80 @@ def gate_report(frames, W=4, floor=None):
     not repaired)."""
     floor = FLOOR if floor is None else floor
     r = measure(frames, W=W, texture=False)
-    E = np.asarray(r['per_frame']['slosh_sum'], float)
+    E = np.asarray(r["per_frame"]["slosh_sum"], float)
     win = []
     for c in np.nonzero(np.isfinite(E) & (E >= floor))[0]:
         a0, a1 = max(0, int(c) - W), min(len(E) - 1, int(c) + W)
-        top = max(OFFSETS, key=lambda kv: np.nan_to_num(r['per_frame'][kv[0]]['slosh'][c]))[0]
-        if win and a0 <= win[-1]['frames'][1]:
-            win[-1]['frames'][1] = a1
-            win[-1]['peak'] = max(win[-1]['peak'], round(float(E[c]), 4))
+        top = max(OFFSETS, key=lambda kv: np.nan_to_num(r["per_frame"][kv[0]]["slosh"][c]))[0]
+        if win and a0 <= win[-1]["frames"][1]:
+            win[-1]["frames"][1] = a1
+            win[-1]["peak"] = max(win[-1]["peak"], round(float(E[c]), 4))
             continue
         win.append(dict(frames=[a0, a1], peak=round(float(E[c]), 4), top=top))
-    return dict(floor=floor, W=W, summary=r['summary'], offsets={k: {x: (round(v, 5) if isinstance(v, float) else v) for x, v in st.items()} for k, st in r['offsets'].items()},
-                windows=win, repaired=False)
+    return dict(
+        floor=floor,
+        W=W,
+        summary=r["summary"],
+        offsets={k: {x: (round(v, 5) if isinstance(v, float) else v) for x, v in st.items()} for k, st in r["offsets"].items()},
+        windows=win,
+        repaired=False,
+    )
 
 
 def table_md(label, r):
-    L = [f'**{label}** ({r["frames_with_layers"]} of {r["n"]} frames with the layer stack; W = {r["W"]})', '',
-         '| offset | n | (a) jaw resid RMS / p95 | (b) jitter p50 / p95 | (c) slosh mean / p95 / max (frame) |', '|---|---|---|---|---|']
-    f = lambda x: 'n/a' if x is None or not np.isfinite(x) else f'{x:.4f}'
+    L = [
+        f"**{label}** ({r['frames_with_layers']} of {r['n']} frames with the layer stack; W = {r['W']})",
+        "",
+        "| offset | n | (a) jaw resid RMS / p95 | (b) jitter p50 / p95 | (c) slosh mean / p95 / max (frame) |",
+        "|---|---|---|---|---|",
+    ]
+    f = lambda x: "n/a" if x is None or not np.isfinite(x) else f"{x:.4f}"
     for k, name in OFFSETS:
-        s = r['offsets'][k]
-        L.append(f"| {k} ({name}) | {s['n']} | {f(s['resid_rms'])} / {f(s['resid_p95'])} | {f(s['jit_p50'])} / {f(s['jit_p95'])} | "
-                 f"{f(s['slosh_mean'])} / {f(s['slosh_p95'])} / {f(s['slosh_max'])} (f{s['slosh_argmax']}) |")
-    if 'tex_drift' in r:
-        s = r['tex_drift']
-        L.append(f"| tex_drift (upper-teeth texture vs t-1) | {s['n']} | vs pin change RMS {f(s['vs_pin_rms'])} | {f(s['jit_p50'])} / {f(s['jit_p95'])} | "
-                 f"{f(s['slosh_mean'])} / {f(s['slosh_p95'])} / {f(s['slosh_max'])} |")
-    L += ['', f"summary: slosh sum {r['summary']['slosh_sum']:.4f} IOD/frame; jaw-residual RMS sum {r['summary']['resid_rms_sum']:.4f} IOD", '']
-    return '\n'.join(L)
+        s = r["offsets"][k]
+        L.append(
+            f"| {k} ({name}) | {s['n']} | {f(s['resid_rms'])} / {f(s['resid_p95'])} | {f(s['jit_p50'])} / {f(s['jit_p95'])} | "
+            f"{f(s['slosh_mean'])} / {f(s['slosh_p95'])} / {f(s['slosh_max'])} (f{s['slosh_argmax']}) |"
+        )
+    if "tex_drift" in r:
+        s = r["tex_drift"]
+        L.append(
+            f"| tex_drift (upper-teeth texture vs t-1) | {s['n']} | vs pin change RMS {f(s['vs_pin_rms'])} | {f(s['jit_p50'])} / {f(s['jit_p95'])} | "
+            f"{f(s['slosh_mean'])} / {f(s['slosh_p95'])} / {f(s['slosh_max'])} |"
+        )
+    L += [
+        "",
+        f"summary: slosh sum {r['summary']['slosh_sum']:.4f} IOD/frame; jaw-residual RMS sum {r['summary']['resid_rms_sum']:.4f} IOD",
+        "",
+    ]
+    return "\n".join(L)
 
 
 def line(label, r):
-    t = r.get('tex_drift', {})
-    return (f"layer-reg {label}: slosh sum {r['summary']['slosh_sum']:.4f} IOD/frame (" +
-                                        ', '.join(f"{k} {r['offsets'][k]['slosh_mean']:.4f}" for k, _ in OFFSETS) +
-                                        (f"; tex drift jitter p95 {t['jit_p95']:.4f}, slosh {t['slosh_mean']:.4f}" if t else '') + ')')
+    t = r.get("tex_drift", {})
+    return (
+        f"layer-reg {label}: slosh sum {r['summary']['slosh_sum']:.4f} IOD/frame ("
+        + ", ".join(f"{k} {r['offsets'][k]['slosh_mean']:.4f}" for k, _ in OFFSETS)
+        + (f"; tex drift jitter p95 {t['jit_p95']:.4f}, slosh {t['slosh_mean']:.4f}" if t else "")
+        + ")"
+    )
 
 
 # ----------------------------------------------------------------------------------------- v12: the pixel ruler --
-PIX_WIN = (-0.6, 0.6, -0.5, 0.45)        # the stabilised crop: canonical window (IOD about ref, the inner-lip centre): x0, x1, y0, y1
-PIX_NOSE = (-0.22, 0.22, -0.42, -0.22)   # the nose-base reference rectangle (IOD about ref; canonical lm 1 / 2 / 98 / 327 sit at
-                                         # y ~ -0.375 / -0.29 / -0.30 / -0.30 IOD, the nostrils at x ~ +-0.17): skin the warp does not move
-PIX_MIN_PX = 150                         # a patch is measured with >= this many mask px at ppi 200 (scaled with ppi^2)
-PIX_R_IOD = 0.05                         # search range +- (IOD / frame; v11's renders move up to ~0.035)
-PIX_MIN_SCORE = 0.5                      # a match is used when its NCC peak is >= this (and not on the search border)
+PIX_WIN = (-0.6, 0.6, -0.5, 0.45)  # the stabilised crop: canonical window (IOD about ref, the inner-lip centre): x0, x1, y0, y1
+PIX_NOSE = (-0.22, 0.22, -0.42, -0.22)  # the nose-base reference rectangle (IOD about ref; canonical lm 1 / 2 / 98 / 327 sit at
+# y ~ -0.375 / -0.29 / -0.30 / -0.30 IOD, the nostrils at x ~ +-0.17): skin the warp does not move
+PIX_MIN_PX = 150  # a patch is measured with >= this many mask px at ppi 200 (scaled with ppi^2)
+PIX_R_IOD = 0.05  # search range +- (IOD / frame; v11's renders move up to ~0.035)
+PIX_MIN_SCORE = 0.5  # a match is used when its NCC peak is >= this (and not on the search border)
 
 
 def _core():
     from ..core import teeth_layer as tl, lip_layers as ll, mouth_morph as mm, mouth_paint as mp_
+
     return tl, ll, mm, mp_
 
 
-def skull_frame(S3raw, n=None, pose_smooth='sg7'):
+def skull_frame(S3raw, n=None, pose_smooth="sg7"):
     """the warp's own skull pose and teeth plane, rebuilt as mouth_warp.WarpClip + teeth_layer.TeethLayer do: the rigid
     pose on MESH_ANCH (pose_smooth), the k5 track S, the canonical median face Cm, IOD, z_up, ref (the inner-lip centre),
     per frame A[t] = plane_affine(pl, t, z_up, ref) (2x3: canonical (x, y) on the plane -> frame px; = warp.json
@@ -345,7 +411,7 @@ def skull_frame(S3raw, n=None, pose_smooth='sg7'):
     n = len(S3raw) if n is None else min(int(n), len(S3raw))
     S3 = S3raw[:n]
     pl = mm.RigidPlacement(S3[int(np.argmin(np.abs(np.arange(n) - n // 2)))], S3, mm.MESH_ANCH, smooth=pose_smooth, lam=0.0)
-    S = mp_.smooth_track(S3, 'k5')
+    S = mp_.smooth_track(S3, "k5")
     C = np.array([pl.to_lib(i, S[i]) for i in range(n)])
     Cm = np.median(C, 0)
     iod = float(np.linalg.norm(Cm[263, :2] - Cm[33, :2]))
@@ -391,7 +457,7 @@ def nose_mask(shape, ppi=200.0, win=PIX_WIN, box=PIX_NOSE):
     m = np.zeros((h, w), bool)
     xa, xb = int(round((box[0] - win[0]) * ppi)), int(round((box[1] - win[0]) * ppi))
     ya, yb = int(round((box[2] - win[2]) * ppi)), int(round((box[3] - win[2]) * ppi))
-    m[max(0, ya):min(h, yb), max(0, xa):min(w, xb)] = True
+    m[max(0, ya) : min(h, yb), max(0, xa) : min(w, xb)] = True
     return m
 
 
@@ -399,8 +465,10 @@ def _extend(m, inner, k, down=True):
     """m grown k px down (or up) per column, kept inside inner."""
     out = m.copy()
     for s in range(1, k + 1):
-        if down: out[s:] |= m[:-s]
-        else: out[:-s] |= m[s:]
+        if down:
+            out[s:] |= m[:-s]
+        else:
+            out[:-s] |= m[s:]
     return out & inner
 
 
@@ -463,7 +531,8 @@ def patch_shift(a, b, mask, r_px, min_score=PIX_MIN_SCORE):
     < min_score or the argmax sits on the search border."""
     m = np.asarray(mask, bool)
     ys, xs = np.nonzero(m)
-    if len(ys) < 16: return None, float('nan')
+    if len(ys) < 16:
+        return None, float("nan")
     y0, y1, x0, x1 = int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1
     H, W_ = b.shape[:2]
     r = int(r_px)
@@ -474,10 +543,13 @@ def patch_shift(a, b, mask, r_px, min_score=PIX_MIN_SCORE):
     R = np.where(np.isfinite(R), R, -1.0)
     iy, ix = np.unravel_index(int(np.argmax(R)), R.shape)
     pk = float(R[iy, ix])
-    if pk < min_score or iy in (0, R.shape[0] - 1) or ix in (0, R.shape[1] - 1): return None, pk
-    def sub(c_, p, m_):              # the parabola's vertex through (-1, m_), (0, c_), (+1, p)
+    if pk < min_score or iy in (0, R.shape[0] - 1) or ix in (0, R.shape[1] - 1):
+        return None, pk
+
+    def sub(c_, p, m_):  # the parabola's vertex through (-1, m_), (0, c_), (+1, p)
         d = p - 2 * c_ + m_
         return 0.0 if abs(d) < 1e-12 else float(np.clip(0.5 * (m_ - p) / d, -0.5, 0.5))
+
     fx = sub(R[iy, ix], R[iy, ix + 1], R[iy, ix - 1])
     fy = sub(R[iy, ix], R[iy + 1, ix], R[iy - 1, ix])
     return np.array([x0 - (sx0 + ix + fx), y0 - (sy0 + iy + fy)], float), pk
@@ -491,40 +563,59 @@ def arch_track(frames, lm, sf, skin_L, ppi=200.0, skip=None, win=PIX_WIN, r_iod=
     (>= PIX_MIN_PX mask px, scaled with ppi^2), frames t-1 and t have landmarks, and neither is skipped (skip: bool per
     frame, e.g. a vocalisation shown as the take's own frame in a render). keep: frame indices whose crops and masks are
     returned under 'debug'."""
-    A, ref, iod = np.asarray(sf['A'], float), np.asarray(sf['ref'], float), float(sf['iod'])
+    A, ref, iod = np.asarray(sf["A"], float), np.asarray(sf["ref"], float), float(sf["iod"])
     n = min(len(frames), len(lm), len(A))
     lm = np.asarray(lm, float)[:n]
     okl = np.isfinite(lm[:, :, :2]).all((1, 2))
     sk = np.zeros(n, bool)
     if skip is not None:
         s_ = np.asarray(skip, bool)[:n]
-        sk[:len(s_)] = s_
+        sk[: len(s_)] = s_
     r = max(2, int(round(r_iod * ppi)))
     minpx = PIX_MIN_PX * (ppi / 200.0) ** 2
-    V = {k: np.full((n, 2), np.nan) for k in ('up', 'lo', 'nose')}
+    V = {k: np.full((n, 2), np.nan) for k in ("up", "lo", "nose")}
     Q = {k: np.full(n, np.nan) for k in V}
-    PX = {k: np.zeros(n, int) for k in ('up', 'lo')}
+    PX = {k: np.zeros(n, int) for k in ("up", "lo")}
     dbg = {}
     prev = None
     nose = None
     for t in range(n):
         g, bgr = stab_crop(frames[t], A[t], ref, iod, ppi, win)
         m = None
-        if nose is None: nose = nose_mask(g.shape, ppi, win)
+        if nose is None:
+            nose = nose_mask(g.shape, ppi, win)
         if okl[t]:
             m = arch_masks(bgr, to_crop(lm[t], A[t], ref, iod, ppi, win), skin_L, ppi)
-            PX['up'][t], PX['lo'][t] = int(m['up'].sum()), int(m['lo'].sum())
-        if keep is not None and t in keep: dbg[t] = dict(grey=g, bgr=bgr, masks=m)
+            PX["up"][t], PX["lo"][t] = int(m["up"].sum()), int(m["lo"].sum())
+        if keep is not None and t in keep:
+            dbg[t] = dict(grey=g, bgr=bgr, masks=m)
         if t > 0 and prev is not None and okl[t] and okl[t - 1] and not sk[t] and not sk[t - 1]:
-            for k, mk in (('up', m['up']), ('lo', m['lo']), ('nose', nose)):
-                if k != 'nose' and mk.sum() < minpx: continue
+            for k, mk in (("up", m["up"]), ("lo", m["lo"]), ("nose", nose)):
+                if k != "nose" and mk.sum() < minpx:
+                    continue
                 d, q = patch_shift(g, prev, mk, r)
                 Q[k][t] = q
-                if d is not None: V[k][t] = d / ppi
+                if d is not None:
+                    V[k][t] = d / ppi
         prev = g
-    out = dict(up=V['up'], lo=V['lo'], nose=V['nose'], score_up=Q['up'], score_lo=Q['lo'], score_nose=Q['nose'], px_up=PX['up'],
-               px_lo=PX['lo'], n=n, ppi=float(ppi), r_px=r, lm_ok=okl, skip=sk, nose_mask=nose)
-    if keep is not None: out['debug'] = dbg
+    out = dict(
+        up=V["up"],
+        lo=V["lo"],
+        nose=V["nose"],
+        score_up=Q["up"],
+        score_lo=Q["lo"],
+        score_nose=Q["nose"],
+        px_up=PX["up"],
+        px_lo=PX["lo"],
+        n=n,
+        ppi=float(ppi),
+        r_px=r,
+        lm_ok=okl,
+        skip=sk,
+        nose_mask=nose,
+    )
+    if keep is not None:
+        out["debug"] = dbg
     return out
 
 
@@ -533,15 +624,18 @@ def wander(v, W=4):
     slosh), sum over the components of osc over the FINITE velocities, / the number of finite velocities in the window;
     nan where the window has < max(3, W) steps or < 3 finite velocities (the teeth are invisible on closed frames)."""
     v = np.asarray(v, float)
-    if v.ndim == 1: v = v[:, None]
+    if v.ndim == 1:
+        v = v[:, None]
     n = len(v)
     E = np.full(n, np.nan)
     ok = np.isfinite(v).all(1)
     for c in range(n):
         a0, a1 = max(1, c - W + 1), min(n - 1, c + W)
-        if a1 - a0 + 1 < max(3, W): continue
-        seg = v[a0:a1 + 1][ok[a0:a1 + 1]]
-        if len(seg) < 3: continue
+        if a1 - a0 + 1 < max(3, W):
+            continue
+        seg = v[a0 : a1 + 1][ok[a0 : a1 + 1]]
+        if len(seg) < 3:
+            continue
         E[c] = sum(osc(seg[:, k]) for k in range(seg.shape[1])) / len(seg)
     return E
 
@@ -550,16 +644,17 @@ def pix_stats(v, W=(4, 8)):
     """a velocity series (n x 2 or n, IOD / frame, nan = gap) -> n (finite), jitter |v| p50 / p95, wander_W mean / p95
     (and the number of windows) for each W."""
     v = np.asarray(v, float)
-    if v.ndim == 1: v = v[:, None]
+    if v.ndim == 1:
+        v = v[:, None]
     ok = np.isfinite(v).all(1)
     j = np.linalg.norm(v[ok], axis=1)
     out = dict(n=int(ok.sum()), jit_p50=_q(j, 50), jit_p95=_q(j, 95))
     for w in W:
         E = wander(v, w)
         f = np.isfinite(E)
-        out[f'w{w}_mean'] = float(E[f].mean()) if f.any() else float('nan')
-        out[f'w{w}_p95'] = _q(E, 95)
-        out[f'w{w}_n'] = int(f.sum())
+        out[f"w{w}_mean"] = float(E[f].mean()) if f.any() else float("nan")
+        out[f"w{w}_p95"] = _q(E, 95)
+        out[f"w{w}_n"] = int(f.sum())
     return out
 
 
@@ -570,7 +665,7 @@ def hinge_split(v_lo, sf, jaw=None):
     along_resid = along - radians(jaw[t] - jaw[t-1]) * lever, lever = |cross(u, T - H)[:2]| / IOD (IOD per rad: the arc
     speed as seen in the plane; lever_3d = the full 3-D lever, for reference)."""
     v = np.asarray(v_lo, float)
-    u, H, T, iod = (np.asarray(sf[k], float) for k in ('u', 'H', 'Cm', 'iod'))
+    u, H, T, iod = (np.asarray(sf[k], float) for k in ("u", "H", "Cm", "iod"))
     T = T[14]
     iod = float(iod)
     c3 = np.cross(u, T - H)
@@ -581,12 +676,12 @@ def hinge_split(v_lo, sf, jaw=None):
     out = dict(a=a, lever=lever, lever_3d=float(np.linalg.norm(c3)) / iod, along=along, across=across, along_resid=None, pred=None)
     if jaw is not None:
         jw = np.full(len(v), np.nan)
-        j_ = np.asarray(jaw, float)[:len(v)]
-        jw[:len(j_)] = j_
+        j_ = np.asarray(jaw, float)[: len(v)]
+        jw[: len(j_)] = j_
         pred = np.full(len(v), np.nan)
         pred[1:] = np.radians(np.diff(jw)) * lever
-        out['pred'] = pred
-        out['along_resid'] = along - pred
+        out["pred"] = pred
+        out["along_resid"] = along - pred
     return out
 
 
@@ -604,11 +699,16 @@ def _rl(x, k=5):
 
 
 def _jsonable(o):
-    if isinstance(o, dict): return {k: _jsonable(v) for k, v in o.items()}
-    if isinstance(o, (list, tuple)): return [_jsonable(v) for v in o]
-    if isinstance(o, (np.floating, float)): return None if not np.isfinite(o) else float(o)
-    if isinstance(o, np.integer): return int(o)
-    if isinstance(o, np.ndarray): return _jsonable(o.tolist())
+    if isinstance(o, dict):
+        return {k: _jsonable(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_jsonable(v) for v in o]
+    if isinstance(o, (np.floating, float)):
+        return None if not np.isfinite(o) else float(o)
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.ndarray):
+        return _jsonable(o.tolist())
     return o
 
 
@@ -620,48 +720,86 @@ def pix_measure(video, S3raw, n, lm, skin_L=None, jaw=None, skip=None, ppi=200.0
     elsewhere). skin_L None -> from the video's own frames with S (fine for the take; for a render pass the take's). sf:
     skull_frame(S3raw, n) when None. keep: frame indices whose crops / masks are returned (not JSON-able) under 'debug'."""
     from .frame_gate import read_frames
+
     frames = read_frames(video, n) if isinstance(video, str) else list(video)
     sf = skull_frame(S3raw, n) if sf is None else sf
-    n = min(len(frames), len(sf['A']), len(lm))
+    n = min(len(frames), len(sf["A"]), len(lm))
     frames = frames[:n]
     lm = np.array(lm, float)[:n]
     bad = ~np.isfinite(lm[:, :, :2]).all((1, 2))
     fb = 0
-    if take_fallback and 'S' in sf and bad.any():
-        S_ = np.asarray(sf['S'], float)[:n]
+    if take_fallback and "S" in sf and bad.any():
+        S_ = np.asarray(sf["S"], float)[:n]
         d = min(lm.shape[2], S_.shape[2])
         lm[bad] = np.nan
         lm[np.nonzero(bad)[0], :, :d] = S_[bad][:, :, :d]
         fb = int(bad.sum())
-    if skin_L is None: skin_L = take_skin_L(frames, sf['S'])
+    if skin_L is None:
+        skin_L = take_skin_L(frames, sf["S"])
     tr = arch_track(frames, lm, sf, skin_L, ppi, skip, keep=keep)
-    hg = hinge_split(tr['lo'], sf, jaw)
-    A = np.asarray(sf['A'], float)[:n]
+    hg = hinge_split(tr["lo"], sf, jaw)
+    A = np.asarray(sf["A"], float)[:n]
     sc = np.sqrt(np.abs(np.linalg.det(A[:, :, :2])))
+
     def blk(k):
         s = pix_stats(tr[k], W)
         ok = np.isfinite(tr[k]).all(1)
-        if k != 'nose':
-            px = tr['px_' + k][ok]
-            s['n_px'] = float(np.median(px)) if len(px) else float('nan')
-        s['score_p50'] = _q(tr['score_' + k][ok], 50)
-        s['n_tried'] = int(np.isfinite(tr['score_' + k]).sum())
+        if k != "nose":
+            px = tr["px_" + k][ok]
+            s["n_px"] = float(np.median(px)) if len(px) else float("nan")
+        s["score_p50"] = _q(tr["score_" + k][ok], 50)
+        s["n_tried"] = int(np.isfinite(tr["score_" + k]).sum())
         return s
-    out = dict(n=n, ppi=float(ppi), iod=float(sf['iod']), iod_px=float(np.median(sc) * sf['iod']), skin_L=float(skin_L), r_px=tr['r_px'],
-               lm_ok=int(tr['lm_ok'].sum()), take_fallback=fb, skipped=int(tr['skip'].sum()), W=list(W),
-               up=blk('up'), lo=blk('lo'), nose=blk('nose'),
-               lo_hinge=dict(a=[round(float(x), 5) for x in hg['a']], lever=hg['lever'], lever_3d=hg['lever_3d'], across=pix_stats(hg['across'], W),
-                             along=pix_stats(hg['along'], W), along_resid=None if hg['along_resid'] is None else pix_stats(hg['along_resid'], W)),
-               per_frame=dict(up=_rl(tr['up']), lo=_rl(tr['lo']), nose=_rl(tr['nose']), score_up=_rl(tr['score_up'], 3), score_lo=_rl(tr['score_lo'], 3),
-                              score_nose=_rl(tr['score_nose'], 3), px_up=tr['px_up'].tolist(), px_lo=tr['px_lo'].tolist(), along=_rl(hg['along']),
-                              along_resid=None if hg['along_resid'] is None else _rl(hg['along_resid']), skip=tr['skip'].astype(int).tolist()))
+
+    out = dict(
+        n=n,
+        ppi=float(ppi),
+        iod=float(sf["iod"]),
+        iod_px=float(np.median(sc) * sf["iod"]),
+        skin_L=float(skin_L),
+        r_px=tr["r_px"],
+        lm_ok=int(tr["lm_ok"].sum()),
+        take_fallback=fb,
+        skipped=int(tr["skip"].sum()),
+        W=list(W),
+        up=blk("up"),
+        lo=blk("lo"),
+        nose=blk("nose"),
+        lo_hinge=dict(
+            a=[round(float(x), 5) for x in hg["a"]],
+            lever=hg["lever"],
+            lever_3d=hg["lever_3d"],
+            across=pix_stats(hg["across"], W),
+            along=pix_stats(hg["along"], W),
+            along_resid=None if hg["along_resid"] is None else pix_stats(hg["along_resid"], W),
+        ),
+        per_frame=dict(
+            up=_rl(tr["up"]),
+            lo=_rl(tr["lo"]),
+            nose=_rl(tr["nose"]),
+            score_up=_rl(tr["score_up"], 3),
+            score_lo=_rl(tr["score_lo"], 3),
+            score_nose=_rl(tr["score_nose"], 3),
+            px_up=tr["px_up"].tolist(),
+            px_lo=tr["px_lo"].tolist(),
+            along=_rl(hg["along"]),
+            along_resid=None if hg["along_resid"] is None else _rl(hg["along_resid"]),
+            skip=tr["skip"].astype(int).tolist(),
+        ),
+    )
     out = _jsonable(out)
-    if keep is not None: out['debug'] = tr['debug']
+    if keep is not None:
+        out["debug"] = tr["debug"]
     return out
 
 
-PIX_ROWS = (('up', 'up', 'upper incisal patch'), ('lo', 'lo', 'lower incisal patch'), ('nose', 'nose', 'nose base (the stabilisation floor)'),
-            ('lo_across', ('lo_hinge', 'across'), 'lower: across the jaw arc'), ('lo_along_resid', ('lo_hinge', 'along_resid'), 'lower: along the arc - logged jaw'))
+PIX_ROWS = (
+    ("up", "up", "upper incisal patch"),
+    ("lo", "lo", "lower incisal patch"),
+    ("nose", "nose", "nose base (the stabilisation floor)"),
+    ("lo_across", ("lo_hinge", "across"), "lower: across the jaw arc"),
+    ("lo_along_resid", ("lo_hinge", "along_resid"), "lower: along the arc - logged jaw"),
+)
 
 
 def _pix_get(r, path):
@@ -669,24 +807,32 @@ def _pix_get(r, path):
 
 
 def pix_table_md(label, r):
-    f = lambda x: 'n/a' if x is None or not np.isfinite(x) else f'{x:.4f}'
-    L = [f'**{label}** pixel registration, IOD / frame ({r["n"]} frames, {r["lm_ok"]} with landmarks, {r["skipped"]} skipped; ppi '
-         f'{r["ppi"]:g}, IOD = {r["iod_px"]:.0f} frame px)', '',
-         '| patch | n | jitter p50 | jitter p95 | W4 mean | W4 p95 | W8 mean | W8 p95 |', '|---|---|---|---|---|---|---|---|']
+    f = lambda x: "n/a" if x is None or not np.isfinite(x) else f"{x:.4f}"
+    L = [
+        f"**{label}** pixel registration, IOD / frame ({r['n']} frames, {r['lm_ok']} with landmarks, {r['skipped']} skipped; ppi "
+        f"{r['ppi']:g}, IOD = {r['iod_px']:.0f} frame px)",
+        "",
+        "| patch | n | jitter p50 | jitter p95 | W4 mean | W4 p95 | W8 mean | W8 p95 |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
     for _, path, name in PIX_ROWS:
         s = _pix_get(r, path)
         if s is None:
-            L.append(f'| {name} | - | n/a | n/a | n/a | n/a | n/a | n/a |')
+            L.append(f"| {name} | - | n/a | n/a | n/a | n/a | n/a | n/a |")
             continue
-        L.append(f"| {name} | {s['n']} | {f(s['jit_p50'])} | {f(s['jit_p95'])} | {f(s['w4_mean'])} | {f(s['w4_p95'])} | {f(s['w8_mean'])} | {f(s['w8_p95'])} |")
-    return '\n'.join(L + [''])
+        L.append(
+            f"| {name} | {s['n']} | {f(s['jit_p50'])} | {f(s['jit_p95'])} | {f(s['w4_mean'])} | {f(s['w4_p95'])} | {f(s['w8_mean'])} | {f(s['w8_p95'])} |"
+        )
+    return "\n".join(L + [""])
 
 
 def pix_line(label, r):
-    f = lambda x: 'n/a' if x is None or not np.isfinite(x) else f'{x:.4f}'
-    seg = lambda s: 'n/a' if s is None else f"jit p95 {f(s['jit_p95'])} W4 {f(s['w4_mean'])} W8 {f(s['w8_mean'])} (n {s['n']})"
-    return (f"layer-reg --pix {label}: up {seg(r['up'])}; lo across {seg(r['lo_hinge']['across'])}; "
-            f"lo along-resid {seg(r['lo_hinge']['along_resid'])}; nose {seg(r['nose'])} [IOD/frame]")
+    f = lambda x: "n/a" if x is None or not np.isfinite(x) else f"{x:.4f}"
+    seg = lambda s: "n/a" if s is None else f"jit p95 {f(s['jit_p95'])} W4 {f(s['w4_mean'])} W8 {f(s['w8_mean'])} (n {s['n']})"
+    return (
+        f"layer-reg --pix {label}: up {seg(r['up'])}; lo across {seg(r['lo_hinge']['across'])}; "
+        f"lo along-resid {seg(r['lo_hinge']['along_resid'])}; nose {seg(r['nose'])} [IOD/frame]"
+    )
 
 
 def pix_landmarks(frames, path, S3raw):
@@ -694,30 +840,33 @@ def pix_landmarks(frames, path, S3raw):
     re-detections nan); an existing cache is never overwritten: one longer than the clip is cut, a shorter one is an
     error (None)."""
     from .frame_gate import landmark_cache, filter_redet
+
     n = len(frames)
     S3raw = np.asarray(S3raw, float)[:n]
     if path and os.path.exists(path):
-        z = np.load(path)['S3']
+        z = np.load(path)["S3"]
         if len(z) < n:
-            print(f'layer-reg --pix: {path} has {len(z)} frames < {n}: not used (delete it or pass another --lm)', file=sys.stderr)
+            print(f"layer-reg --pix: {path} has {len(z)} frames < {n}: not used (delete it or pass another --lm)", file=sys.stderr)
             return None
         if len(z) > n:
             lm, rej = filter_redet(np.asarray(z[:n], float), S3raw)
-            if rej: print(f"layer-reg --pix: {len(rej)} implausible re-detection(s) not used: {[x['i'] for x in rej]}")
+            if rej:
+                print(f"layer-reg --pix: {len(rej)} implausible re-detection(s) not used: {[x['i'] for x in rej]}")
             return lm
     return landmark_cache(frames, path, None, S3raw)
 
 
 def pix_main(a):
     from .frame_gate import read_frames
+
     if not a.take_trk:
-        print('layer-reg --pix: --take-trk is required', file=sys.stderr)
+        print("layer-reg --pix: --take-trk is required", file=sys.stderr)
         return 2
-    video = a.video or (os.path.join(a.render, 'full.mp4') if a.render and not a.render.endswith('.json') else None)
+    video = a.video or (os.path.join(a.render, "full.mp4") if a.render and not a.render.endswith(".json") else None)
     if not video or not os.path.exists(video):
-        print(f'layer-reg --pix: no video ({video})', file=sys.stderr)
+        print(f"layer-reg --pix: no video ({video})", file=sys.stderr)
         return 2
-    S3raw = np.load(a.take_trk)['S3']
+    S3raw = np.load(a.take_trk)["S3"]
     n = min(a.frames or len(S3raw), len(S3raw))
     frames = read_frames(video, n)
     n = min(n, len(frames))
@@ -726,23 +875,33 @@ def pix_main(a):
     is_take = os.path.abspath(take) == os.path.abspath(video)
     sf = skull_frame(S3raw, n)
     tf = frames if is_take else read_frames(take, n)
-    skin_L = take_skin_L(tf[:n], sf['S'])
+    skin_L = take_skin_L(tf[:n], sf["S"])
     del tf
     lm = pix_landmarks(frames, a.lm, S3raw[:n])
-    if lm is None: return 2
+    if lm is None:
+        return 2
     jaw = skip = None
     if a.render:
-        wj = a.render if a.render.endswith('.json') else os.path.join(a.render, 'warp.json')
-        fr = json.load(open(wj))['frames'][:n]
-        jaw = [f['reg']['jaw'] if f.get('reg') and f['reg'].get('jaw') is not None else np.nan for f in fr]
-        skip = [f.get('vocal_s') is not None and float(f['vocal_s']) <= 0.0 for f in fr]
+        wj = a.render if a.render.endswith(".json") else os.path.join(a.render, "warp.json")
+        fr = json.load(open(wj))["frames"][:n]
+        jaw = [f["reg"]["jaw"] if f.get("reg") and f["reg"].get("jaw") is not None else np.nan for f in fr]
+        skip = [f.get("vocal_s") is not None and float(f["vocal_s"]) <= 0.0 for f in fr]
     r = pix_measure(frames, S3raw, n, lm, skin_L, jaw, skip, a.ppi, sf=sf, take_fallback=is_take)
     label = a.label or os.path.basename(os.path.dirname(os.path.abspath(video))) or os.path.basename(video)
-    r.update(label=label, video=os.path.abspath(video), take=os.path.abspath(take), take_trk=os.path.abspath(a.take_trk), lm_cache=a.lm,
-             render=a.render, is_take=is_take)
-    if a.json: json.dump(r, open(a.json, 'w'))
+    r.update(
+        label=label,
+        video=os.path.abspath(video),
+        take=os.path.abspath(take),
+        take_trk=os.path.abspath(a.take_trk),
+        lm_cache=a.lm,
+        render=a.render,
+        is_take=is_take,
+    )
+    if a.json:
+        json.dump(r, open(a.json, "w"))
     md = pix_table_md(label, r)
-    if a.md: open(a.md, 'w').write(md)
+    if a.md:
+        open(a.md, "w").write(md)
     print(md)
     print(pix_line(label, r))
     return 0
@@ -761,78 +920,101 @@ def plate_edges(tex, upper=True, iod=1.0, texel=1.0, h0=0.0, centre_iod=0.2, cav
     -> counts over the tooth columns (opaque, tooth-bright): n, the share with exactly 1, with >= 2, the mean; for the
     central columns (|a| <= centre_iod IOD: the harvested incisors) and for all."""
     from scipy.ndimage import gaussian_filter1d
+
     T = np.asarray(tex, np.float32)
     Th, Tw = T.shape[:2]
     al = np.clip(T[..., 3], 0, 1)
     L = cv2.cvtColor(np.clip(T[..., :3], 0, 255).astype(np.uint8), cv2.COLOR_BGR2LAB)[..., 0].astype(np.float32)
     Lc = L * al + cav * (1 - al)
-    if not upper: Lc, al = Lc[::-1], al[::-1]
+    if not upper:
+        Lc, al = Lc[::-1], al[::-1]
     sg = max(0.5, sigma * iod * texel)
     run_max = max(2, int(round(max_run * iod * texel)))
     a = (np.arange(Tw) + 0.5) / texel - Tw / (2.0 * texel)
     counts = np.full(Tw, -1, int)
     for c in range(Tw):
         op = al[:, c] > 0.5
-        if op.sum() < 3: continue
+        if op.sum() < 3:
+            continue
         top = float(np.percentile(Lc[op, c], 90))
-        if top < cav + 40: continue
-        p = gaussian_filter1d(Lc[:, c], sg, mode='nearest')
+        if top < cav + 40:
+            continue
+        p = gaussian_filter1d(Lc[:, c], sg, mode="nearest")
         k = 0
         i = 1
         while i < Th - 1:
             if p[i] >= p[i - 1] and p[i] > p[i + 1] and p[i] >= cav + 0.5 * (top - cav):
                 q = i
-                while q + 1 < Th and p[q + 1] <= p[q]: q += 1
-                j = i + int(np.argmax(p[i:q + 1] <= p[q] + 0.1 * (p[i] - p[q])))     # where the fall is 90 % done
-                if p[i] - p[q] >= drop * (top - cav) and j - i <= run_max: k += 1
+                while q + 1 < Th and p[q + 1] <= p[q]:
+                    q += 1
+                j = i + int(np.argmax(p[i : q + 1] <= p[q] + 0.1 * (p[i] - p[q])))  # where the fall is 90 % done
+                if p[i] - p[q] >= drop * (top - cav) and j - i <= run_max:
+                    k += 1
                 i = q
             i += 1
         counts[c] = k
+
     def summ(m):
         x = counts[m & (counts >= 0)]
-        return dict(n=int(len(x)), one=round(float((x == 1).mean()), 3) if len(x) else None, two_plus=round(float((x >= 2).mean()), 3) if len(x) else None,
-                    mean=round(float(x.mean()), 3) if len(x) else None)
+        return dict(
+            n=int(len(x)),
+            one=round(float((x == 1).mean()), 3) if len(x) else None,
+            two_plus=round(float((x >= 2).mean()), 3) if len(x) else None,
+            mean=round(float(x.mean()), 3) if len(x) else None,
+        )
+
     return dict(centre=summ(np.abs(a) <= centre_iod * iod), all=summ(np.ones(Tw, bool)), counts=counts.tolist())
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog='lsdub layer-reg', description=__doc__.split('\n')[0])
-    ap.add_argument('--render', help='a render dir (warp.json + full.mp4) or a warp.json path (required without --pix; with '
-                                     '--pix optional: the render\'s logged jaw and its skipped frames)')
-    ap.add_argument('--video', help='the rendered video (default <dir>/full.mp4)')
-    ap.add_argument('--json')
-    ap.add_argument('--md')
-    ap.add_argument('--w', type=int, default=4)
-    ap.add_argument('--no-texture', action='store_true')
-    ap.add_argument('--label')
-    ap.add_argument('--pix', action='store_true', help='v12: the pixel registration ruler (template-tracked teeth patches in '
-                                                        'the skull-stabilised crop) on --video: a take or a render')
-    ap.add_argument('--take-trk', help='--pix: npz with S3 = the take\'s raw MediaPipe 3D track (the warp\'s input)')
-    ap.add_argument('--frames', type=int, help='--pix: frame count (default: the track\'s)')
-    ap.add_argument('--take', help='--pix: the take video (its skin L keys the teeth; default = --video)')
-    ap.add_argument('--lm', help='--pix: IMAGE-mode landmark cache of --video (computed and saved when missing)')
-    ap.add_argument('--ppi', type=float, default=200.0, help='--pix: crop px per IOD')
+    ap = argparse.ArgumentParser(prog="lsdub layer-reg", description=__doc__.split("\n")[0])
+    ap.add_argument(
+        "--render",
+        help="a render dir (warp.json + full.mp4) or a warp.json path (required without --pix; with "
+        "--pix optional: the render's logged jaw and its skipped frames)",
+    )
+    ap.add_argument("--video", help="the rendered video (default <dir>/full.mp4)")
+    ap.add_argument("--json")
+    ap.add_argument("--md")
+    ap.add_argument("--w", type=int, default=4)
+    ap.add_argument("--no-texture", action="store_true")
+    ap.add_argument("--label")
+    ap.add_argument(
+        "--pix",
+        action="store_true",
+        help="v12: the pixel registration ruler (template-tracked teeth patches in "
+        "the skull-stabilised crop) on --video: a take or a render",
+    )
+    ap.add_argument("--take-trk", help="--pix: npz with S3 = the take's raw MediaPipe 3D track (the warp's input)")
+    ap.add_argument("--frames", type=int, help="--pix: frame count (default: the track's)")
+    ap.add_argument("--take", help="--pix: the take video (its skin L keys the teeth; default = --video)")
+    ap.add_argument("--lm", help="--pix: IMAGE-mode landmark cache of --video (computed and saved when missing)")
+    ap.add_argument("--ppi", type=float, default=200.0, help="--pix: crop px per IOD")
     a = ap.parse_args(argv)
-    if a.pix: return pix_main(a)
-    if not a.render: ap.error('--render is required (or --pix)')
-    wj = a.render if a.render.endswith('.json') else os.path.join(a.render, 'warp.json')
+    if a.pix:
+        return pix_main(a)
+    if not a.render:
+        ap.error("--render is required (or --pix)")
+    wj = a.render if a.render.endswith(".json") else os.path.join(a.render, "warp.json")
     d = os.path.dirname(os.path.abspath(wj))
     W = json.load(open(wj))
-    frames = W['frames']
-    meta = ((W.get('teeth') or {}).get('layers') or {}).get('reg_meta')
-    if not any(f.get('reg') for f in frames):
-        print(f'layer-reg: {wj} has no per-frame reg entries (rendered before v11, or without the layer stack)', file=sys.stderr)
+    frames = W["frames"]
+    meta = ((W.get("teeth") or {}).get("layers") or {}).get("reg_meta")
+    if not any(f.get("reg") for f in frames):
+        print(f"layer-reg: {wj} has no per-frame reg entries (rendered before v11, or without the layer stack)", file=sys.stderr)
         return 2
-    video = a.video or os.path.join(d, 'full.mp4')
+    video = a.video or os.path.join(d, "full.mp4")
     r = measure(frames, video if os.path.exists(video) else None, meta, a.w, not a.no_texture)
     label = a.label or os.path.basename(d)
-    if a.json: json.dump(r, open(a.json, 'w'))
+    if a.json:
+        json.dump(r, open(a.json, "w"))
     md = table_md(label, r)
-    if a.md: open(a.md, 'w').write(md)
+    if a.md:
+        open(a.md, "w").write(md)
     print(md)
     print(line(label, r))
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

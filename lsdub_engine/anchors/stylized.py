@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
+#!/usr/bin/env python3
 """stylized.py — classical-animation mouth rules for LSDub's non-human / cutout / puppet path.
 
 Single source of the shape set, phoneme->anchor map, decomposition axes, per-anchor puppet gape, and the
@@ -14,65 +14,95 @@ Anchors are named by APPEARANCE, not sound. Each anchor records:
   contact  - 'closed' | 'fv' (teeth-on-lip) | 'open'
   gape     - puppet jaw-open fraction of max (felt-mouth hinge; color-blind, openness only)
 """
+
 from __future__ import annotations
 import re
 
 # anchor: (rep_vis, openness, round, contact, gape)
 ANCHORS = {
-    'rest':   ('sil', 0.05,  0.0, 'open',   0.00),
-    'closed': ('PP',  0.00,  0.0, 'closed', 0.00),
-    'ah':     ('aa',  1.00,  0.0, 'open',   1.00),
-    'ai':     ('aa',  0.70,  0.0, 'open',   0.60),
-    'ee':     ('E',   0.50, -1.0, 'open',   0.20),
-    'oh':     ('oh',  0.60,  1.0, 'open',   0.60),
-    'oo':     ('ou',  0.30,  1.0, 'open',   0.30),
-    'fv':     ('FF',  0.12,  0.0, 'fv',     0.15),
-    'L':      ('nn',  0.30,  0.0, 'open',   0.15),
-    'cons':   ('DD',  0.25,  0.0, 'open',   0.15),
+    "rest": ("sil", 0.05, 0.0, "open", 0.00),
+    "closed": ("PP", 0.00, 0.0, "closed", 0.00),
+    "ah": ("aa", 1.00, 0.0, "open", 1.00),
+    "ai": ("aa", 0.70, 0.0, "open", 0.60),
+    "ee": ("E", 0.50, -1.0, "open", 0.20),
+    "oh": ("oh", 0.60, 1.0, "open", 0.60),
+    "oo": ("ou", 0.30, 1.0, "open", 0.30),
+    "fv": ("FF", 0.12, 0.0, "fv", 0.15),
+    "L": ("nn", 0.30, 0.0, "open", 0.15),
+    "cons": ("DD", 0.25, 0.0, "open", 0.15),
 }
 ANCHOR_REP = {k: v[0] for k, v in ANCHORS.items()}
-OPENNESS   = {k: v[1] for k, v in ANCHORS.items()}
-ROUND      = {k: v[2] for k, v in ANCHORS.items()}
-CONTACT    = {k: v[3] for k, v in ANCHORS.items()}
-GAPE       = {k: v[4] for k, v in ANCHORS.items()}
+OPENNESS = {k: v[1] for k, v in ANCHORS.items()}
+ROUND = {k: v[2] for k, v in ANCHORS.items()}
+CONTACT = {k: v[3] for k, v in ANCHORS.items()}
+GAPE = {k: v[4] for k, v in ANCHORS.items()}
 
-CLOSURES = {'closed', 'fv'}                      # held-then-popped, minimal lead, never blended
-VOWELS   = {'ah', 'ai', 'ee', 'oh', 'oo'}        # carry the motion; accents land here
+CLOSURES = {"closed", "fv"}  # held-then-popped, minimal lead, never blended
+VOWELS = {"ah", "ai", "ee", "oh", "oo"}  # carry the motion; accents land here
 
 # ARPAbet (stress digits stripped) -> anchor. Thin lookup; library is indexed by axes, not phoneme.
 ARPA2ANCHOR = {
-    'P': 'closed', 'B': 'closed', 'M': 'closed',
-    'F': 'fv', 'V': 'fv', 'PH': 'fv',
-    'L': 'L',
-    'AA': 'ah', 'AE': 'ah', 'AY': 'ah', 'AW': 'ah',
-    'AH': 'ai', 'AO': 'ai',
-    'IY': 'ee', 'IH': 'ee', 'EY': 'ee', 'EH': 'ee',
-    'OW': 'oh',
-    'UW': 'oo', 'UH': 'oo', 'W': 'oo', 'Q': 'oo',
-    'SIL': 'rest', 'SP': 'rest', 'SPN': 'rest', '': 'rest',
+    "P": "closed",
+    "B": "closed",
+    "M": "closed",
+    "F": "fv",
+    "V": "fv",
+    "PH": "fv",
+    "L": "L",
+    "AA": "ah",
+    "AE": "ah",
+    "AY": "ah",
+    "AW": "ah",
+    "AH": "ai",
+    "AO": "ai",
+    "IY": "ee",
+    "IH": "ee",
+    "EY": "ee",
+    "EH": "ee",
+    "OW": "oh",
+    "UW": "oo",
+    "UH": "oo",
+    "W": "oo",
+    "Q": "oo",
+    "SIL": "rest",
+    "SP": "rest",
+    "SPN": "rest",
+    "": "rest",
 }
-for _c in ['C', 'D', 'G', 'K', 'N', 'R', 'S', 'T', 'Z', 'Y', 'JH', 'J', 'SH', 'CH', 'TH', 'DH', 'HH', 'NG']:
-    ARPA2ANCHOR[_c] = 'cons'
+for _c in ["C", "D", "G", "K", "N", "R", "S", "T", "Z", "Y", "JH", "J", "SH", "CH", "TH", "DH", "HH", "NG"]:
+    ARPA2ANCHOR[_c] = "cons"
 
 # the 15-viseme library set (viseme_track.VIS) -> anchor
 VIS2ANCHOR = {
-    'sil': 'rest', 'PP': 'closed', 'FF': 'fv', 'TH': 'L', 'DD': 'cons', 'kk': 'cons',
-    'CH': 'cons', 'SS': 'cons', 'nn': 'cons', 'RR': 'cons',
-    'aa': 'ah', 'E': 'ee', 'ih': 'ee', 'oh': 'oh', 'ou': 'oo',
+    "sil": "rest",
+    "PP": "closed",
+    "FF": "fv",
+    "TH": "L",
+    "DD": "cons",
+    "kk": "cons",
+    "CH": "cons",
+    "SS": "cons",
+    "nn": "cons",
+    "RR": "cons",
+    "aa": "ah",
+    "E": "ee",
+    "ih": "ee",
+    "oh": "oh",
+    "ou": "oo",
 }
 
 # presets: the allowed anchor set (others remap to nearest). crude = Rhubarb A-F; southpark = 4 + rest.
 PRESETS = {
-    'classic':   set(ANCHORS),
-    'crude':     {'closed', 'cons', 'ee', 'ah', 'oh', 'oo'},
-    'southpark': {'rest', 'closed', 'ah', 'ee', 'oo'},
+    "classic": set(ANCHORS),
+    "crude": {"closed", "cons", "ee", "ah", "oh", "oo"},
+    "southpark": {"rest", "closed", "ah", "ee", "oo"},
 }
 
 
 def phoneme_to_anchor(p: str) -> str:
     """ARPAbet phoneme (stress digits ok) -> anchor; unknowns route to nearest open consonant."""
-    p = re.sub(r'\d+$', '', (p or '').strip().upper())
-    return ARPA2ANCHOR.get(p, 'cons')
+    p = re.sub(r"\d+$", "", (p or "").strip().upper())
+    return ARPA2ANCHOR.get(p, "cons")
 
 
 def _nearest_in(anchor: str, allowed: set) -> str:
@@ -80,7 +110,7 @@ def _nearest_in(anchor: str, allowed: set) -> str:
         return anchor
     # nearest by (openness, round, contact-match) distance
     o0, r0, c0 = OPENNESS[anchor], ROUND[anchor], CONTACT[anchor]
-    best, bd = 'rest' if 'rest' in allowed else next(iter(allowed)), 1e9
+    best, bd = "rest" if "rest" in allowed else next(iter(allowed)), 1e9
     for a in allowed:
         d = (OPENNESS[a] - o0) ** 2 + 0.5 * (ROUND[a] - r0) ** 2 + (0.0 if CONTACT[a] == c0 else 0.4)
         if d < bd:
@@ -92,8 +122,9 @@ def _scale(n_at24: int, fps: float) -> int:
     return max(1, round(n_at24 * fps / 24.0))
 
 
-def build_stylized_track(frames, fps=25.0, preset='classic', lead_vowel=2, lead_closed=1,
-                         min_hold=2, on_twos=True, singing=False, accent=True, cartoon=1.0):
+def build_stylized_track(
+    frames, fps=25.0, preset="classic", lead_vowel=2, lead_closed=1, min_hold=2, on_twos=True, singing=False, accent=True, cartoon=1.0
+):
     """Turn a viseme track (list of per-frame {'vis','vis2','mix','open',...}) into a stylized, snap-ready
     per-frame list: [{'anchor','rep','open','sq_w','sq_h','accent'}].
 
@@ -101,7 +132,7 @@ def build_stylized_track(frames, fps=25.0, preset='classic', lead_vowel=2, lead_
     rest-on-pause, accent (animate-to-vowels), singing vowel holds + vowel modification, and
     volume-conserving squash/stretch (sq_w width mult, sq_h height mult).
     """
-    allowed = PRESETS.get(preset, PRESETS['classic'])
+    allowed = PRESETS.get(preset, PRESETS["classic"])
     n = len(frames)
     if n == 0:
         return []
@@ -116,8 +147,8 @@ def build_stylized_track(frames, fps=25.0, preset='classic', lead_vowel=2, lead_
                 s = i
         return out
 
-    base = [_nearest_in(VIS2ANCHOR.get(f.get('vis', 'sil'), 'rest'), allowed) for f in frames]
-    opn0 = [float(f.get('open', OPENNESS[base[i]])) for i, f in enumerate(frames)]
+    base = [_nearest_in(VIS2ANCHOR.get(f.get("vis", "sil"), "rest"), allowed) for f in frames]
+    opn0 = [float(f.get("open", OPENNESS[base[i]])) for i, f in enumerate(frames)]
 
     # 1) lead: shift each shape's window EARLIER (picture ahead of sound). Vowels lead by lv, closures by
     #    lc. Paint runs in time order so an upcoming shape overwrites the tail of the previous = anticipation.
@@ -154,7 +185,7 @@ def build_stylized_track(frames, fps=25.0, preset='classic', lead_vowel=2, lead_
                 i += 1
         for i in range(n):
             if base[i] in VOWELS and opn[i] > 0.7:
-                base[i] = {'oo': 'oh', 'ee': 'ah', 'ai': 'ah'}.get(base[i], base[i])
+                base[i] = {"oo": "oh", "ee": "ah", "ai": "ah"}.get(base[i], base[i])
                 base[i] = _nearest_in(base[i], allowed)
 
     # 3) runs: enforce min-hold (drop too-short non-closure runs into a neighbour) + on-twos; closures >=2.
@@ -195,13 +226,13 @@ def build_stylized_track(frames, fps=25.0, preset='classic', lead_vowel=2, lead_
     # 4) rest on pause (only genuine silence; never demote a vowel or closure)
     for i in range(n):
         if opn[i] < 0.03 and base[i] not in CLOSURES and base[i] not in VOWELS:
-            base[i] = _nearest_in('rest', allowed)
+            base[i] = _nearest_in("rest", allowed)
 
     # 5) accent: vowel onset after a closure/rest -> +40% openness (×1.4 peak), decaying over the run.
     acc = [False] * n
     if accent:
         for i in range(n):
-            if base[i] in VOWELS and (i == 0 or base[i - 1] in CLOSURES or base[i - 1] == 'rest'):
+            if base[i] in VOWELS and (i == 0 or base[i - 1] in CLOSURES or base[i - 1] == "rest"):
                 acc[i] = True
 
     out = []
@@ -211,17 +242,18 @@ def build_stylized_track(frames, fps=25.0, preset='classic', lead_vowel=2, lead_
         if acc[i]:
             o = min(1.0, o * 1.4)
         # volume-conserving squash/stretch: more open -> narrower; round anchors narrower; closed -> wider.
-        stretch = 1.0 + cartoon * 0.4 * (o - OPENNESS['rest'])        # 1.0..~1.4 height on a wide open
+        stretch = 1.0 + cartoon * 0.4 * (o - OPENNESS["rest"])  # 1.0..~1.4 height on a wide open
         sq_h = stretch
-        sq_w = 1.0 / (stretch ** 0.5)
+        sq_w = 1.0 / (stretch**0.5)
         if ROUND[a] > 0:
-            sq_w *= (1.0 - 0.18 * cartoon * ROUND[a])                 # pucker narrows
+            sq_w *= 1.0 - 0.18 * cartoon * ROUND[a]  # pucker narrows
         elif ROUND[a] < 0:
-            sq_w *= (1.0 + 0.12 * cartoon * (-ROUND[a]))              # spread widens
+            sq_w *= 1.0 + 0.12 * cartoon * (-ROUND[a])  # spread widens
         if a in CLOSURES:
             sq_h, sq_w = 1.0, 1.0 + 0.06 * cartoon
-        out.append({'anchor': a, 'rep': ANCHOR_REP[a], 'open': round(o, 3),
-                    'sq_w': round(sq_w, 3), 'sq_h': round(sq_h, 3), 'accent': acc[i]})
+        out.append(
+            {"anchor": a, "rep": ANCHOR_REP[a], "open": round(o, 3), "sq_w": round(sq_w, 3), "sq_h": round(sq_h, 3), "accent": acc[i]}
+        )
     return out
 
 
@@ -232,7 +264,7 @@ def puppet_gape_track(frames, fps=25.0, accent=True, singing=False):
     n = len(frames)
     if n == 0:
         return []
-    anc = [VIS2ANCHOR.get(f.get('vis', 'sil'), 'rest') for f in frames]
+    anc = [VIS2ANCHOR.get(f.get("vis", "sil"), "rest") for f in frames]
     g = [GAPE[a] for a in anc]
 
     # one open per syllable: a short consonant run flanked by vowels is pulled down to the lower vowel floor
@@ -240,12 +272,12 @@ def puppet_gape_track(frames, fps=25.0, accent=True, singing=False):
     while i < n:
         if anc[i] in VOWELS:
             j = i + 1
-            while j < n and anc[j] == 'cons':
+            while j < n and anc[j] == "cons":
                 j += 1
             if j < n and anc[j] in VOWELS and (j - i) <= _scale(4, fps):
                 lo = min(g[i], g[j])
                 for k in range(i + 1, j):
-                    g[k] = min(g[k], lo)      # don't let an intervocalic consonant re-open the jaw
+                    g[k] = min(g[k], lo)  # don't let an intervocalic consonant re-open the jaw
             i = j
         else:
             i += 1
@@ -253,7 +285,7 @@ def puppet_gape_track(frames, fps=25.0, accent=True, singing=False):
     # accent: vowel onset after a closure/rest gets the Henson punch
     g = list(g)
     for i in range(n):
-        if anc[i] in VOWELS and (i == 0 or anc[i - 1] in CLOSURES or anc[i - 1] == 'rest'):
+        if anc[i] in VOWELS and (i == 0 or anc[i - 1] in CLOSURES or anc[i - 1] == "rest"):
             g[i] = min(1.0, g[i] * 1.4) if accent else g[i]
         elif anc[i] in VOWELS and accent and g[i] < 0.5:
             g[i] *= 0.9
@@ -265,8 +297,8 @@ def puppet_gape_track(frames, fps=25.0, accent=True, singing=False):
     for i in range(n):
         tgt = g[i]
         if tgt >= cur:
-            cur += (tgt - cur) / max(1, rise)          # fast ease-out rise
+            cur += (tgt - cur) / max(1, rise)  # fast ease-out rise
         else:
-            cur += (tgt - cur) / max(1, rise + 1)      # slightly slower close
+            cur += (tgt - cur) / max(1, rise + 1)  # slightly slower close
         out[i] = round(max(0.0, cur), 3)
     return out

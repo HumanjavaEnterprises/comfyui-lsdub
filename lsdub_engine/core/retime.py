@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
+#!/usr/bin/env python3
 """retime.py: the MAKER for cadence hitches (lsdub/audits/cadence.py is the checker). CPU.
 
 A generator stall is a stretch where the picture crawls for a few frames, then catches up. The frames all exist; they
@@ -12,8 +12,9 @@ everything outside the windows are unchanged, so audio sync and the track timing
 
   lsdub retime --video plate.mp4 --out plate_rt.mp4 [--pad 3]   (detects with the cadence checker, then fixes)
 """
-import argparse
+
 from ..io import ff
+import argparse
 import cv2, numpy as np
 from ..audits import cadence
 
@@ -23,15 +24,18 @@ def _read(video):
     F = []
     while True:
         ok, f = cap.read()
-        if not ok: break
+        if not ok:
+            break
         F.append(f)
     return F, cap.get(cv2.CAP_PROP_FPS)
 
 
 def interp(f0, f1, a, dis):
     """frame at fraction a between f0 and f1: both warped along the flow toward time a, then blended."""
-    if a <= 1e-3: return f0.copy()
-    if a >= 1 - 1e-3: return f1.copy()
+    if a <= 1e-3:
+        return f0.copy()
+    if a >= 1 - 1e-3:
+        return f1.copy()
     g0 = cv2.cvtColor(f0, cv2.COLOR_BGR2GRAY)
     g1 = cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY)
     fw = dis.calc(g0, g1, None)
@@ -48,7 +52,7 @@ def retime(F, sp, windows):
     out = list(F)
     dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
     for a, b in windows:
-        s = np.r_[0, np.cumsum(sp[a:b])]                             # cumulative motion at frames a..b
+        s = np.r_[0, np.cumsum(sp[a:b])]  # cumulative motion at frames a..b
         tgt = np.linspace(0, s[-1], b - a + 1)
         for k in range(1, b - a):
             j = int(np.clip(np.searchsorted(s, tgt[k]) - 1, 0, b - a - 1))
@@ -60,34 +64,68 @@ def retime(F, sp, windows):
 def windows_for(events, n, pad=3):
     W = []
     for e in events:
-        a, b = max(0, e['a'] - pad), min(n - 1, e['b'] + pad)
-        if W and a <= W[-1][1]: W[-1] = (W[-1][0], max(W[-1][1], b))
-        else: W.append((a, b))
+        a, b = max(0, e["a"] - pad), min(n - 1, e["b"] + pad)
+        if W and a <= W[-1][1]:
+            W[-1] = (W[-1][0], max(W[-1][1], b))
+        else:
+            W.append((a, b))
     return W
 
 
 def write(frames, fps, out, src):
     h, w = frames[0].shape[:2]
-    p = ff.popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{w}x{h}', '-r', str(fps),
-                          '-i', '-', '-i', src, '-map', '0:v', '-map', '1:a?', '-c:v', 'libx264', '-crf', '12',
-                          '-pix_fmt', 'yuv420p', '-c:a', 'copy', out], stdin=ff.PIPE)
-    for f in frames: p.stdin.write(f.tobytes())
+    p = ff.popen(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-s",
+            f"{w}x{h}",
+            "-r",
+            str(fps),
+            "-i",
+            "-",
+            "-i",
+            src,
+            "-map",
+            "0:v",
+            "-map",
+            "1:a?",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "12",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            out,
+        ],
+        stdin=ff.PIPE,
+    )
+    for f in frames:
+        p.stdin.write(f.tobytes())
     p.stdin.close()
     p.wait()
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument('--video', required=True)
-    ap.add_argument('--out', required=True)
-    ap.add_argument('--pad', type=int, default=3)
-    ap.add_argument('--hold-ratio', type=float, default=0.45)
-    ap.add_argument('--min-speed', type=float, default=0.5)
+    ap.add_argument("--video", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--pad", type=int, default=3)
+    ap.add_argument("--hold-ratio", type=float, default=0.45)
+    ap.add_argument("--min-speed", type=float, default=0.5)
     a = ap.parse_args(argv)
     F, fps = _read(a.video)
     sp = cadence.speeds(a.video)
     ev = cadence.find(sp, a.hold_ratio, min_speed=a.min_speed)
-    W = windows_for([e for e in ev if e['kind'] == 'HOLD'], len(F), a.pad)
+    W = windows_for([e for e in ev if e["kind"] == "HOLD"], len(F), a.pad)
     print(f"retime {a.video}: {len(ev)} events, windows {W}")
     write(retime(F, sp, W), fps, a.out, a.video)
     sp2 = cadence.speeds(a.out)
@@ -95,5 +133,5 @@ def main(argv=None):
     print(f"confirm {a.out}: {'PASS' if not ev2 else 'FLAG ' + str(ev2)}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

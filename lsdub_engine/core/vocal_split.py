@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
+#!/usr/bin/env python3
 """vocal_split.py — ML vocal separation (Mel-Band RoFormer) for the lead-vocal drive.
 
 The mouth must follow the LEAD singer only. A DSP centre-extract leaves backing harmonies and reverb in the
@@ -8,7 +8,7 @@ The mouth must follow the LEAD singer only. A DSP centre-extract leaves backing 
 runs a band-split RoFormer over the mix and returns the vocal stem (and the instrumental as mix - vocals).
 
 Model: Mel-Band RoFormer (Wang et al. 2023), 60 mel bands, 6 x (time transformer, freq transformer), dim 384,
-stereo 44.1 kHz. The weights are the MIT-licensed vocal checkpoint; this file is our own torch implementation
+stereo 44.1 kHz. The weights are the vocal checkpoint; this file is our own torch implementation
 of the architecture, written to load that state_dict. Torch + numpy only (no librosa / einops): it runs in the
 ComfyUI venv as-is.
 
@@ -16,19 +16,18 @@ ComfyUI venv as-is.
 
 The ComfyUI node (comfyui/nodes_vocal.py) wraps `separate()` on ComfyUI AUDIO dicts.
 """
+
+from ..io import ff
 import argparse, os
-from ..io import ff as ffio
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 SR = 44100
-CFG = dict(dim=384, depth=6, num_bands=60, dim_head=64, heads=8, n_fft=2048, hop=441, win=2048,
-           mask_depth=2, chunk=352800, overlap=2)
-DEFAULT_CKPT = os.environ.get('LIPS_VOCAL_CKPT', os.path.join(os.environ.get('LIPS_CACHE', os.path.expanduser('~/.cache/lsdub')),
-                                                         'audio_separation', 'MelBandRoformer_kim_vocals.ckpt'))
-CKPT_SHA256 = '87201f4d31afb5bc79993230fc49446918425574db48c01c405e44f365c7559e'
+CFG = dict(dim=384, depth=6, num_bands=60, dim_head=64, heads=8, n_fft=2048, hop=441, win=2048, mask_depth=2, chunk=352800, overlap=2)
+DEFAULT_CKPT = os.path.expanduser("~/ComfyUI/models/audio_separation/MelBandRoformer_kim_vocals.ckpt")
+CKPT_SHA256 = "87201f4d31afb5bc79993230fc49446918425574db48c01c405e44f365c7559e"
 
 
 # --- mel filter bank (Slaney scale + Slaney area norm), only its non-zero pattern decides the bands ---
@@ -60,9 +59,9 @@ def mel_bank(sr, n_fft, n_mels):
     w = np.zeros((n_mels, len(fft_f)))
     for i in range(n_mels):
         w[i] = np.maximum(0, np.minimum(-ramps[i] / fdiff[i], ramps[i + 2] / fdiff[i + 1]))
-    w *= (2.0 / (mel_f[2:n_mels + 2] - mel_f[:n_mels]))[:, None]
+    w *= (2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels]))[:, None]
     w[0, 0] = w[0, 1] * 0.25
-    w[-1, -1] = w[-1, -2] * 0.25          # cover DC and Nyquist
+    w[-1, -1] = w[-1, -2] * 0.25  # cover DC and Nyquist
     return w.astype(np.float32)
 
 
@@ -70,7 +69,7 @@ def mel_bank(sr, n_fft, n_mels):
 class RMSNorm(nn.Module):
     def __init__(self, dim):
         super().__init__()
-        self.scale = dim ** 0.5
+        self.scale = dim**0.5
         self.gamma = nn.Parameter(torch.ones(dim))
 
     def forward(self, x):
@@ -82,7 +81,7 @@ class Rotary(nn.Module):
         super().__init__()
         self.freqs = nn.Parameter(1.0 / 10000 ** (torch.arange(0, dim_head, 2).float() / dim_head), requires_grad=False)
 
-    def forward(self, x):                                               # x: (..., n, d), pairs interleaved
+    def forward(self, x):  # x: (..., n, d), pairs interleaved
         n = x.shape[-2]
         ang = torch.arange(n, device=x.device, dtype=torch.float32)[:, None] * self.freqs.float()[None]
         ang = ang.repeat_interleave(2, dim=-1)
@@ -115,8 +114,9 @@ class Attention(nn.Module):
 class FeedForward(nn.Module):
     def __init__(self, dim, mult=4):
         super().__init__()
-        self.net = nn.Sequential(RMSNorm(dim), nn.Linear(dim, dim * mult), nn.GELU(), nn.Dropout(0.0),
-                                 nn.Linear(dim * mult, dim), nn.Dropout(0.0))
+        self.net = nn.Sequential(
+            RMSNorm(dim), nn.Linear(dim, dim * mult), nn.GELU(), nn.Dropout(0.0), nn.Linear(dim * mult, dim), nn.Dropout(0.0)
+        )
 
     def forward(self, x):
         return self.net(x)
@@ -129,9 +129,9 @@ class Transformer(nn.Module):
         self.norm = RMSNorm(dim)
 
     def forward(self, x):
-        for attn, ff in self.layers:
+        for attn, mlp in self.layers:
             x = attn(x) + x
-            x = ff(x) + x
+            x = mlp(x) + x
         return self.norm(x)
 
 
@@ -140,40 +140,40 @@ def _mlp(dim_in, dim_out, hidden, depth):
     net = []
     for i, (a, b) in enumerate(zip(dims[:-1], dims[1:])):
         net.append(nn.Linear(a, b))
-        if i < len(dims) - 2: net.append(nn.Tanh())
+        if i < len(dims) - 2:
+            net.append(nn.Tanh())
     return nn.Sequential(*net)
 
 
 class MelBandRoformer(nn.Module):
-    def __init__(self, dim=384, depth=6, num_bands=60, dim_head=64, heads=8, n_fft=2048, hop=441, win=2048,
-                 mask_depth=2, **_):
+    def __init__(self, dim=384, depth=6, num_bands=60, dim_head=64, heads=8, n_fft=2048, hop=441, win=2048, mask_depth=2, **_):
         super().__init__()
         self.stft = dict(n_fft=n_fft, hop_length=hop, win_length=win, normalized=False)
         self.win = win
-        bank = torch.from_numpy(mel_bank(SR, n_fft, num_bands)) > 0                   # (bands, freqs)
+        bank = torch.from_numpy(mel_bank(SR, n_fft, num_bands)) > 0  # (bands, freqs)
         fidx = torch.arange(n_fft // 2 + 1).expand(num_bands, -1)[bank]
-        fidx = (fidx[:, None] * 2 + torch.arange(2)).flatten()                          # stereo interleave
-        self.register_buffer('freq_indices', fidx, persistent=False)
-        self.register_buffer('bands_per_freq', bank.sum(0), persistent=False)
-        dims_in = tuple(4 * int(c) for c in bank.sum(1))                                # 2 ch x complex
+        fidx = (fidx[:, None] * 2 + torch.arange(2)).flatten()  # stereo interleave
+        self.register_buffer("freq_indices", fidx, persistent=False)
+        self.register_buffer("bands_per_freq", bank.sum(0), persistent=False)
+        dims_in = tuple(4 * int(c) for c in bank.sum(1))  # 2 ch x complex
         self.dims_in = dims_in
-        self.layers = nn.ModuleList([nn.ModuleList([Transformer(dim, heads, dim_head), Transformer(dim, heads, dim_head)])
-                                     for _ in range(depth)])
+        self.layers = nn.ModuleList(
+            [nn.ModuleList([Transformer(dim, heads, dim_head), Transformer(dim, heads, dim_head)]) for _ in range(depth)]
+        )
         self.band_split = nn.Module()
         self.band_split.to_features = nn.ModuleList([nn.Sequential(RMSNorm(d), nn.Linear(d, dim)) for d in dims_in])
         me = nn.Module()
-        me.to_freqs = nn.ModuleList([nn.Sequential(_mlp(dim, d * 2, dim * 4, mask_depth), nn.GLU(-1))
-                                                       for d in dims_in])
+        me.to_freqs = nn.ModuleList([nn.Sequential(_mlp(dim, d * 2, dim * 4, mask_depth), nn.GLU(-1)) for d in dims_in])
         self.mask_estimators = nn.ModuleList([me])
 
-    def forward(self, audio):                                           # audio: (b, 2, t) -> vocals (b, 2, t)
+    def forward(self, audio):  # audio: (b, 2, t) -> vocals (b, 2, t)
         b, s, t = audio.shape
         audio = audio.float()
         wdt = self.band_split.to_features[0][1].weight.dtype
         win = torch.hann_window(self.win, device=audio.device)
         spec = torch.stft(audio.reshape(b * s, t), **self.stft, window=win, return_complex=True)
-        spec = torch.view_as_real(spec).reshape(b, s, *spec.shape[-2:], 2)                # b s f t c
-        spec = spec.permute(0, 2, 1, 3, 4).reshape(b, -1, spec.shape[-2], 2)             # b (f s) t c
+        spec = torch.view_as_real(spec).reshape(b, s, *spec.shape[-2:], 2)  # b s f t c
+        spec = spec.permute(0, 2, 1, 3, 4).reshape(b, -1, spec.shape[-2], 2)  # b (f s) t c
         x = spec[:, self.freq_indices].permute(0, 2, 1, 3).reshape(b, spec.shape[2], -1).to(wdt)  # b t (f c)
         x = torch.stack([m(c) for c, m in zip(x.split(self.dims_in, -1), self.band_split.to_features)], -2)
         T, Fb, D = x.shape[1:]
@@ -182,7 +182,7 @@ class MelBandRoformer(nn.Module):
             x = ft(x.reshape(b * T, Fb, D)).reshape(b, T, Fb, D)
         mask = torch.cat([m(xb) for xb, m in zip(x.unbind(-2), self.mask_estimators[0].to_freqs)], -1)
         mask = torch.view_as_complex(mask.float().reshape(b, T, -1, 2).permute(0, 2, 1, 3).contiguous())  # b f' t
-        cspec = torch.view_as_complex(spec.contiguous())                                   # b (f s) t
+        cspec = torch.view_as_complex(spec.contiguous())  # b (f s) t
         summed = torch.zeros_like(cspec).index_add_(1, self.freq_indices, mask)
         denom = self.bands_per_freq.repeat_interleave(2).clamp(min=1).to(cspec.real.dtype)[None, :, None]
         out = (cspec * summed / denom).reshape(b, -1, s, T).transpose(1, 2).reshape(b * s, -1, T)
@@ -193,21 +193,23 @@ class MelBandRoformer(nn.Module):
 _MODEL = {}
 
 
-def load(ckpt=DEFAULT_CKPT, device='cuda', dtype=torch.float32):   # fp16 overflows in this net; bf16 or fp32
+def load(ckpt=DEFAULT_CKPT, device="cuda", dtype=torch.float32):  # fp16 overflows in this net; bf16 or fp32
     key = (ckpt, str(device), dtype)
-    if key in _MODEL: return _MODEL[key]
+    if key in _MODEL:
+        return _MODEL[key]
     m = MelBandRoformer(**CFG)
-    sd = torch.load(ckpt, map_location='cpu', weights_only=True)                         # tensors only, no pickle code
+    sd = torch.load(ckpt, map_location="cpu", weights_only=True)  # tensors only, no pickle code
     m.load_state_dict(sd, strict=True)
     m = m.to(device).eval()
-    if dtype != torch.float32: m = m.to(dtype)
+    if dtype != torch.float32:
+        m = m.to(dtype)
     _MODEL.clear()
     _MODEL[key] = m
     return m
 
 
 @torch.inference_mode()
-def separate(mix, model, chunk=CFG['chunk'], overlap=CFG['overlap'], batch=4, progress=None):
+def separate(mix, model, chunk=CFG["chunk"], overlap=CFG["overlap"], batch=4, progress=None):
     """mix: float tensor (2, n) at 44.1 kHz -> vocals (2, n). Overlap-add with a fade window."""
     dev = next(model.parameters()).device
     n = mix.shape[-1]
@@ -223,44 +225,50 @@ def separate(mix, model, chunk=CFG['chunk'], overlap=CFG['overlap'], batch=4, pr
     acc = torch.zeros_like(x)
     cnt = torch.zeros(x.shape[-1])
     for i in range(0, len(starts), batch):
-        ss = starts[i:i + batch]
-        seg = torch.stack([x[:, s0:s0 + chunk] for s0 in ss]).to(dev)
+        ss = starts[i : i + batch]
+        seg = torch.stack([x[:, s0 : s0 + chunk] for s0 in ss]).to(dev)
         y = model(seg).float().cpu()
         for j, s0 in enumerate(ss):
-            acc[:, s0:s0 + chunk] += y[j] * w
-            cnt[s0:s0 + chunk] += w
-        if progress: progress(min(i + batch, len(starts)), len(starts))
-    return (acc / cnt.clamp(min=1e-6))[:, pad:pad + n]
+            acc[:, s0 : s0 + chunk] += y[j] * w
+            cnt[s0 : s0 + chunk] += w
+        if progress:
+            progress(min(i + batch, len(starts)), len(starts))
+    return (acc / cnt.clamp(min=1e-6))[:, pad : pad + n]
 
 
 def _read(path):
-    raw = ffio.run(['ffmpeg', '-v', 'error', '-i', path, '-ac', '2', '-ar', str(SR), '-f', 'f32le', '-'],
-                         capture_output=True, check=True).stdout
+    raw = ff.run(
+        ["ffmpeg", "-v", "error", "-i", path, "-ac", "2", "-ar", str(SR), "-f", "f32le", "-"], capture_output=True, check=True
+    ).stdout
     return torch.from_numpy(np.frombuffer(raw, np.float32).reshape(-1, 2).T.copy())
 
 
 def _write(path, x):
-    ffio.run(['ffmpeg', '-v', 'error', '-y', '-f', 'f32le', '-ar', str(SR), '-ac', str(x.shape[0]), '-i', '-',
-                    '-c:a', 'pcm_s16le', path], input=x.T.contiguous().numpy().astype(np.float32).tobytes(), check=True)
+    ff.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "f32le", "-ar", str(SR), "-ac", str(x.shape[0]), "-i", "-", "-c:a", "pcm_s16le", path],
+        input=x.T.contiguous().numpy().astype(np.float32).tobytes(),
+        check=True,
+    )
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument('--in', dest='inp', required=True)
-    ap.add_argument('--out-vocals', required=True)
-    ap.add_argument('--out-inst')
-    ap.add_argument('--ckpt', default=DEFAULT_CKPT)
-    ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
-    ap.add_argument('--bf16', action='store_true', help='half the VRAM; fp32 is the reference')
+    ap.add_argument("--in", dest="inp", required=True)
+    ap.add_argument("--out-vocals", required=True)
+    ap.add_argument("--out-inst")
+    ap.add_argument("--ckpt", default=DEFAULT_CKPT)
+    ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--bf16", action="store_true", help="half the VRAM; fp32 is the reference")
     a = ap.parse_args(argv)
     mix = _read(a.inp)
-    m = load(a.ckpt, a.device, torch.bfloat16 if (a.bf16 and a.device != 'cpu') else torch.float32)
-    v = separate(mix, m, progress=lambda i, n: print(f'\r  chunk {i}/{n}', end='', flush=True))
+    m = load(a.ckpt, a.device, torch.bfloat16 if (a.bf16 and a.device != "cpu") else torch.float32)
+    v = separate(mix, m, progress=lambda i, n: print(f"\r  chunk {i}/{n}", end="", flush=True))
     print()
     _write(a.out_vocals, v)
-    if a.out_inst: _write(a.out_inst, mix - v)
-    print(f'vocals -> {a.out_vocals}' + (f'; instrumental -> {a.out_inst}' if a.out_inst else ''))
+    if a.out_inst:
+        _write(a.out_inst, mix - v)
+    print(f"vocals -> {a.out_vocals}" + (f"; instrumental -> {a.out_inst}" if a.out_inst else ""))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

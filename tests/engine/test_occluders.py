@@ -16,7 +16,7 @@ def test_restore_keeps_take_pixels_under_the_mask_only():
 
 
 def test_load_resizes_and_pads(tmp_path):
-    p = tmp_path / 'occ.npz'
+    p = tmp_path / "occ.npz"
     np.savez_compressed(p, masks=np.full((1, 10, 20), 255, np.uint8))
     m = occluders.load(str(p), 3, (20, 40))
     assert m.shape == (3, 20, 40) and m[0].min() == 1.0 and m[2].max() == 0.0

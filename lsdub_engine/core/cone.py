@@ -7,6 +7,7 @@
   red:   re-stage the shot (or re-shoot)
 Pitch sign follows `lsdub scan` (negative = head tilted back / up). Also wants the face >= 300 px tall at 1080p.
 """
+
 import argparse
 import json
 
@@ -26,7 +27,7 @@ def zone(yaw, pitch, roll):
 def report(scan):
     rows = scan["frames"]
     z = [zone(r.get("yaw"), r.get("pitch"), r.get("roll")) for r in rows]
-    found = max(1, len(z) - z.count("lost"))   # frames the tracker lost don't count for or against the shot
+    found = max(1, len(z) - z.count("lost"))  # frames the tracker lost don't count for or against the shot
     frac = {k: round(z.count(k) / found, 3) for k in ("green", "amber", "red")}
     frac["lost"] = round(z.count("lost") / max(1, len(z)), 3)
     if frac["green"] >= 0.9:

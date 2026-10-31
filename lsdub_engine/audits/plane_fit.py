@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
+#!/usr/bin/env python3
 """plane_fit.py — does the mouth sit ON the face's 3D surface, or is it a flat sticker? (founder 2026-10-15: "more
 accurate to the face and the facial plane").
 
@@ -16,12 +16,13 @@ The lower lip / jaw / corners are not used: they move with the viseme, the upper
 
   lsdub plane-fit --take body.mp4 --frames 47 [--json out.json] take=body.mp4 v10=v10.mp4 v11=v11.mp4
 """
+
 import argparse, json
 import numpy as np
 from ..core.mouth_paint import track as _track
 from ..core.mouth_morph import ANCH
 
-RIG = [i for i in ANCH if i not in (205, 425, 98, 327, 2, 50, 280, 187, 411)]   # head-rigid only (no cheek/nostril points)
+RIG = [i for i in ANCH if i not in (205, 425, 98, 327, 2, 50, 280, 187, 411)]  # head-rigid only (no cheek/nostril points)
 
 
 def sim3(src, dst):
@@ -32,7 +33,7 @@ def sim3(src, dst):
     d = np.sign(np.linalg.det(U @ Vt))
     D = np.diag([1, 1, d])
     R = U @ D @ Vt
-    s = np.trace(np.diag(S_) @ D) / (a ** 2).sum()
+    s = np.trace(np.diag(S_) @ D) / (a**2).sum()
     return s * R, md - s * R @ ms
 
 
@@ -44,7 +45,7 @@ def frame_axes(P):
     return x, (y if y[1] < 0 else -y)
 
 
-ARC = [40, 39, 37, 0, 267, 269, 270]   # outer upper lip, centre third-to-third (no corners)
+ARC = [40, 39, 37, 0, 267, 269, 270]  # outer upper lip, centre third-to-third (no corners)
 
 
 def arc_shape(P, w):
@@ -58,41 +59,44 @@ def arc_shape(P, w):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument('--take', required=True)
-    ap.add_argument('--frames', type=int, required=True)
-    ap.add_argument('--json')
-    ap.add_argument('videos', nargs='+', help='name=path')
+    ap.add_argument("--take", required=True)
+    ap.add_argument("--frames", type=int, required=True)
+    ap.add_argument("--json")
+    ap.add_argument("videos", nargs="+", help="name=path")
     a = ap.parse_args(argv)
     T, _, _ = _track(a.take, a.frames, z=True)
     op = np.linalg.norm(T[:, 13, :2] - T[:, 14, :2], axis=1) / np.linalg.norm(T[:, 10, :2] - T[:, 152, :2], axis=1)
     r = int(np.argmin(op))
     Xr = T[r]
-    out = {'ref_frame': r}
+    out = {"ref_frame": r}
     for nv in a.videos:
-        name, path = nv.split('=', 1)
+        name, path = nv.split("=", 1)
         S, _, found = _track(path, a.frames, z=True)
         n = len(S)
-        E = {'arc': [], 'sag': [], 'asym': []}
+        E = {"arc": [], "sag": [], "asym": []}
         for i in range(n):
             sR, t = sim3(Xr[RIG], S[i][RIG])
             pred = Xr @ sR.T + t
             w = np.linalg.norm(pred[291, :2] - pred[61, :2]) + 1e-9
-            E['arc'].append(float(np.linalg.norm(S[i][ARC, :2] - pred[ARC, :2], axis=1).mean() / w))
+            E["arc"].append(float(np.linalg.norm(S[i][ARC, :2] - pred[ARC, :2], axis=1).mean() / w))
             ps, pa = arc_shape(pred, w)
             qs, qa = arc_shape(S[i], w)
-            E['sag'].append(abs(qs - ps))
-            E['asym'].append(abs(qa - pa))
-        o = {'found': found}
+            E["sag"].append(abs(qs - ps))
+            E["asym"].append(abs(qa - pa))
+        o = {"found": found}
         for k, v in E.items():
             v = np.array(v)
-            o[k + '_med'] = float(np.median(v))
-            o[k + '_p95'] = float(np.percentile(v, 95))
-        o['per_frame_arc'] = [round(v, 4) for v in E['arc']]
+            o[k + "_med"] = float(np.median(v))
+            o[k + "_p95"] = float(np.percentile(v, 95))
+        o["per_frame_arc"] = [round(v, 4) for v in E["arc"]]
         out[name] = o
-        print(f"{name:8s} arc {o['arc_med']:.3f}/{o['arc_p95']:.3f}  sag {o['sag_med']:.3f}/{o['sag_p95']:.3f}"
-              f"  asym {o['asym_med']:.3f}/{o['asym_p95']:.3f}   (median/p95, mouth widths)")
-    if a.json: json.dump(out, open(a.json, 'w'), indent=1)
+        print(
+            f"{name:8s} arc {o['arc_med']:.3f}/{o['arc_p95']:.3f}  sag {o['sag_med']:.3f}/{o['sag_p95']:.3f}"
+            f"  asym {o['asym_med']:.3f}/{o['asym_p95']:.3f}   (median/p95, mouth widths)"
+        )
+    if a.json:
+        json.dump(out, open(a.json, "w"), indent=1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

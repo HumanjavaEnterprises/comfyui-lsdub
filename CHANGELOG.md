@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `lsdub_engine/` and `tests/engine/` are now build output of `scripts/vendor_engine.py` in lsdub; `lsdub_engine/VERSION` pins the
+  commit and CI rebuilds and diffs it. Presets move to `lsdub_engine/core/presets.py`, recipes arrive beside them.
+
 ## 0.1.3 (2026-10-30)
 
 - Speech-to-text falls back to the CPU when the GPU runtime is missing (for example CUDA 12 cuBLAS on a CUDA 13 image), so Align works on hosted GPUs.

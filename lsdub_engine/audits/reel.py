@@ -6,8 +6,9 @@ between shots, a caption per shot. Audio from --audio (or the first column's fil
   lsdub reel --out reel.mp4 --labels OLD NEW \\
       --shot "s01|first line|old_s01.mp4|new_s01.mp4" --shot "s02|second line|old_s02.mp4|new_s02.mp4" [--gap 0.5]
 """
-import argparse
+
 from ..io import ff
+import argparse
 import os
 import tempfile
 
@@ -30,12 +31,20 @@ def build(shots, out, labels, width=1920, height=1080, gap=0.5, fps=25, audio=No
             ins, flt = [], []
             for i, c in enumerate(clips):
                 ins += ["-i", c]
-                lab = f",drawtext=text='{_esc(labels[i])}':x=16:y=16:fontsize=28:fontcolor=white:box=1:boxcolor=black@0.5" if labels and i < len(labels) else ""
-                flt.append(f"[{i}:v]fps={fps},scale={cw}:{ch}:force_original_aspect_ratio=decrease,pad={cw}:{ch}:(ow-iw)/2:(oh-ih)/2{lab}[v{i}]")
+                lab = (
+                    f",drawtext=text='{_esc(labels[i])}':x=16:y=16:fontsize=28:fontcolor=white:box=1:boxcolor=black@0.5"
+                    if labels and i < len(labels)
+                    else ""
+                )
+                flt.append(
+                    f"[{i}:v]fps={fps},scale={cw}:{ch}:force_original_aspect_ratio=decrease,pad={cw}:{ch}:(ow-iw)/2:(oh-ih)/2{lab}[v{i}]"
+                )
             stack = "".join(f"[v{i}]" for i in range(n)) + (f"hstack=inputs={n}[row]" if n > 1 else "null[row]")
             cap = _esc(f"{sid}  {caption}")
-            flt.append(stack + f";[row]pad={width}:{height}:(ow-iw)/2:(oh-ih)/2-40:black,"
-                       f"drawtext=text='{cap}':x=(w-tw)/2:y=h-90:fontsize=36:fontcolor=white,format=yuv420p[v]")
+            flt.append(
+                stack + f";[row]pad={width}:{height}:(ow-iw)/2:(oh-ih)/2-40:black,"
+                f"drawtext=text='{cap}':x=(w-tw)/2:y=h-90:fontsize=36:fontcolor=white,format=yuv420p[v]"
+            )
             seg = f"{d}/s{k}.mp4"
             dur = _duration(clips[0])
             ins += ["-f", "lavfi", "-t", f"{dur:.3f}", "-i", "anullsrc=r=48000:cl=stereo"]
@@ -46,13 +55,45 @@ def build(shots, out, labels, width=1920, height=1080, gap=0.5, fps=25, audio=No
             else:
                 aidx = 0 if src else n
             flt.append(f"[{aidx}:a]aresample=48000,aformat=channel_layouts=stereo[a]")
-            _run(*ins, "-filter_complex", ";".join(flt), "-map", "[v]", "-map", "[a]", "-t", f"{dur:.3f}",
-                 "-c:v", "libx264", "-crf", "16", "-c:a", "aac", seg)
+            _run(
+                *ins,
+                "-filter_complex",
+                ";".join(flt),
+                "-map",
+                "[v]",
+                "-map",
+                "[a]",
+                "-t",
+                f"{dur:.3f}",
+                "-c:v",
+                "libx264",
+                "-crf",
+                "16",
+                "-c:a",
+                "aac",
+                seg,
+            )
             parts.append(seg)
             if gap > 0 and k < len(shots) - 1:
                 g = f"{d}/g{k}.mp4"
-                _run("-f", "lavfi", "-i", f"color=black:s={width}x{height}:r={fps}:d={gap}", "-f", "lavfi", "-i",
-                     f"anullsrc=r=48000:cl=stereo:d={gap}", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", g)
+                _run(
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    f"color=black:s={width}x{height}:r={fps}:d={gap}",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    f"anullsrc=r=48000:cl=stereo:d={gap}",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-shortest",
+                    g,
+                )
                 parts.append(g)
         lst = f"{d}/list.txt"
         open(lst, "w").write("".join(f"file '{p}'\n" for p in parts))
@@ -66,8 +107,11 @@ def _duration(p):
 
 
 def _has_audio(p):
-    r = ff.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", p],
-                       capture_output=True, text=True)
+    r = ff.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", p],
+        capture_output=True,
+        text=True,
+    )
     return bool(r.stdout.strip())
 
 

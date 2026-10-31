@@ -162,7 +162,7 @@ class LSDubSyncQA(io.ComfyNode):
         from . import devices as _dev
         _dev.ensure_face_models()
         from .lsdub_engine.audits import sync_qa as Q, sync_strip as SS
-        from .lsdub_engine._inproc import call
+        from .lsdub_engine.core.steps import call
         from .nodes_mouth import LSDubDub, extract_shot
         only = parse_force_shots(shot_ids)
         st = project.stage('qa/syncqa', cls._key(project, source, shots, song, align, render, shot_ids))

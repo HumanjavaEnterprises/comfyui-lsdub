@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v5 rigid teeth (teeth_layer.py + --warp-teeth rigid): teeth are bone. Synthetic, CPU only."""
+
 import numpy as np, cv2
 from scipy.spatial.transform import Rotation as Rot
 
 from lsdub_engine.core import teeth_layer as tl, lip_layers as ll, mouth_paint
 
-SKIN = (120, 155, 205)       # BGR
+SKIN = (120, 155, 205)  # BGR
 LIP = (45, 40, 185)
 TOOTH = (235, 240, 245)
 CAV = (20, 15, 40)
@@ -19,8 +20,11 @@ class StubPose:
         self.s, self.R, self.t = np.asarray(s, float), np.asarray(R, float), np.asarray(t, float)
         self.par = np.hstack([np.log(self.s)[:, None], Rot.from_matrix(self.R).as_rotvec(), self.t])
 
-    def rigid3(self, i, X3): return self.s[i] * np.asarray(X3, float) @ self.R[i].T + self.t[i]
-    def rigid(self, i, X3): return self.rigid3(i, X3)[:, :2]
+    def rigid3(self, i, X3):
+        return self.s[i] * np.asarray(X3, float) @ self.R[i].T + self.t[i]
+
+    def rigid(self, i, X3):
+        return self.rigid3(i, X3)[:, :2]
 
 
 def _P(c=(160.0, 130.0), hw=40, gap=20.0):
@@ -52,7 +56,7 @@ def _frame(P, tooth_w=8, tooth_h=9, H=260, W=320):
     teeth = np.zeros((H, W), np.uint8)
     for k in range(-3, 3):
         x0 = int(round(c[0] + k * (tooth_w + 2)))
-        teeth[top:top + 6 + tooth_h, x0:x0 + tooth_w] = 1
+        teeth[top : top + 6 + tooth_h, x0 : x0 + tooth_w] = 1
     img[(teeth > 0) & (inner > 0)] = TOOTH
     return img
 
@@ -60,7 +64,8 @@ def _frame(P, tooth_w=8, tooth_h=9, H=260, W=320):
 def _layer(gaps=(4.0, 20.0, 28.0, 12.0), poses=None, tooth_w=8):
     n = len(gaps)
     S = np.array([_P(gap=g) for g in gaps])
-    if poses is None: poses = StubPose(np.ones(n), np.tile(np.eye(3), (n, 1, 1)), np.zeros((n, 3)))
+    if poses is None:
+        poses = StubPose(np.ones(n), np.tile(np.eye(3), (n, 1, 1)), np.zeros((n, 3)))
     frames = [_frame(_P(gap=g), tooth_w) for g in gaps]
     F = np.stack([S[:, 13, 1] * 0 + np.array(gaps), np.full(n, 64.0)], 1)
     return tl.TeethLayer(frames, S, poses, S, F, up_idx=2, lo_idx=2), frames, S
@@ -82,12 +87,14 @@ def test_upper_plate_size_constant_under_opening_changes():
         out, m = layer.render(take, 0, P_in, gap_t)
         cols = np.nonzero(_teeth_cols(out, 100, 130) & (m.max(0) > 0.5))[0]
         runs = np.split(cols, np.nonzero(np.diff(cols) > 1)[0] + 1)
-        starts = [r[0] for r in runs[1:] if len(r)]                     # left edges of the whole teeth
-        if gap_t > 10 and len(starts) >= 2: widths.append((float(np.median(np.diff(starts))), max(len(r) for r in runs)))
+        starts = [r[0] for r in runs[1:] if len(r)]  # left edges of the whole teeth
+        if gap_t > 10 and len(starts) >= 2:
+            widths.append((float(np.median(np.diff(starts))), max(len(r) for r in runs)))
         lab = cv2.cvtColor(out, cv2.COLOR_BGR2LAB)[..., 0]
         cx = 160
         ys = np.nonzero(lab[:, cx + 3] > 200)[0]
-        if len(ys): edges.append(ys.max())
+        if len(ys):
+            edges.append(ys.max())
     # every tooth stays the harvest frame's size (pitch 8 + 2 px gap = 10, width 8; the take's stretched teeth are 13 + 2),
     # whatever the opening
     assert len(widths) >= 2 and all(abs(p - 10) <= 0.5 and abs(w - 8) <= 1 for p, w in widths), widths
@@ -97,14 +104,14 @@ def test_upper_plate_size_constant_under_opening_changes():
 
 def test_upper_teeth_fixed_to_the_skull_pose():
     n = 3
-    R = Rot.from_euler('xyz', [[0, 0, 0], [0.1, -0.2, 0.05], [-0.15, 0.25, -0.1]]).as_matrix()
+    R = Rot.from_euler("xyz", [[0, 0, 0], [0.1, -0.2, 0.05], [-0.15, 0.25, -0.1]]).as_matrix()
     pose = StubPose([1.0, 1.1, 0.9], R, [[0, 0, 0], [12, -7, 3], [-9, 5, -2]])
     layer, frames, S = _layer(gaps=(20.0, 20.0, 20.0), poses=pose)
-    X = np.array([[150.0, 128.0], [172.0, 131.0], [161.0, 125.0]])                 # canonical points on the upper plate plane
+    X = np.array([[150.0, 128.0], [172.0, 131.0], [161.0, 125.0]])  # canonical points on the upper plate plane
     Ah = tl.plane_affine(pose, layer.h_up, layer.z_up, ref=layer.ref)
-    xh = X @ Ah[:, :2].T + Ah[:, 2]                                                # where they sit in the harvest frame
+    xh = X @ Ah[:, :2].T + Ah[:, 2]  # where they sit in the harvest frame
     for i in range(n):
-        for gap_t in (5.0, 30.0):                                                  # the opening never moves the upper teeth
+        for gap_t in (5.0, 30.0):  # the opening never moves the upper teeth
             A_up, _ = layer.affines(i, gap_t)
             got = xh @ A_up[:, :2].T + A_up[:, 2]
             want = pose.rigid(i, np.hstack([X, np.full((3, 1), layer.z_up)]))
@@ -120,11 +127,11 @@ def test_lower_teeth_rotate_about_the_hinge_without_scaling():
     u, d = layer.u, layer.d
     for th in (-0.2, 0.1, 0.3):
         R = tl.rot_axis(u, th)
-        assert abs(np.linalg.det(R) - 1) < 1e-9 and np.allclose(R @ R.T, np.eye(3))   # a rotation: no scale, no shear in 3D
-        assert np.allclose(R @ u, u)                                                    # about the lateral axis
+        assert abs(np.linalg.det(R) - 1) < 1e-9 and np.allclose(R @ R.T, np.eye(3))  # a rotation: no scale, no shear in 3D
+        assert np.allclose(R @ u, u)  # about the lateral axis
         T = layer.T_lo
         T2 = (T - layer.H) @ R.T + layer.H
-        assert abs(np.linalg.norm(T2 - layer.H) - np.linalg.norm(T - layer.H)) < 1e-9   # the incisor stays on its circle
+        assert abs(np.linalg.norm(T2 - layer.H) - np.linalg.norm(T - layer.H)) < 1e-9  # the incisor stays on its circle
     # the jaw angle from a target drop reproduces that drop along the head's down axis, opening = positive angle
     for delta in (-8.0, 5.0, 15.0):
         th = tl.jaw_angle(layer.T_lo, layer.H, u, d, delta)
@@ -146,10 +153,13 @@ def test_render_only_inside_the_mouth_and_flag_parses(capsys):
     far = np.ones(take.shape[:2], bool)
     far[60:200, 80:240] = False
     assert (out[far] == take[far]).all() and (m[far] == 0).all()
-    try: mouth_paint.main(['--help'])
-    except SystemExit: pass
+    try:
+        mouth_paint.main(["--help"])
+    except SystemExit:
+        pass
     o = capsys.readouterr().out
-    for f in ('--warp-teeth', '--warp-teeth-hinge', '--warp-teeth-jaw-gain'): assert f in o
+    for f in ("--warp-teeth", "--warp-teeth-hinge", "--warp-teeth-jaw-gain"):
+        assert f in o
 
 
 # ------------------------------------------------------------------------------------------- v6 (anchor + jaw plan) --
@@ -159,7 +169,7 @@ def _skin_seq(shifts, H=240, W=320):
     base = cv2.GaussianBlur((rng.random((H + 40, W + 40, 3)) * 255).astype(np.uint8), (0, 0), 1.5)
     frames, S = [], []
     for dx, dy in shifts:
-        frames.append(np.ascontiguousarray(base[20 - dy:20 - dy + H, 20 - dx:20 - dx + W]))
+        frames.append(np.ascontiguousarray(base[20 - dy : 20 - dy + H, 20 - dx : 20 - dx + W]))
         P = np.zeros((478, 3))
         P[:, :2] = (160 + dx, 120 + dy)
         a = np.linspace(0, 2 * np.pi, len(tl.ROOT), endpoint=False)
@@ -177,7 +187,7 @@ def test_teeth_share_the_upper_lip_root_motion():
     pose = np.tile([160.0, 120.0], (len(sh), 1))
     c = tl.skin_pin(frames, S, pose, 0, sigma=0, noise=0, iod=120.0)
     assert np.abs(c - (np.array(sh, float) - sh[0])).max() < 0.35, c
-    c4 = tl.skin_pin(frames, S, pose, 0, sigma=4.0, noise=0, iod=120.0)        # default: slow part left to the pose
+    c4 = tl.skin_pin(frames, S, pose, 0, sigma=4.0, noise=0, iod=120.0)  # default: slow part left to the pose
     assert np.abs(np.diff(c4, axis=0) - np.diff(np.array(sh, float), axis=0)).max() < 0.8
     # the plates carry the pin: upper AND lower maps are the v5 maps translated by exactly the pin of that frame
     layer, _, _ = _layer()
@@ -196,13 +206,15 @@ def test_jaw_plan_smooth_anticipatory_hidden_on_closure():
     noisy = clean + np.radians(1.5) * rng.standard_normal(n)
     th = tl.plan_jaw(noisy)
     jerk = lambda x: np.percentile(np.abs(np.diff(np.degrees(x), 3)), 95)
-    assert jerk(th) < 0.3 * jerk(noisy)                                       # smooth
-    assert np.abs(np.diff(th)).max() <= np.radians(3.0) + 1e-3                # speed limit (degrees / frame)
-    assert np.median(np.abs(th - clean)) < np.radians(1.0)                    # follows the target
+    assert jerk(th) < 0.3 * jerk(noisy)  # smooth
+    assert np.abs(np.diff(th)).max() <= np.radians(3.0) + 1e-3  # speed limit (degrees / frame)
+    assert np.median(np.abs(th - clean)) < np.radians(1.0)  # follows the target
+
     # zero-phase (no lag behind the target), and an explicit lead moves it earlier
     def lag(x):
-        c = [np.corrcoef(x[5 + k:n - 5 + k], clean[5:n - 5])[0, 1] for k in range(-4, 5)]
+        c = [np.corrcoef(x[5 + k : n - 5 + k], clean[5 : n - 5])[0, 1] for k in range(-4, 5)]
         return int(np.argmax(c)) - 4
+
     assert lag(th) == 0
     assert lag(tl.plan_jaw(noisy, lead=2.0)) == -2
     # near-closed frames: the planned jaw sits at or past the hide angle (lower teeth below the lower lip), even when the
@@ -218,8 +230,18 @@ def test_jaw_plan_smooth_anticipatory_hidden_on_closure():
 
 
 def test_v6_flags_parse(capsys):
-    try: mouth_paint.main(['--help'])
-    except SystemExit: pass
+    try:
+        mouth_paint.main(["--help"])
+    except SystemExit:
+        pass
     o = capsys.readouterr().out
-    for f in ('--warp-teeth-anchor', '--warp-teeth-jaw', '--warp-teeth-tongue-drop', '--warp-teeth-plates', '--warp-teeth-throat',
-              '--warp-teeth-mirror', '--warp-teeth-hide'): assert f in o
+    for f in (
+        "--warp-teeth-anchor",
+        "--warp-teeth-jaw",
+        "--warp-teeth-tongue-drop",
+        "--warp-teeth-plates",
+        "--warp-teeth-throat",
+        "--warp-teeth-mirror",
+        "--warp-teeth-hide",
+    ):
+        assert f in o

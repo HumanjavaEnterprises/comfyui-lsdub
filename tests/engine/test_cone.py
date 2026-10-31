@@ -6,7 +6,7 @@ from lsdub_engine import cone
 def test_zones():
     assert cone.zone(0, 0, 0) == "green"
     assert cone.zone(25, 0, 0) == "amber"
-    assert cone.zone(0, -17.5, 0) == "amber"   # head tilted back past the green limit
+    assert cone.zone(0, -17.5, 0) == "amber"  # head tilted back past the green limit
     assert cone.zone(45, 0, 0) == "red"
     assert cone.zone(None, None, None) == "lost"
 

@@ -8,7 +8,7 @@ import folder_paths
 from comfy_api.v0_0_2 import io
 
 from . import lsdub_types as T
-from .lsdub_engine import presets
+from .lsdub_engine.core import presets
 from .lsdub_engine.core.cpu_env import thread_report
 from .project import MODES, Project, parse_force_shots, stage_key, text_hash
 

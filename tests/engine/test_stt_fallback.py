@@ -1,5 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """stt(): a GPU whose CUDA runtime fails lazily (on the first encode, e.g. libcublas.so.12 missing on a CUDA 13 image)
 falls back to the CPU instead of failing the Align node."""
+
 import sys
 import types
 
@@ -22,7 +25,7 @@ def _fake_whisper(monkeypatch, fail_on):
     made = []
 
     class WhisperModel:
-        def __init__(self, model, device='cpu', **kw):
+        def __init__(self, model, device="cpu", **kw):
             self.device = device
             made.append(device)
 
@@ -31,12 +34,13 @@ def _fake_whisper(monkeypatch, fail_on):
 
             def gen():
                 if dev in fail_on:
-                    raise RuntimeError('Library libcublas.so.12 is not found or cannot be loaded')
-                yield _Seg([_W(' hello', 1.5, 1.9, 0.9)])
+                    raise RuntimeError("Library libcublas.so.12 is not found or cannot be loaded")
+                yield _Seg([_W(" hello", 1.5, 1.9, 0.9)])
+
             return gen(), None
 
-    monkeypatch.setitem(sys.modules, 'faster_whisper', types.SimpleNamespace(WhisperModel=WhisperModel))
-    monkeypatch.setattr(LA, 'whisper_source', lambda m, d: m)
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=WhisperModel))
+    monkeypatch.setattr(LA, "whisper_source", lambda m, d: m)
     return made
 
 
@@ -44,8 +48,9 @@ def _fake_whisper(monkeypatch, fail_on):
 def wav(tmp_path):
     import numpy as np
     import wave
-    p = tmp_path / 'a.wav'
-    with wave.open(str(p), 'wb') as w:
+
+    p = tmp_path / "a.wav"
+    with wave.open(str(p), "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(16000)
@@ -54,13 +59,13 @@ def wav(tmp_path):
 
 
 def test_lazy_cuda_failure_falls_back_to_cpu(monkeypatch, wav):
-    made = _fake_whisper(monkeypatch, fail_on={'cuda'})
-    out = LA.stt(wav, 0.0, 1.0, device='cuda')
-    assert made == ['cuda', 'cpu']
-    assert out and out[0]['w'] == 'hello'
+    made = _fake_whisper(monkeypatch, fail_on={"cuda"})
+    out = LA.stt(wav, 0.0, 1.0, device="cuda")
+    assert made == ["cuda", "cpu"]
+    assert out and out[0]["w"] == "hello"
 
 
 def test_cpu_failure_is_not_swallowed(monkeypatch, wav):
-    _fake_whisper(monkeypatch, fail_on={'cpu'})
+    _fake_whisper(monkeypatch, fail_on={"cpu"})
     with pytest.raises(RuntimeError):
-        LA.stt(wav, 0.0, 1.0, device='cpu')
+        LA.stt(wav, 0.0, 1.0, device="cpu")

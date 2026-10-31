@@ -18,8 +18,8 @@ from comfy_api.v0_0_2 import io
 from . import lsdub_types as T
 from . import media
 from .media import kit_folder
-from .lsdub_engine import presets
-from .lsdub_engine._inproc import call
+from .lsdub_engine.core import presets
+from .lsdub_engine.core.steps import call
 from .project import file_hash, shots_todo, stage_key, text_hash
 
 DUB_VERDICTS = ('DUB', 'DUB-MEDIUM')
