@@ -24,7 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu   # the DINOv2 load-by-path test
           if [ "${{ matrix.deps }}" = constraints ]; then CONSTRAINT="-c constraints-hosted.txt"; else CONSTRAINT=""; fi
-          pip install -r requirements.txt pytest ruff comfy-cli packaging $CONSTRAINT
+          pip install -r requirements.txt pytest ruff==0.17.3 comfy-cli packaging $CONSTRAINT
           pip freeze | grep -iE '^(mediapipe|numpy|opencv|scipy|transformers)'
       - name: Ruff (registry rules as errors)
         run: ruff check --select S102,S307,E702,F --target-version py310 .

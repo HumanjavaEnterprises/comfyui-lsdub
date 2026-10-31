@@ -261,7 +261,7 @@ def main(argv=None):
     g = sp.add_parser('gen')
     g.add_argument('--out-dir', required=True)
     g.add_argument('--seeds', type=int, nargs='+', default=[11, 22, 33])
-    g.add_argument('--only', nargs='+')
+    g.add_argument('--only', nargs='+', choices=list(SHAPES))
     g.add_argument('--no-register', action='store_true')
     g.add_argument('--keep', default='person, same face shape, skin tone, hair, eyewear and makeup',
                    help='who to keep, after "the same ": describe the character (face, skin, hair, eyewear)')

@@ -431,7 +431,8 @@ class LSDubDub(io.ComfyNode):
                                  render=render, reason=reason or info.get('mask_note', ''))
                 except Exception as e:                                  # a failed shot does not stop the cut
                     _log(f'shot {sid} failed: {type(e).__name__}: {e}')
-                    st.mark_done(False, time.perf_counter() - t0, time.process_time() - c0, error=f'{type(e).__name__}: {e}', reason=f'dub error: {type(e).__name__}: {e}')
+                    st.mark_done(False, time.perf_counter() - t0, time.process_time() - c0, error=f'{type(e).__name__}: {e}',
+                                 reason=f'dub error: {type(e).__name__}: {e}')
             d = st.done() or {}
             r = d.get('render') if d.get('render') and os.path.exists(d.get('render')) else ''
             ok = bool(d.get('pass'))

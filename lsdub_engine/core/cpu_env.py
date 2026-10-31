@@ -1,29 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""cpu_env.py: keep MediaPipe/GL work off the GPUs. `cpu_env()` is the environment for a child process (no CUDA,
-MediaPipe's GL context on Mesa llvmpipe, not the NVIDIA driver); `guard()` applies the same variables in-process, before
-MediaPipe is imported, but only where the caller has not set them (an operator-granted run keeps its own values)."""
+"""cpu_env.py: the one observation line the project node logs."""
 
 import os, sys
-
-CPU_VARS = {
-    "CUDA_VISIBLE_DEVICES": "",
-    "__EGL_VENDOR_LIBRARY_FILENAMES": "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
-    "MESA_LOADER_DRIVER_OVERRIDE": "llvmpipe",
-    "LIBGL_ALWAYS_SOFTWARE": "1",
-    "OMP_NUM_THREADS": "4",
-}
-
-
-def cpu_env():
-    """child processes stay off the GPUs: no CUDA, and MediaPipe's GL context on Mesa (llvmpipe), not the NVIDIA driver."""
-    return dict(os.environ, **CPU_VARS)
-
-
-def guard():
-    """the same variables in this process, each only if unset."""
-    for k, v in CPU_VARS.items():
-        os.environ.setdefault(k, v)
 
 
 def thread_report():
