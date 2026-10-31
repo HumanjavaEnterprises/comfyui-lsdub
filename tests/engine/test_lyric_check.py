@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v12 the mouth card's word facts (lsdub/core/lyric_check.py): the normaliser (heard vs lyric), the per-word confidence
+"""the mouth card's word facts (lsdub/core/lyric_check.py): the normaliser (heard vs lyric), the per-word confidence
 rule (weak words), reading the lyric word back from lyric_align's reconcile notes, the lyric check writer, the suggested
-lyric sheet, and `lsdub visemes` persisting the facts into the track (words block + per-frame wi; --no-words = v11)."""
+lyric sheet, and `lsdub visemes` persisting the facts into the track (words block + per-frame wi; --no-words = the older format)."""
 
 import json
 
@@ -279,7 +279,7 @@ def test_visemes_writes_the_words_block(tmp_path):
     vt.main(["--align", str(tmp_path / "a.json"), "--t0", "0.9", "--frames", "40", "--fps", "25", "--out", str(out)])
     vt.main(["--align", str(tmp_path / "a.json"), "--t0", "0.9", "--frames", "40", "--fps", "25", "--out", str(old), "--no-words"])
     T, O = json.load(open(out)), json.load(open(old))
-    assert "words" not in O and "words_meta" not in O and all("wi" not in f for f in O["frames"])  # v11 format
+    assert "words" not in O and "words_meta" not in O and all("wi" not in f for f in O["frames"])  # format
     assert [{k: v for k, v in f.items() if k != "wi"} for f in T["frames"]] == O["frames"]  # same frames
     assert {k: v for k, v in T.items() if k not in ("words", "words_meta")}.keys() == O.keys()
     assert [r["i"] for r in T["words"]] == [0, 1, 2] and T["words"][1]["lyric_text"] == "'em"

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v13 teeth scale (mouth_layers ANTHRO / anthro_map / synth_slots / the corridor): --warp-arch-layout anthro puts the plate's
+"""teeth scale (mouth_layers ANTHRO / anthro_map / synth_slots / the corridor): --warp-arch-layout anthro puts the plate's
 crowns on the anthropometric slots (per the 63 mm IOD = the face's inter-pupil distance); --warp-arch-corridor K fades the
 plates into the cavity at the corners of the planned opening; both opt-in, the defaults untouched. Synthetic, CPU only."""
 
@@ -94,7 +94,7 @@ def test_uniform_stretch_with_few_lines_is_capped():
 
 
 def test_complete_puts_the_crowns_on_the_slots_and_models_the_rest():
-    band = _teeth_tex(_band(), period=7.5, run=16.0)  # harvest teeth 0.075 IOD wide (v12's default period)
+    band = _teeth_tex(_band(), period=7.5, run=16.0)  # harvest teeth 0.075 IOD wide (the earlier default period)
     u = 69.0
     lay = dict(bounds=ml.anthro_bounds(ml.ANTHRO["up"], u, 1.02 * band.A))
     band.complete(100.0, upper=True, synth=True, crown=True, layout=lay)
@@ -221,7 +221,7 @@ def test_corridor_dims_both_arches_but_never_the_tongue():
 
 
 def test_corridor_keeps_the_v12_lip_band():
-    # v12's lip band (the plate beyond the crown takes the planned lip's inner rim colour) is the lips' own inner surface: the
+    # the earlier lip band (the plate beyond the crown takes the planned lip's inner rim colour) is the lips' own inner surface: the
     # corridor dims the crowns at the corners, never the band
     a, layer, frames, S = _comp(gaps=(4.0, 20.0, 28.0, 12.0), build="v12")
     b, *_ = _comp(gaps=(4.0, 20.0, 28.0, 12.0), build="v12", corridor=0.12)

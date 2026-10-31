@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v8 polish of the layered mouth (mouth_layers.py): the chin pin split + projected onto the jaw hinge's arc, the
+"""polish of the layered mouth (mouth_layers.py): the chin pin split + projected onto the jaw hinge's arc, the
 modelled tongue's near-closed constraint, modelled side teeth, multi-frame harvest, the lip-aware ghost check, flags.
 Synthetic, CPU only."""
 
@@ -64,7 +64,7 @@ def test_arc_pin_honours_the_exposure_limit_so_the_clamp_never_fires():
         over, rate, _ = comp.exposure_over(i, comp.jaw_R(i), Sq[i][14])
         assert over <= 0.05, (i, over)
     assert comp.dth.max() > 0.05  # (the bound did act: the jaw opened to it)
-    # (and the skin mode, v7, would have had to clamp)
+    # (and the skin mode would have had to clamp)
     comp7, layer7, _, _ = _comp(gaps=tuple([20.0] * n))
     layer7.jaw_plan = np.zeros(n)
     comp7.expose = 0.0

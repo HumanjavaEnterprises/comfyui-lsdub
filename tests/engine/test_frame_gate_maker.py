@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v9 per-frame gate, the MAKER + CONFIRMATION (lsdub/core/frame_gate.py) on a synthetic clip, CPU only. The clip's
+"""per-frame gate, the MAKER + CONFIRMATION (lsdub/core/frame_gate.py) on a synthetic clip, CPU only. The clip's
 input track is HELD for its first frames (no detection) while the head drifts -- the fast-head starts in
 miniature: the warp moves the wrong pixels there. A fake detector stands in for MediaPipe (it measures the synthetic
 lips). With --warp-gate off the render is the batch's bit-for-bit; render_frame(i, {}) reproduces every batch frame;
@@ -128,7 +128,7 @@ def test_render_frame_reproduces_the_batch_and_gate_off_is_v8(clip_dir):
     for i in range(n):
         out, mask, ent, P = clip.render_frame(i, {})
         assert np.array_equal(out, clip.outs[i]) and np.array_equal(mask, clip.masks[i]), i
-    # --warp-gate off: the same file as without the flag (the v8 path)
+    # --warp-gate off: the same file as without the flag (the earlier path)
     a0 = args(tmp, vid, n)
     a0.out = str(tmp / "v8.mp4")
     mw.run(a0)
@@ -366,10 +366,10 @@ def test_unresolved_none_leaves_an_unfixable_frame_as_round_0(clip_dir):
     assert outs["none"] == [], outs
 
 
-# ------------------------------------------------------------------------------- v11 --
+# --
 def test_held_fix_never_feeds_a_false_face_fit_to_the_warp(clip_dir, monkeypatch):
-    # seen in v10d: one IMAGE-mode re-detection locked onto a false face 0.8 IOD up; held_fix substituted it and the
-    # k5 smoothing spread it over 5 frames -> the gate's lm_hold drew the mouth at the nostrils. v11: it is never used.
+    # seen in one IMAGE-mode re-detection locked onto a false face 0.8 IOD up; held_fix substituted it and the
+    # k5 smoothing spread it over 5 frames -> the gate's lm_hold drew the mouth at the nostrils. it is never used.
     from test_frame_gate import _false_fit
 
     tmp, vid, frames, S = clip_dir
@@ -388,7 +388,7 @@ def test_held_fix_never_feeds_a_false_face_fit_to_the_warp(clip_dir, monkeypatch
     io = 120.0
     lips = lambda X: X[:, [13, 14, 61, 291], :2].mean(1)
     assert np.abs(lips(S_fix)[: k + 3] - lips(S)[: k + 3]).max() < 0.15 * io  # every frame near the real lips
-    # the same with the plausibility check disabled (the v9 behaviour): the false fit reaches the repaired track
+    # the same with the plausibility check disabled (the earlier behaviour): the false fit reaches the repaired track
     monkeypatch.setattr(fgm.chk, "REDET", dict(skull=99.0, spread=(0.0, 99.0), jump=99.0))
     ck2 = fgm.make_checker(clip, a, lmk=det_bad)
     S_bad, _, _ = fgm.held_fix(clip, ck2)
@@ -444,7 +444,7 @@ def test_gate_reports_the_registration_ruler(clip_dir):
 
 
 def test_h_guard_allows_h_only_near_closed_or_between_own_frames(clip_dir):
-    """v12 --warp-gate-h-guard: h (layers_off) only where the planned opening is near-closed (<= the take's p5 + the closure
+    """--warp-gate-h-guard: h (layers_off) only where the planned opening is near-closed (<= the take's p5 + the closure
     band) or where both neighbours show the take's own interior; a one-frame switch of the interior's look is counted."""
     tmp, vid, frames, S = clip_dir
     n = len(frames)
@@ -473,6 +473,6 @@ def test_h_guard_allows_h_only_near_closed_or_between_own_frames(clip_dir):
     assert (
         fgm.style_switches(clip, {t - 1: ({"layers_off": True}, {}), t: ({"layers_off": True}, {}), t + 1: ({"layers_off": True}, {})}) == 0
     )
-    # without the flag: v11's h, unchanged
+    # without the flag: the earlier h, unchanged
     c11 = mw.WarpClip(args(tmp, vid, n, LAYERS)).run_batch()
     assert fgm.cand_layers_off(c11, None, t, {}, {})[0]["layers_off"]

@@ -15,11 +15,11 @@ are kept for cross-fades. Openness: the vowel's nominal jaw opening x the dry-vo
   lsdub visemes --align align_018.json --t0 8.04 --frames 200 --fps 25 \
       --audio vocal_dry.wav --out vis_018.json [--arkit-csv vis_018_arkit.csv] [--strip-png s.png]
 JSON per frame: {t, vis, vis2, mix (0..1 share of vis2), open (0..1), word, phone, wi}.
-v12: the track also carries what the aligner knew about each word (lyric_check.word_table: heard, src, the lyric word,
+the track also carries what the aligner knew about each word (lyric_check.word_table: heard, src, the lyric word,
 Whisper's probability, mfa / sphinx / whisper+spread, the phrase's fallback, phones, held-note stretch) as `words` (the
 words overlapping the track), `words_meta` (absolute alignment + lyric-sheet paths) and per frame `wi` (the index of the
 frame's word in the alignment's words, -1 none): the mouth card's weak marks and heard: diffs (lsdub annotate, lsdub
-paint --annotate) read them from the track. --no-words writes the v11 format (byte for byte).
+paint --annotate) read them from the track. --no-words writes the format (byte for byte).
 """
 
 from ..io import ff
@@ -216,7 +216,7 @@ def build(align, t0, n, fps, lead=0.06, release=0.05, min_hold=3, open_curve=Non
         if p["word"] or not align:
             for k in np.where((tt >= p["start"]) & (tt < p["end"]))[0]:
                 word[k], phone[k], wix[k] = p["word"], p["p"], p.get("wi", -1)
-    # v13: a near-closed "rest" lip position BETWEEN words -- the mouth falls toward base in the gap between
+    # a near-closed "rest" lip position BETWEEN words -- the mouth falls toward base in the gap between
     # one word and the next (the rise/fall of speech). A raised-cosine boost to the silence class, centred on
     # each inter-WORD boundary (NOT phone edges), over +-word_close s, moderate so a real phone still wins.
     if word_close and ph:
@@ -274,7 +274,7 @@ def build(align, t0, n, fps, lead=0.06, release=0.05, min_hold=3, open_curve=Non
             }
         )
         if word_index:
-            frames[-1]["wi"] = int(wix[k])  # v12: the frame's word in the alignment (the card's word facts)
+            frames[-1]["wi"] = int(wix[k])  # the frame's word in the alignment (the card's word facts)
     return frames
 
 
@@ -383,7 +383,7 @@ def main(argv=None):
         "--word-close",
         type=float,
         default=0.0,
-        help="v13: a near-closed rest lip position between words "
+        help="a near-closed rest lip position between words "
         "(seconds each side of every word boundary; 0 = off). The mouth falls toward base at word edges.",
     )
     ap.add_argument("--out", required=True)
@@ -393,7 +393,7 @@ def main(argv=None):
         "--no-words",
         dest="words",
         action="store_false",
-        help="v12: no words / words_meta block and no per-frame wi (the v11 track format, byte for byte)",
+        help="no words / words_meta block and no per-frame wi (the earlier track format, byte for byte)",
     )
     a = ap.parse_args(argv)
     align = json.load(open(a.align)) if a.align else None
@@ -420,7 +420,7 @@ def main(argv=None):
         "visemes": VIS,
         "library_map": LIB,
     }
-    if words:  # v12: the aligner's per-word facts, for the mouth card / lyric check
+    if words:  # the aligner's per-word facts, for the mouth card / lyric check
         from . import lyric_check
 
         lyr = lyric_check.find_file(align.get("lyrics"), a.align)

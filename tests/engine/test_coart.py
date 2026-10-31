@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v10c: the COARTICULATION planner (lsdub/core/coart.py, --warp-target coart) on synthetic phone sequences, CPU only:
+"""the COARTICULATION planner (lsdub/core/coart.py, --warp-target coart) on synthetic phone sequences, CPU only:
 the dominance blend is a partition of unity; closures reach closure; a 40 ms vowel undershoots while a 400 ms one reaches
 its target; the dynamics prior lands the plan's velocity p95 near the take's own; a skipped span is free (the take's own
-shape); the jaw share 1 is v9's jaw reference; and --warp-target v9 (the default) is v9 bit for bit on a synthetic clip."""
+shape); the jaw share 1 is the earlier jaw reference; and --warp-target v9 (the default) is bit for bit on a synthetic clip."""
 
 import argparse, os, sys
 import numpy as np
@@ -256,7 +256,7 @@ def test_pause_eases_to_the_faces_rest_shape():
 
 
 def test_dyn_source_is_followed_outside_closures_and_pauses(tmp_path):
-    # a model trajectory on the song timeline (a CSV like v10b's a2f_cut_25fps.csv): with mix 1 the plan follows its
+    # a model trajectory on the song timeline (a CSV like the earlier a2f_cut_25fps.csv): with mix 1 the plan follows its
     # mapped curve; the aligner's closure stays hard; inside a pause the rest wins; mix 0 ignores it
     import csv
 
@@ -322,7 +322,7 @@ def test_range_map_keeps_the_neutral_level():
 
 
 def test_vocalisation_span_follows_the_vocalisations_mode():
-    # v10a marks a vocalisation span with `skip`: free by default (the take's own shape), a rest with --vocalisations rest,
+    # marks a vocalisation span with `skip`: free by default (the take's own shape), a rest with --vocalisations rest,
     # planned as words with --vocalisations mouth
     al = dict(words=[dict(w="uh", phones=[dict(p="AH", start=0.10, end=0.90)])])
     al["words"][0]["start"], al["words"][0]["end"] = 0.10, 0.90

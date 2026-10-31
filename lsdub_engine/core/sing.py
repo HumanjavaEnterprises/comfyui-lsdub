@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""sing.py: `lsdub sing`, the ONE standard path for every sung cut (founder: the mediums and close-ups are "not close
-enough ... not quite snappy enough"; the per-shot face / lip deep dive is a standard step, for EVERY sung shot). CPU.
+"""sing.py: `lsdub sing`, the ONE standard path for every sung cut (the per-shot face / lip deep dive is a standard
+step, for EVERY sung shot). CPU.
 
   1 singer    `lsdub cast` (YuNet + MediaPipe tracks, DINOv2 + colour identity) on the take -> the --char track's box
   2 crop      smoothed track, one fixed crop per shot, Lanczos up so the face is --face-target (512) px. Close-ups too:
@@ -26,7 +26,7 @@ enough ... not quite snappy enough"; the per-shot face / lip deep dive is a stan
 
 from ..io import ff
 import argparse, csv, json, os, sys, tempfile, time
-from . import steps
+from . import paint_api, steps
 from .cpu_env import thread_report
 import cv2, numpy as np
 
@@ -169,11 +169,14 @@ def run(
     tm["plan"] = round(time.perf_counter() - t_, 3)
     # 3. occluders: a mic near the lips -> the GPU command (written, not run); an existing mask is used
     occ = os.path.join(work, "occ.npz")
-    pa = list(paint_args) + ["--coart-dyn", dyn, "--coart-dyn-mix", "1.0"]
-    if snap:
-        pa += SNAP["paint"]
-    if os.path.exists(occ):
-        pa += ["--occluder-mask", occ]
+    pa = paint_api.flags(
+        user_overrides=paint_args,
+        operational=[
+            *paint_api.coart_dyn(paint_args, dyn),
+            *(SNAP["paint"] if snap else ()),
+            *(("--occluder-mask", occ) if os.path.exists(occ) else ()),
+        ],
+    )
     target = dyn_target(dyn, n, t0, fps)
     pick = (lambda wj, n_, m_: pick_extremes([f["egap"] for f in json.load(open(wj))["frames"]], target, m_)) if m > 1 else None
     R = MED.run(
@@ -243,28 +246,14 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
         trk1,
     ] + (["--a2f-csv", a2f] if a2f else [])
     steps.call("visemes", vs, quiet=True)
-    steps.call(
-        "paint",
-        [
-            "--mode",
-            "warp",
-            "--video",
-            take,
-            "--track",
-            trk1,
-            "--frames",
-            str(n),
-            *paint_args,
-            "--coart-dyn",
-            dyn,
-            "--coart-dyn-mix",
-            "1.0",
-            "--out",
-            nat,
-            "--warp-json",
-            os.path.join(work, "native_warp.json"),
-            "--no-watermark",
-        ],
+    paint_api.paint(
+        take,
+        trk1,
+        n,
+        user_overrides=paint_args,
+        operational=paint_api.coart_dyn(paint_args, dyn),
+        out=nat,
+        warp_json=os.path.join(work, "native_warp.json"),
     )
     shutil.copyfile(out, sng)
     g_n = gate(nat, R, target, vocal, align, t0, fps, work=os.path.join(work, "native_gate"))

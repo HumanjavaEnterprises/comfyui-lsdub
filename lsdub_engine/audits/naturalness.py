@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""naturalness.py: the NATURALNESS RULER (v10c). How does a render's mouth MOTION differ, statistically, from the
+"""naturalness.py: the NATURALNESS RULER. How does a render's mouth MOTION differ, statistically, from the
 take's own? The take is the same face moving the way it really moves; a render whose mouth reaches every phone's shape,
 steps between shapes and makes shape combinations the face never makes reads over-articulated even when every shape is
 "right". CPU.
 
-Measured outside-in and identically on the render and on the take: IMAGE-mode MediaPipe on every frame (the v9 gate's
+Measured outside-in and identically on the render and on the take: IMAGE-mode MediaPipe on every frame (the earlier gate's
 instrument: a face-box crop from the take's track, so every version is measured in the same place), one rigid skull pose
 per frame fitted on the video's OWN strict skull + brow points (zero-phase, as the pipeline), every point in that head
 frame, in IOD units. Per frame: inner-lip gap (mean of 3 vertical pairs), mouth width (outer + inner corners), corner
@@ -103,7 +103,7 @@ def mouth_series(L, pose_smooth="sg7"):
 
 
 def series_from_video(video, take_trk, n=None, cache=None, lmk=None):
-    """IMAGE-mode landmarks of a video (the v9 gate's Landmarker on a face-box crop from the take's raw track; cached
+    """IMAGE-mode landmarks of a video (the earlier gate's Landmarker on a face-box crop from the take's raw track; cached
     in `cache`) -> (mouth_series dict, found share, IOD px, landmarks)."""
     from .frame_gate import landmark_cache, read_frames
 
@@ -421,7 +421,7 @@ def compare(out, ref):
         else 0.0
     )
     T["peaks"] = pe + sp
-    # the founder's two: the range of openings (compressed middle) and resting in the pauses (mouthing in silence)
+    # two more: the range of openings (compressed middle) and resting in the pauses (mouthing in silence)
     T["range"] = _lr(out["gap_range"], ref["gap_range"])
     pz = ref.get("pauses")
     rest_o = rest_r = None

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v16 / v16.1 teeth (mouth_layers): the lower arch as the dim, half-hidden, soft-bottomed sibling of the uppers, not their
-mirror (--warp-lower-real). Opt-in; the v15 lowers are bit for bit when off. v16.1: the lower-teeth atlas is built v15-BRIGHT
+"""teeth (mouth_layers): the lower arch as the dim, half-hidden, soft-bottomed sibling of the uppers, not their
+mirror (--warp-lower-real). Opt-in; the earlier lowers are bit for bit when off. the lower-teeth atlas is built BRIGHT
 and the shadow is applied PER FRAME, gated by the take's own lower display -- so a bright smile row is not dragged down by a
 baked darkening, while the grill still recedes where the take hides the lowers. Synthetic, CPU only, our own classical graphics."""
 
@@ -22,10 +22,10 @@ def _lo_frame(comp, h=40, w=40, L=200.0):
     return lo_rgb, lo_a, lo_h, io
 
 
-# --------------------------------------------------------- v16.1: the per-frame lower shadow is gated by the take-show --
+# --------------------------------------------------------- the per-frame lower shadow is gated by the take-show --
 def test_lower_shadow_is_a_noop_where_the_take_shows_a_row():
-    """the founder's 'match the take': on a frame where the take bares a full lower row (show = 1), the per-frame shadow does
-    NOTHING -- the crown stays v15-bright, no darkening, no alpha feather."""
+    """'match the take': on a frame where the take bares a full lower row (show = 1), the per-frame shadow does
+    NOTHING -- the crown stays bright, no darkening, no alpha feather."""
     comp, *_ = _comp(lower_real=0.9)
     lo_rgb, lo_a, lo_h, io = _lo_frame(comp)
     comp._lshow[3] = 1.0
@@ -44,7 +44,7 @@ def test_lower_shadow_darkens_and_feathers_where_the_take_hides_the_lowers():
 
 
 def test_lower_crown_is_brighter_when_the_take_shows_a_row_than_when_it_hides_it():
-    """the v16.1 recovery, as a unit: the incisal zone renders BRIGHTER on a high-take-show frame than on a low-take-show one."""
+    """the earlier recovery, as a unit: the incisal zone renders BRIGHTER on a high-take-show frame than on a low-take-show one."""
     comp, *_ = _comp(lower_real=0.9)
     lo_rgb, lo_a, lo_h, io = _lo_frame(comp)
     comp._lshow[1] = 1.0
@@ -67,15 +67,15 @@ def test_lower_shadow_scales_smoothly_with_the_take_show():
 
 # ------------------------------------------------------------------------------------------- off = byte-identical --
 def test_lower_atlas_is_v15_bright_whether_or_not_lower_real_is_on():
-    """v16.1: --warp-lower-real no longer bakes any darkening into the lower atlas -- it is identical on and off (the shadow is
+    """--warp-lower-real no longer bakes any darkening into the lower atlas -- it is identical on and off (the shadow is
     a per-frame pass)."""
     off, *_ = _comp()
     on, *_ = _comp(lower_real=0.9)
     assert np.array_equal(off.lo.tex, on.lo.tex)
-    assert off.lower_p is None and off.lower_target is None  # off = no v16 state at all
+    assert off.lower_p is None and off.lower_target is None  # off = no state at all
 
 
-# --------------------------------------------------------- the per-take ratio drives the dim target (founder's insight) --
+# --------------------------------------------------------- the per-take ratio drives the dim target --
 def test_per_take_ratio_is_measured_and_maps_to_a_target():
     comp, *_ = _comp(lower_real=0.9)
     assert comp.lower_ratio_src == "auto" and 0.05 <= comp.lower_ratio <= 1.2
@@ -145,7 +145,7 @@ def test_cover_amt_keeps_the_tongue_over_the_lowers_wide_open_where_the_take_hid
     off, *_ = _comp(tongue="wedge", tongue_cover=0.9)
     on._lshow[0] = 0.0  # the take hides the lowers wide-open ('ah' / 'oo')
     assert on._cover_amt(0, op=0.95) > 0.15  # the tongue stays partly over the lowers (no grill)
-    assert off._cover_amt(0, op=0.95) < 0.1  # v15: drops to ~0 (the lowers flash)
+    assert off._cover_amt(0, op=0.95) < 0.1  # drops to ~0 (the lowers flash)
     assert on._cover_amt(0, op=0.08) < 0.1  # near-closed: still a flash (wide = 0 there)
     on._lshow[0] = 1.0  # but where the take bares a real smile row, do NOT occlude it
     assert on._cover_amt(0, op=0.95) < 0.1

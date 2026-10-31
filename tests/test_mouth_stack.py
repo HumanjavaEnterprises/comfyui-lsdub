@@ -102,3 +102,63 @@ def test_node_paint_warnings(pack, capfd):
     w = pack.nodes_mouth._paint_warnings(['--lib', 'k', '--mode', 'morph', '--warp-temporal', '0.3'])
     assert w and '--warp-' in w[0]
     assert pack.nodes_mouth._paint_warnings(['--not-a-flag']) == []
+
+
+def test_unload_hook_without_the_attribute(pack):
+    import comfy.model_management as mm
+    keep = mm.__dict__.pop('unload_all_models', None)
+    try:
+        pack.devices.hook_unload()
+        assert not hasattr(mm, 'unload_all_models')
+    finally:
+        if keep: mm.unload_all_models = keep
+
+
+def _kit(identity='singer'):
+    return types.SimpleNamespace(dir='KIT', identity=identity)
+
+
+def _tw(settings=''):
+    return types.SimpleNamespace(settings=settings)
+
+
+def _flags(pack, stack='plain', preset='none', identity='singer', settings='', v='skip'):
+    return pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack=stack, preset=preset), _kit(identity), _tw(settings), v)
+
+
+def _landing(pack):
+    P = pack.nodes_mouth.presets.LANDING
+    f = list(P.flags_for('red_nova'))
+    i = f.index('--warp-lip-lock')
+    del f[i:i + 2]
+    return f
+
+
+def test_argv_snapshot_plain_and_landing(pack):
+    plain = ['--lib', 'KIT', '--warp-track-mode', 'chain', '--vocalisations', 'skip']
+    assert _flags(pack) == plain
+    assert _flags(pack, preset='landing') == plain                                    # a face the preset does not list
+    assert _flags(pack, preset='landing', identity='red_nova') == ['--lib', 'KIT', *_landing(pack), *plain[2:]]
+
+
+def test_layers_on_any_kit(pack):
+    R = pack.nodes_mouth.recipes.LAYERS_V16_1
+    full = ['--lib', 'KIT', *R, '--warp-track-mode', 'chain', '--vocalisations', 'mouth']
+    assert _flags(pack, 'layers', v='mouth') == full
+    assert _flags(pack, 'layers', 'landing', v='mouth') == full
+    assert '--warp-compose' in full and '--warp-lip-lock' not in _flags(pack, 'layers', 'landing', 'red_nova')
+
+
+def test_settings_are_shell_quoted_and_can_change_vocalisations(pack):
+    a = _flags(pack, settings='--vocalisations rest --warp-erase "a b"')
+    assert a[-5:] == ['skip', '--vocalisations', 'rest', '--warp-erase', 'a b'] and a[-6] == '--vocalisations'
+
+
+def test_two_kits_no_cast_names_each_dropped_shot(pack, capfd):
+    D = pack.nodes_mouth.LSDubDub
+    shots = types.SimpleNamespace(shots=[dict(shot=4, verdict='DUB', target='face', f0=0, f1=9, start=0.0)])
+    kits = {'a': object(), 'b': object()}
+    assert D._plan(None, shots, kits, []) == []
+    msg = D._dropped(shots, kits, [])[4][1]
+    assert msg == "shot 4: target 'face' matches no kit (kits: a, b); connect LSDub Cast or use one kit"
+    assert D._dropped(shots, {'a': object()}, []) == {}

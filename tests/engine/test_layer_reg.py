@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v11 inter-layer registration: the per-frame log of the layer stack (mouth_layers.reg_entry -> warp.json frames[i].reg) and
+"""inter-layer registration: the per-frame log of the layer stack (mouth_layers.reg_entry -> warp.json frames[i].reg) and
 the ruler on it (lsdub/audits/layer_reg.py: offsets of the teeth / cavity / tongue vs the lips in the skull-stabilised
-frame; jaw residual, jitter, the v9 gate's windowed slosh, the texture drift), plus the interior clip
+frame; jaw residual, jitter, the earlier gate's windowed slosh, the texture drift), plus the interior clip
 (--warp-interior-clip: no cavity or tooth pixel outside the warped lips). Synthetic, CPU only."""
 
 import os, sys
@@ -139,10 +139,10 @@ def test_interior_clip_keeps_the_interior_inside_the_warped_lips():
     bu_out = base.composite(take, 2, S[2], Pu, 20.0)[0]
     dark = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2LAB)[..., 0] < 60
     false_open = tl.poly_mask(Pu[ll.LIP_IN, :2], take.shape, 0.0)
-    assert dark(bu_out)[false_open].mean() > 0.5 and dark(outu)[false_open].mean() < 0.02  # v9: a cavity there; v11: none
+    assert dark(bu_out)[false_open].mean() > 0.5 and dark(outu)[false_open].mean() < 0.02  # a cavity there; none
 
 
-# ------------------------------------------------------------------------------ v11: the corner cover (step 4) --
+# ------------------------------------------------------------------------------ the corner cover (step 4) --
 def test_corner_points_push_only_the_corners():
     P = _P(gap=10.0)
     q = P[ll.LIP_OUT, :2]
@@ -170,8 +170,8 @@ def test_corner_cover_fills_old_mouth_moved_past_a_wider_corner():
     out0, _ = off.composite(warped, 2, P_take, P_new, 20.0)
     on, *_ = _comp(cover_mode="fill", cover_corners=1.0)
     out1, _ = on.composite(warped, 2, P_take, P_new, 20.0)
-    assert near(out0, lip_lab) < 20  # v9: the old lip stays at the corner
-    assert near(out1, skin_lab) < 25 and on.corner_log[2] > 0  # v11: filled with skin
+    assert near(out0, lip_lab) < 20  # the old lip stays at the corner
+    assert near(out1, skin_lab) < 25 and on.corner_log[2] > 0  # filled with skin
     gl, gr = on.corner_growth(2, P_take[:, :2], P_new[:, :2], layer.iod)
     assert gl > 12 and gr > 12  # grows with the corners' push (+ half the opening)
     # off by default: the same frame as without the option

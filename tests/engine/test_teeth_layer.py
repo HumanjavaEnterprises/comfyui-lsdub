@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v5 rigid teeth (teeth_layer.py + --warp-teeth rigid): teeth are bone. Synthetic, CPU only."""
+"""rigid teeth (teeth_layer.py + --warp-teeth rigid): teeth are bone. Synthetic, CPU only."""
 
 import numpy as np, cv2
 from scipy.spatial.transform import Rotation as Rot
@@ -162,7 +162,7 @@ def test_render_only_inside_the_mouth_and_flag_parses(capsys):
         assert f in o
 
 
-# ------------------------------------------------------------------------------------------- v6 (anchor + jaw plan) --
+# (anchor + jaw plan) --
 def _skin_seq(shifts, H=240, W=320):
     """a textured skin patch (the upper-lip root) moved by integer shifts per frame; landmarks for it."""
     rng = np.random.default_rng(3)
@@ -189,7 +189,7 @@ def test_teeth_share_the_upper_lip_root_motion():
     assert np.abs(c - (np.array(sh, float) - sh[0])).max() < 0.35, c
     c4 = tl.skin_pin(frames, S, pose, 0, sigma=4.0, noise=0, iod=120.0)  # default: slow part left to the pose
     assert np.abs(np.diff(c4, axis=0) - np.diff(np.array(sh, float), axis=0)).max() < 0.8
-    # the plates carry the pin: upper AND lower maps are the v5 maps translated by exactly the pin of that frame
+    # the plates carry the pin: upper AND lower maps are the maps translated by exactly the pin of that frame
     layer, _, _ = _layer()
     A0 = layer.affines(1, 20.0)
     layer.pin = np.tile([[3.5, -2.0]], (4, 1))

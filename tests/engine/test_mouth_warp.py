@@ -262,7 +262,7 @@ def test_interior_alpha_is_own_or_donor_not_a_mix():
     assert 0 < mw.interior_alpha(52, 80, 0.5) < 1  # narrow ramp between
 
 
-# --- v3 ---------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------
 _RNG = dict(g_lo=0.0, g_hi=10.0, w_lo=40.0, w_med=58.0, w_hi=60.0)  # a take parked near its p90 width
 
 
@@ -270,7 +270,7 @@ def test_class_floor_wide_uses_the_wider_half_range():
     _, half = mw.class_floor(None, 0.5, _RNG, "half")
     _, wide = mw.class_floor(None, 0.5, _RNG, "wide")
     assert half["E"][0] == 0.5 and half["ou"][1] == -0.5  # r2: 0.5 x (60-58) = +1 px only
-    assert abs(wide["E"][0] * (60 - 58) - 0.5 * 18) < 1e-9  # v3: 0.5 x the wider half (18) = +9 px
+    assert abs(wide["E"][0] * (60 - 58) - 0.5 * 18) < 1e-9  # 0.5 x the wider half (18) = +9 px
     assert abs(wide["ou"][1] * (58 - 40) + 0.5 * 18) < 1e-9  # round: wide half is its own -> -0.5
 
 
@@ -286,7 +286,7 @@ def test_width_mix_primary_keeps_the_vowels_width_band():
     sw = mw.target_features(fr, F, _RNG, sigma=0, bands=bands, centre=0.8, width_mix="switch")
     pr = mw.target_features(fr, F, _RNG, sigma=0, bands=bands, centre=0.8, width_mix="primary")
     assert np.allclose(sw[:, 1], 50.0)  # r2: sil's (absent) band -> width dropped
-    assert np.all(pr[:, 1] > 58.0)  # v3: E's spread target kept
+    assert np.all(pr[:, 1] > 58.0)  # E's spread target kept
     fr2 = _fr("E", "ou", 0.7, n)  # vis2 has its own band and dominates
     assert np.all(mw.target_features(fr2, F, _RNG, sigma=0, bands=bands, centre=0.8, width_mix="primary")[:, 1] < 58.0)
 

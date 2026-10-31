@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v12 the mouth card as a toggle: `lsdub paint --annotate` / mouth_paint.paint(show_mouth_card=True) writes the annotated
+"""the mouth card as a toggle: `lsdub paint --annotate` / mouth_paint.paint(show_mouth_card=True) writes the annotated
 video + the lyric check NEXT TO the clean output and never changes it (md5 with and without the toggle, through the CLI's
 watermark too); the card draws the weak mark and the heard: line from the track's word facts (never on a skipped
 vocalisation); the facts also come from the alignment for a track without a words block. CPU only, no MediaPipe (the
@@ -64,7 +64,7 @@ def video(path, n=30, W=320, H=240):
 
 @pytest.fixture()
 def shot(tmp_path):
-    """a 30-frame take, a cutout mouth library (sil + mask), and a v12 track (words block) of align()'s 'ask them why'."""
+    """a 30-frame take, a cutout mouth library (sil + mask), and a track (words block) of align()'s 'ask them why'."""
     video(tmp_path / "take.mp4")
     lib = tmp_path / "lib"
     lib.mkdir()
@@ -202,7 +202,7 @@ def test_card_marks_weak_and_heard_words(shot):
     assert has(why, vo.HEARD) < 20 and has(why, vo.WEAK) < 20  # 'why': whisper-timed only (0.7), no mark
     # (< 20: anti-aliased glyph edges)
     assert has(ask, vo.HEARD) > 0  # ... but the 1 s timeline shows 'them' ahead
-    assert c.H == vo.CARD[1] + vo.LINE2 == 144 and vo.Card(1.0).H == vo.CARD[1] == 128  # v10a's card without facts
+    assert c.H == vo.CARD[1] + vo.LINE2 == 144 and vo.Card(1.0).H == vo.CARD[1] == 128  # the earlier card without facts
     plain, _ = vo.Card(1.0).render(tv, 12)
     assert has(plain, vo.HEARD) < 20 and has(plain, vo.WEAK) < 20
     # a skipped vocalisation never gets the marks: the same frames marked skip
@@ -285,6 +285,6 @@ def test_annotate_cli_corner_auto_and_lyric_outputs(shot):
         )
         == 0
     )
-    assert json.load(open(shot / "log2.json"))["card"] == [round(340 * s), round(128 * s)]  # no facts found: v10a's card size
+    assert json.load(open(shot / "log2.json"))["card"] == [round(340 * s), round(128 * s)]  # no facts found: the earlier card size
     assert json.load(open(shot / "c.json"))["counts"]["mismatches"] == 1 and os.path.exists(shot / "c.md")
     assert open(shot / "s.txt").read() == "Don't ask [heard: them] why\n"

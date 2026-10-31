@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""mouth_layers.py: v7 layered mouth compositor for --mode warp (--warp-compose layers). All CPU.
+"""mouth_layers.py: layered mouth compositor for --mode warp (--warp-compose layers). All CPU.
 
-Founder on v6: "uncanny valley ... the lower teeth look like just the middle 2 or 4 ... build it up as layers". So the
-mouth is an explicit stack of RGBA layers, composited back to front; depth / occlusion come from the ORDER and the
+The mouth is an explicit stack of RGBA layers, composited back to front; depth / occlusion come from the ORDER and the
 target inner-lip mask, never from blending one mouth into another:
 
   L0 frame       the take's own frame
@@ -19,7 +18,7 @@ target inner-lip mask, never from blending one mouth into another:
                  from the take's harvested lower teeth, mirrored / extended to the sides, darkened toward the back. Rides
                  the skull pose + the planned jaw (rotation about the condyle hinge) + the upper-lip-root pin + the CHIN
                  pin (the lower teeth take the chin skin's own frame-to-frame motion)
-  L4 upper       the full upper arch, the same kind of band, fixed to the skull + the upper-lip-root pin (v6)
+  L4 upper       the full upper arch, the same kind of band, fixed to the skull + the upper-lip-root pin
   L5 lips        the warped lips only (outer lip .. target inner-lip contour), with a darker inner rim (the lip turning
                  inward: it visibly sits in front of the teeth); soft contact shadows of the lips on the teeth and the
                  cavity edge are applied to L2..L4
@@ -30,7 +29,7 @@ The arches and the cavity are defined in the head (canonical) frame and rasteris
 rigid pose (+ jaw, + pins): one resampling, the same geometry as a head-stabilised composite without a second resample
 of the frame. The debug strip shows every layer head-stabilised (--warp-layers-debug).
 
-v8 (polish pass on the v7 stack; founder: "the closest one yet, keep grinding"). Every change opt-in, v7 is the default:
+Polish pass on the stack. Every change is opt-in:
   PIN      --warp-teeth-chin-pin arc: the chin flow is split into its slow part (consistent with the planned jaw) and
            the fast residual (the take's own fast jaw motion the warp leaves in the chin); the lower arch follows the
            slow part fully and the fast part by --warp-chin-pin-gain (zero-phase smoothed), and the pin is PROJECTED
@@ -51,11 +50,11 @@ v8 (polish pass on the v7 stack; founder: "the closest one yet, keep grinding").
            FRAME (harmonic membrane + grain from around it), so no seam between the bald cover and the warped face.
   SMOOTH   --warp-layers-smooth: zero-phase ease (frames) of the per-frame layer parameters (opening, tongue).
 
-v11 (opt-in unless noted):
+(opt-in unless noted):
   CORNERS  --warp-cover-corners K: the cover grows at the two mouth corners with the plan (how far it moves each outer
            corner past the take's, half the opening increase, 0.15 IOD x |sin yaw| -- the far corner in full), x K: the
            L1 cover's hull (lip_layers.corner_points), and the L6 fill also takes the old-mouth material the warp MOVED
-           onto what was skin in the take there (corner_residue). v10c's wider openings showed the take's old lip / cavity
+           onto what was skin in the take there (corner_residue). the earlier wider openings showed the take's old lip / cavity
            at turned-head corners (far corner on a turned head): the search stopped at the take's own (unwarped) lip hull.
   CLIP     --warp-interior-clip: the interior (L2 cavity, L3 lower arch + tongue, L4 upper arch) is only ever seen THROUGH
            the warped lips: the planned opening is kept where the warped frame has lip pixels above AND below it along the
@@ -67,13 +66,13 @@ v11 (opt-in unless noted):
            angle, the upper (lip-root skin) pin, the chin pin, the exposure kick and the head pose -> warp.json frames[i].reg
            (lsdub layer-reg reads it).
 
-v12 (opt-in):
+(opt-in):
   SINGLE   --warp-reg single: ONE reference for the interior (plan_single): the upper arch on the skull pose only, the lower
            arch + tongue on the skull pose + one low-passed hinge angle from the planned opening, the tongue a slow function
            of that angle, the cavity the planned opening; no pins, no per-frame exposure kick; gum guards. The lips, cover
-           and face are unchanged. --warp-reg v11 (the default) is the v11 placement, bit for bit.
+           and face are unchanged. --warp-reg v11 (the default) is the placement, bit for bit.
 
-v13 (opt-in; founder: "the teeth are wider by 1/5th or so in comparison to the head, only on close ups"):
+Tooth scale, opt-in (close-up teeth read about 1/5 too wide for the head):
   LAYOUT   --warp-arch-layout anthro: the crowns' widths along the arc are the anthropometric table's (ANTHRO, per the 63 mm
            IOD = the face's own inter-pupil distance), symmetric about the midline; the harvested run is resampled onto those
            slots (its interdental lines -> the slot boundaries, a monotone piecewise-linear x-warp; one capped uniform stretch
@@ -98,7 +97,7 @@ CHIN = [18, 200, 199, 175, 83, 313, 201, 421, 182, 406]  # soft chin below the l
 
 
 def aa_poly(pts, shape, px=0.0, ss=4):
-    """v17e: anti-aliased polygon coverage 0..1 (rasterised at ss x and area-averaged down), dilated by px; a plain
+    """anti-aliased polygon coverage 0..1 (rasterised at ss x and area-averaged down), dilated by px; a plain
     fillPoly + small blur left a stair-step along the thin corner wedges of the opening."""
     H, W = shape[:2]
     m = np.zeros((H * ss, W * ss), np.uint8)
@@ -110,7 +109,7 @@ def aa_poly(pts, shape, px=0.0, ss=4):
 
 
 NAMES = ("L0 frame", "L1 mouth cover", "L2 back of mouth", "L3 lower teeth + tongue", "L4 upper teeth", "L5 lips", "L6 face area")
-REG_END = 0.18  # v11 reg: the incisal edge "ends" logged at +-0.18 IOD of arc from the midline (the canines)
+REG_END = 0.18  # reg: the incisal edge "ends" logged at +-0.18 IOD of arc from the midline (the canines)
 smootherstep = tl.smootherstep
 # vowel classes for the tongue: (dorsum rise, tip rise, retraction) in IOD; narrow vowels raise the tongue body, open
 # ones drop and retract it
@@ -232,9 +231,8 @@ def synth_teeth(T, src, lo, hi, p, iod, texel, upper, r_e, th, x_hl=0.0, line=0.
     return done
 
 
-# ---------------------------------------------------------------------- v13: the anthropometric layout (--warp-arch-layout) --
-# mesiodistal crown widths ALONG THE ARC, per the anthropometric IOD = the inter-PUPIL distance (63 mm; the founder's table,
-# v13): upper central, lateral, canine, premolar 1, premolar 2, molar 1 (+ molar 2, 9 mm: beyond the table, only reached
+# ---------------------------------------------------------------------- the anthropometric layout (--warp-arch-layout) --
+# mesiodistal crown widths ALONG THE ARC, per the anthropometric IOD = the inter-PUPIL distance (63 mm): upper central, lateral, canine, premolar 1, premolar 2, molar 1 (+ molar 2, 9 mm: beyond the table, only reached
 # by a widened arc); lower central, lateral, canine, premolars (+ molars 1 / 2, 11 / 10 mm: beyond the table). lsdub's own IOD
 # (|Cm[263] - Cm[33]|, the outer eye corners) is ~1.45 x that on these faces, so the table is scaled by the face's own
 # inter-pupil distance (the iris centres 468 / 473 of the median canonical face), not by lsdub's IOD.
@@ -255,7 +253,7 @@ def anthro_bounds(widths, unit, extent):
 
 
 def edge_lines(T, tk, r_e, iod, texel, upper, prom=(1.5, 0.35)):
-    """v13: the interdental lines of a plate texture -- the minima of the L profile along the band just inside the incisal edge
+    """the interdental lines of a plate texture -- the minima of the L profile along the band just inside the incisal edge
     over the tooth columns (tooth_period's profile; its peak criteria: prominence >= max(prom[0], prom[1] x the high-passed
     profile's std)), sub-texel (a parabola through each minimum) -> dict(x0, x1 = the profiled run's columns, lines = texel
     columns (float), prom = their prominences) or None."""
@@ -298,7 +296,7 @@ def edge_lines(T, tk, r_e, iod, texel, upper, prom=(1.5, 0.35)):
 
 
 def anthro_map(det, Tw, texel, A, bounds, cap=(0.6, 1.8), default_p=None):
-    """v13: the horizontal resample that puts the harvested run's teeth on the anthropometric slots. det = edge_lines(); bounds =
+    """the horizontal resample that puts the harvested run's teeth on the anthropometric slots. det = edge_lines(); bounds =
     anthro_bounds() (canonical px from the midline). Lines -> slot boundaries: the line nearest the midline takes its nearest
     boundary, then outward on each side every next line takes the next boundary (or the one after it, when the line between was
     missed, or the one after that: the stretch closer to 1 wins); a line whose segment would stretch beyond cap is skipped (spurious). Between the knots
@@ -371,7 +369,7 @@ def anthro_map(det, Tw, texel, A, bounds, cap=(0.6, 1.8), default_p=None):
 
 
 def synth_slots(T, src, lo, hi, bounds, A, iod, texel, upper, r_e, x_hl=0.0, line=0.75, hl=0.10):
-    """v13 (--warp-arch-layout anthro): synth_teeth with the layout's widths -- the teeth beyond the covered run [lo, hi] fill the
+    """--warp-arch-layout anthro: synth_teeth with the layout's widths -- the teeth beyond the covered run [lo, hi] fill the
     anthropometric slots (bounds: canonical px from the midline; the left side their mirror) instead of 0.95 / 0.85 / 1.15 x
     the harvested period. Each slot is one modelled crown (synth_teeth's crown, highlight and rounded incisal corner over the
     WHOLE slot); a slot the run already partly covers is completed beyond it without a second interproximal line. Returns the
@@ -416,7 +414,7 @@ def synth_slots(T, src, lo, hi, bounds, A, iod, texel, upper, r_e, x_hl=0.0, lin
 
 
 def trim_run(lo, hi, bounds, A, texel, keep=0.5):
-    """v13 (anthro): the covered run [lo, hi] (texel columns) cut back to a slot boundary on a side where it covers less than
+    """the covered run [lo, hi] (texel columns) cut back to a slot boundary on a side where it covers less than
     `keep` of its outermost slot (a sliver -- the harvest's feathered, see-through edge columns -- would print a two-tone crown
     between two lines); synth_slots then models that slot whole. -> (lo, hi, trimmed texels (left, right))."""
     c_of = lambda a: (a + A) * texel - 0.5
@@ -463,10 +461,10 @@ class ArchBand:
         self.synth_cols = 0
         self.mipmap = False
         self._mip = None
-        self._mip_of = None  # v14: trilinear minification pyramid (opt-in, --warp-arch-mipmap)
+        self._mip_of = None  # trilinear minification pyramid (opt-in, --warp-arch-mipmap)
 
     def mip_pyramid(self):
-        """v14: a premultiplied-alpha mip pyramid of self.tex -- level 0 = the atlas itself, each next a 2x INTER_AREA
+        """a premultiplied-alpha mip pyramid of self.tex -- level 0 = the atlas itself, each next a 2x INTER_AREA
         downsample (area-correct: the premultiplied RGBA stays premultiplied under an area average, so transparent texels do
         not bleed dark into the crowns). Rebuilt only when self.tex changes (identity by id + shape). Returns [BGRA_premult, ...]."""
         key = (id(self.tex), self.tex.shape)
@@ -488,7 +486,7 @@ class ArchBand:
         return levels
 
     def _warp_quad_mip(self, M, out_wh):
-        """v14: warpAffine the atlas into a column quad with trilinear mip minification. M (2x3) maps dst px -> texel
+        """warpAffine the atlas into a column quad with trilinear mip minification. M (2x3) maps dst px -> texel
         (WARP_INVERSE_MAP). The local minification = sqrt(|det of M's 2x2 linear part|) texels per dst px; level = log2 of it,
         two adjacent levels blended. Each level is premultiplied; the result is un-premultiplied to straight BGRA (what the
         raw-bilinear path returns), so the caller's 'over' composite is unchanged. Magnification (ratio < 1) -> level 0."""
@@ -548,7 +546,7 @@ class ArchBand:
         return self
 
     def harvest_many(self, sources, iod, max_shift=0.02, min_ncc=0.6, log=None):
-        """v8: the texture = per-texel MEDIAN over several harvest frames [(img, alpha, proj, gain)], each registered to
+        """the texture = per-texel MEDIAN over several harvest frames [(img, alpha, proj, gain)], each registered to
         the first on the canonical plane (phase correlation of L over the shared tooth pixels; a frame that does not
         register is dropped); gain scales a frame's colour to the first's light. Returns the frames used."""
         texs = []
@@ -648,9 +646,9 @@ class ArchBand:
         2D harvest does not ride the 3D arch twice (the tips' own shapes stay); (1) along each column the teeth run
         tooth_h IOD from the edge (the part the harvest frame's lip covered repeats the teeth just inside it), then the
         gum; (2) columns the harvest frame did not show take their mirror image about the midline; (3) beyond that the
-        outermost tooth period is tiled outward (premolars) -- or, v8 synth, modelled teeth (synth_teeth) -- and darkened
-        (+ desaturated, v8) toward the back (shade at `back` IOD past the last real column); the arch's ends feather out.
-        v12 crown (--warp-arch-build v12): (1) continues each column beyond its visible tooth as a CROWN BODY: the median
+        outermost tooth period is tiled outward (premolars) -- or, synth, modelled teeth (synth_teeth) -- and darkened
+        (+ desaturated) toward the back (shade at `back` IOD past the last real column); the arch's ends feather out.
+        crown (--warp-arch-build v12): (1) continues each column beyond its visible tooth as a CROWN BODY: the median
         colour of the visible tooth's root-side rows (0.02 IOD; never the incisal edge's row band), low-passed across the
         arch (0.06 IOD: no interdental or edge structure) and darkened toward the root, then the gum."""
         T = self.tex
@@ -683,7 +681,7 @@ class ArchBand:
             tk = cv2.remap(tk.astype(np.float32), mx, my, cv2.INTER_LINEAR, borderValue=0) > 0.5
             al = T[..., 3]
             self.edge_fit = f.tolist()
-        if layout is not None:  # v13 (--warp-arch-layout anthro): the harvested teeth resampled onto the anthropometric
+        if layout is not None:  # --warp-arch-layout anthro: the harvested teeth resampled onto the anthropometric
             cap_ = tuple(layout.get("cap", (0.6, 1.8)))
             p0 = max(2, int(round(period * iod * self.texel)))  # slots (a monotone
             det = edge_lines(T, tk, r_e, iod, self.texel, upper)  # x-warp of the columns)
@@ -715,7 +713,7 @@ class ArchBand:
                 rr = np.nonzero(al[:, c] > 0.5)[0]
             if len(rr) < 2:
                 continue
-            if upper and crown:  # v12: a crown body above the visible tooth (the median colour of its root-side rows,
+            if upper and crown:  # a crown body above the visible tooth (the median colour of its root-side rows,
                 g2 = max(g, int(round(0.02 * iod * self.texel)))  # below the harvest lip's contact line / shadow)
                 r = int(min(rr[0] + g2, rr[-1]))
                 r1 = min(int(rr[-1]) + 1, r + max(1, int(round(0.02 * iod * self.texel))))
@@ -723,7 +721,7 @@ class ArchBand:
                 T[:r, c, 3] = np.maximum(T[:r, c, 3], T[r, c, 3])
                 GW[:, c] = smootherstep(((r_e - th) - rows) / tr)
                 rep[:r, c] = np.clip((r - rows[:r]) / max(1.0, 0.6 * th), 0, 1)
-            elif crown:  # v12, lower: the same below it
+            elif crown:  # lower: the same below it
                 g2 = max(g, int(round(0.02 * iod * self.texel)))
                 r = int(max(rr[-1] - g2, rr[0]))
                 r0 = max(int(rr[0]), r + 1 - max(1, int(round(0.02 * iod * self.texel))))
@@ -753,8 +751,8 @@ class ArchBand:
         if not upper:  # the lower incisal edge is the part the lip leaves visible: solid, not see-through,
             body = (rows[:, None] >= r_e + 1.5) & (T[..., 3] > 0.3)
             T[..., 3] = np.where(body, 1.0, T[..., 3])
-            # and lit like the tooth below it (the harvest's tips carry the dark bite line between the arches). v16.1: the atlas
-            # stays BRIGHT (v15); the lower-teeth shadow is applied per frame (LayerCompositor._lower_shadow), gated by the take's
+            # and lit like the tooth below it (the harvest's tips carry the dark bite line between the arches). the atlas
+            # stays BRIGHT; the lower-teeth shadow is applied per frame (LayerCompositor._lower_shadow), gated by the take's
             # own per-frame lower display -- bright where the take bares a row, dark/receded where it hides them (no baked darkening)
             k0 = int(np.ceil(r_e + max(2.0, 0.015 * iod * self.texel)))
             r0_ = int(np.ceil(r_e + 0.5))
@@ -762,7 +760,7 @@ class ArchBand:
                 T[r0_:k0, :, :3] = np.maximum(T[r0_:k0, :, :3], 0.92 * T[k0 : k0 + 1, :, :3])
         if gum is not None:
             gcol = gum[None, None, :] * np.ones((Th, Tw, 1), np.float32)
-            if synth:  # v8: the gum recedes into the lip's shadow away from the teeth (a pale gum line
+            if synth:  # the gum recedes into the lip's shadow away from the teeth (a pale gum line
                 far = (r_e - th - rows) if upper else (rows - (r_e + th))  # printed through a see-through lip edge)
                 gcol = gcol * (1 - 0.45 * smootherstep(far / max(1.0, 0.12 * iod * self.texel)))[:, None, None]
             T[..., :3] = T[..., :3] * (1 - GW[..., None]) + gcol * GW[..., None]
@@ -785,7 +783,7 @@ class ArchBand:
             if not cov[c] and cov[m]:
                 T[:, c] = T[:, m]
                 src[c] = 2
-        if layout is not None:  # v13: every slot boundary on the harvested / mirrored run reads as an interproximal line
+        if layout is not None:  # every slot boundary on the harvested / mirrored run reads as an interproximal line
             self.groove(T, src > 0, layout["bounds"], iod, upper, r_e, th)  # over the whole crown (the gap fill above and the
         cov = src > 0
         mid = Tw // 2  # crown body's blur remove the harvest's own)
@@ -801,7 +799,7 @@ class ArchBand:
                 lo -= 1
             while hi + 1 < Tw and cov[hi + 1]:
                 hi += 1
-            if layout is not None and hi - lo + 1 >= 2:  # v13: beyond the run, modelled teeth fill the anthropometric slots
+            if layout is not None and hi - lo + 1 >= 2:  # beyond the run, modelled teeth fill the anthropometric slots
                 lo, hi, self.trimmed = trim_run(lo, hi, layout["bounds"], self.A, self.texel)  # (a run ending in a sliver of a slot:
                 self.synth_cols = synth_slots(
                     T, src, lo, hi, layout["bounds"], self.A, iod, self.texel, upper, r_e, self.x_hl
@@ -830,15 +828,15 @@ class ArchBand:
                         dark[c], 1 - 0.5 * shade * smootherstep((abs(c - mid) - 0.1 * iod * self.texel) / max(1.0, back * iod * self.texel))
                     )
         T[..., :3] *= dark[None, :, None]
-        if desat > 0:  # v8: the back of the mouth loses its colour too (the teeth there are in shadow)
+        if desat > 0:  # the back of the mouth loses its colour too (the teeth there are in shadow)
             grey = T[..., :3].mean(2, keepdims=True)
             s_ = (1 - desat * fb)[None, :, None]
             T[..., :3] = grey + (T[..., :3] - grey) * s_
-        if detail > 0:  # v14: edge-aware detail enhancement of the crown structure
+        if detail > 0:  # edge-aware detail enhancement of the crown structure
             self.detail_pass(T, iod, upper, r_e, th, float(detail))
-        if enamel:  # v14: the enamel material pass (gloss, incisal translucency, interdental / gumline AO, warm hue)
+        if enamel:  # the enamel material pass (gloss, incisal translucency, interdental / gumline AO, warm hue)
             self.enamel_pass(T, src > 0, iod, upper, r_e, th, fb, enamel, layout)
-        if gums > 0 and crown and gum_rgb is not None and gum_h > 0:  # v15: pink gingiva above / below the crowns, scalloped margin
+        if gums > 0 and crown and gum_rgb is not None and gum_h > 0:  # pink gingiva above / below the crowns, scalloped margin
             gh = gum_h * iod * self.texel  # the pink band above the crown top (texel rows)
             drop = float(gum_drop) * th
             pap = float(gum_pap) * th  # the margin drops onto the cervical enamel; papillae dip between teeth
@@ -847,11 +845,11 @@ class ArchBand:
         endf = smootherstep((self.A - np.abs(self.a)) / max(1e-6, fade * iod)).astype(np.float32)
         T[..., 3] *= endf[None, :]
         self.tex, self.src = T, src
-        self.tooth_h_c, self.tr_c = th / self.texel, tr / self.texel  # (v12 lip band: canonical px)
+        self.tooth_h_c, self.tr_c = th / self.texel, tr / self.texel  # (lip band: canonical px)
         return self
 
     def detail_pass(self, T, iod, upper, r_e, th, amount, radius=0.004, clip=18.0):
-        """v14 (--warp-arch-detail): an edge-aware, MEAN-PRESERVING detail enhancement of the crown's own structure in atlas
+        """--warp-arch-detail: an edge-aware, MEAN-PRESERVING detail enhancement of the crown's own structure in atlas
         space. The L channel's high-frequency residual over a small radius (sub-tooth: surface + groove texture, not the
         tooth-vs-gap macro edges) is soft-clipped (tanh, no ringing / halos) and added back, so a blurry mid-shot's harvested
         teeth get their crispness restored -- it only sharpens what the harvest already has. Because the unsharp residual is
@@ -873,12 +871,12 @@ class ArchBand:
         T[..., :3] = np.where(m[..., None], cv2.cvtColor(lab.astype(np.uint8), cv2.COLOR_LAB2BGR).astype(np.float32), T[..., :3])
 
     def enamel_pass(self, T, run, iod, upper, r_e, th, fb, p, layout=None):
-        """v14 (--warp-arch-enamel): a material pass on the crown rows in atlas space -- kill the flat grey enamel. Four
+        """--warp-arch-enamel: a material pass on the crown rows in atlas space -- kill the flat grey enamel. Four
         components, each a scalar in `p` (0 = off): `spec` a glossy specular highlight (a soft vertical band across the mid-
         crown, strongest on the key-light side, self.x_hl in -1..1); `transl` incisal translucency (the biting edge lighter and
         a touch warmer -- thin enamel); `ao` interdental + gum-line ambient occlusion (darker in the grooves and where the
         crown meets the gum / the back of the arch); `warm` the enamel hue toward the take's yellowish teeth (Lab b* up, a*
-        held low -- the v13 render read greyer / bluer). Operates only on crown texels (within th of the incisal edge, tooth
+        held low -- the render read greyer / bluer). Operates only on crown texels (within th of the incisal edge, tooth
         alpha > 0.5), leaving the gum, the cavity and the lip band untouched. In place. `fb` = the back-of-arch fade (0 front,
         1 back) so the gloss eases out toward the dark corners."""
         Th, Tw = T.shape[:2]
@@ -923,7 +921,7 @@ class ArchBand:
         T[..., :3] = np.where(m[..., None], bgr, T[..., :3])
 
     def gum_pass(self, T, run, iod, upper, r_e, th, gh, strength, col, layout=None, drop=0.0, pap=0.0):
-        """v15 (--warp-arch-gums): a pink gingival band baked into the arch atlas over the cervical top of the crowns and up
+        """--warp-arch-gums: a pink gingival band baked into the arch atlas over the cervical top of the crowns and up
         toward the lip, so the crowns emerge from gum, not from lip colour. `gh` = the pink band's height ABOVE the crown top
         (texel rows, scaled by the face's IPD through the anthro unit); `col` = BGR gum colour (the take's own harvested
         gingiva, or a synthesized warm-pink fallback); `strength` = the blend opacity. The gum MARGIN is scalloped and DROPS
@@ -953,8 +951,8 @@ class ArchBand:
         T[..., :3] = T[..., :3] * (1 - w[..., None]) + gcol * w[..., None]
         T[..., 3] = np.maximum(T[..., 3], (w > 0.05).astype(np.float32))  # opaque where gum was painted (no cavity shows through)
 
-    def groove(self, T, run, bounds, iod, upper, r_e, th, depth=0.15, width=0.005):  # v17e: 0.3 -> 0.15 (founder: gaps too busy)
-        """v13 (anthro): the slot boundaries (bounds: canonical px from the midline, both sides) on the run's columns (run: bool per
+    def groove(self, T, run, bounds, iod, upper, r_e, th, depth=0.15, width=0.005):  # 0.3 -> 0.15 (gaps too busy)
+        """the slot boundaries (bounds: canonical px from the midline, both sides) on the run's columns (run: bool per
         column) as interproximal lines: each column near a boundary is scaled as a whole (every row by one factor: no new
         horizontal edge, the double-edge ruler is unaffected) to (1 - depth x a gaussian of `width` IOD about the boundary) of
         the run's local tooth brightness (a horizontal median over ~0.03 IOD, over the crown's rows within th of the incisal
@@ -990,7 +988,7 @@ class ArchBand:
         T[..., :3] *= f[None, :, None]
 
     def lines_now(self, iod, skin_L=None, upper=True):
-        """v13: the interdental lines of the band's CURRENT texture (edge_lines over its opaque tooth pixels, the teeth key when
+        """the interdental lines of the band's CURRENT texture (edge_lines over its opaque tooth pixels, the teeth key when
         skin_L is given) -> (lines: arc positions in IOD, ascending; the two central widths (image-left, image-right) in IOD
         around the line nearest the midline (within 0.08 IOD), None where a neighbour is missing)."""
         T = self.tex
@@ -1015,7 +1013,7 @@ class ArchBand:
         x0, y0, w, h = box
         out = np.zeros((h, w, 4), np.float32)
         am = np.full((h, w), np.nan, np.float32) if amap else None
-        hm = np.full((h, w), np.nan, np.float32) if hmap else None  # v12: the band's h (canonical px) of the front-most quad
+        hm = np.full((h, w), np.nan, np.float32) if hmap else None  # the band's h (canonical px) of the front-most quad
         step = step or max(2.0, 0.01 * self.Tw)
         nq = max(4, int(np.ceil(2 * self.A * self.texel / step)))
         ac = np.linspace(-self.A, self.A, nq + 1)
@@ -1039,7 +1037,7 @@ class ArchBand:
                 continue
             srcp = np.float32([[tx[j], -0.5], [tx[j + 1], -0.5], [tx[j + 1], self.Th - 0.5]])
             M = cv2.getAffineTransform(dst[:3] - np.float32([bx0, by0]), srcp)  # box px -> texel
-            if self.mipmap:  # v14: area-correct minification
+            if self.mipmap:  # area-correct minification
                 patch = self._warp_quad_mip(M, (bx1 - bx0, by1 - by0))
             else:
                 patch = cv2.warpAffine(
@@ -1055,7 +1053,7 @@ class ArchBand:
             m = (m > 0) & (patch[..., 3] > 0.002)
             if nz[j] > 0:
                 patch[..., :3] *= lingual  # back-facing: the lingual side
-            elif facing > 0:  # v8: a crown seen edge-on is in shadow
+            elif facing > 0:  # a crown seen edge-on is in shadow
                 patch[..., :3] *= (1 - facing) + facing * float(np.clip(-nz[j], 0, 1)) ** 0.7
             sub = out[by0:by1, bx0:bx1]
             a = patch[..., 3:4]  # premultiplied "over"
@@ -1085,7 +1083,7 @@ class ArchBand:
         return (rgb, out[..., 3], am) if amap else (rgb, out[..., 3])
 
     def load_from(self, Z, key, iod, L_scale=1.0):
-        """v8 fallback: take the arch texture of another shot (np.load'ed Z, keys <key>_tex / <key>_a / <key>_h in IOD
+        """fallback: take the arch texture of another shot (np.load'ed Z, keys <key>_tex / <key>_a / <key>_h in IOD
         units), resampled onto this band's (a, h) grid by IOD, its L scaled by L_scale."""
         Ts = np.asarray(Z[f"{key}_tex"], np.float32)
         a_s = np.asarray(Z[f"{key}_a"], float)
@@ -1105,7 +1103,7 @@ class ArchBand:
 def ellipsoid_layer(c, L, box, colour, light=(0.0, -0.55, -0.83), groove=0.08, spec=0.0, ambient=0.45, diffuse=0.6):
     """a soft ellipsoid (the tongue) in box: centre c (frame px, 2), L = the 2x3 linear map canonical -> frame applied to
     the ellipsoid's semi-axes (columns = axis vectors x semi-axis, rotated). Silhouette = the projected ellipse
-    (shape L L^T); shading = a sphere impostor lit from the front-above, a faint median groove, (v8) a wet specular
+    (shape L L^T); shading = a sphere impostor lit from the front-above, a faint median groove, a wet specular
     highlight of strength spec. -> (BGR, alpha)."""
     x0, y0, w, h = box
     Mx = np.asarray(L, float)
@@ -1138,7 +1136,7 @@ def ellipsoid_layer(c, L, box, colour, light=(0.0, -0.55, -0.83), groove=0.08, s
 
 
 def fill_blob(img, mask, seed=7, grain=1.0):
-    """v8 cover: fill mask (bool) of img (BGR uint8) with the harmonic membrane of the pixels around it plus static
+    """cover: fill mask (bool) of img (BGR uint8) with the harmonic membrane of the pixels around it plus static
     grain matched to the surrounding skin's high-pass (the same recipe as lip_layers.erase_lips, on any mask). The fill
     meets the surrounding pixels exactly at the boundary, so there is no seam against the image it is cut into."""
     img = np.asarray(img)
@@ -1168,8 +1166,8 @@ def fill_blob(img, mask, seed=7, grain=1.0):
 
 # ------------------------------------------------------------------------------------------- the compositor --
 class LayerCompositor:
-    """v7 layered mouth. teeth: the TeethLayer (pose, pins, jaw plan, harvest stats, cavity tone, light) -- its plates
-    are not used; frames: the take; S: its smoothed track. v8 options (all default to v7's behaviour): pin_mode
+    """layered mouth. teeth: the TeethLayer (pose, pins, jaw plan, harvest stats, cavity tone, light) -- its plates
+    are not used; frames: the take; S: its smoothed track. options (all default to the earlier behaviour): pin_mode
     'skin' | 'arc', pin_gain / pin_split (the arc pin's fast-residual gain and split sigma), harvest_n, texel, synth,
     desat, tex_from / tex_out, tongue 'on' | 'off' | 'wedge', rim (strength, width IOD), wet, cover 'on' | 'off' |
     'fill', smooth (frames)."""
@@ -1233,9 +1231,9 @@ class LayerCompositor:
         self.t, self.frames, self.S = teeth, frames, S
         t = teeth
         io = t.iod
-        self.cavity_fill = float(cavity_fill or 0.0)  # v17 (--warp-cavity fill): tongue + lower row painted in the opening
-        self.build = build  # v12 (--warp-arch-build v12): crown-body continuation, open-bite lower harvest
-        # v13 (--warp-arch-layout anthro, --warp-arch-corridor K): the teeth on anthropometric slots; the buccal corridor
+        self.cavity_fill = float(cavity_fill or 0.0)  # --warp-cavity fill: tongue + lower row painted in the opening
+        self.build = build  # --warp-arch-build crown-body continuation, open-bite lower harvest
+        # --warp-arch-layout anthro, --warp-arch-corridor K: the teeth on anthropometric slots; the buccal corridor
         self.layout, self.corridor, self.corridor_floor, self.lay = layout, float(corridor or 0.0), float(corridor_floor), None
         self.cor_frames, self._cor = {}, None
         if layout == "anthro" or self.corridor > 0:
@@ -1244,10 +1242,10 @@ class LayerCompositor:
             self.lay = {
                 k: dict(bounds=anthro_bounds(ANTHRO[k], self.unit_c, 1.02 * arc * io)) for k, arc in (("up", up_arc), ("lo", lo_arc))
             }
-        self.interior_clip, self.dbg_stab, self.reg = bool(interior_clip), dbg_stab, {}  # v11
+        self.interior_clip, self.dbg_stab, self.reg = bool(interior_clip), dbg_stab, {}
         self.cover_corners = float(cover_corners or 0.0)
         self.corner_log = {}
-        self.face_of = None  # v12 (--warp-yaw-clamp): (i, box) -> the corner cover's face test over the box, or None
+        self.face_of = None  # --warp-yaw-clamp: (i, box) -> the corner cover's face test over the box, or None
         self.lip_ab, self.skin_ab = lip_ab, skin_ab
         self.tongue_mode = tongue if isinstance(tongue, str) else ("on" if tongue else "off")
         self.tongue_on = self.tongue_mode != "off"
@@ -1280,14 +1278,14 @@ class LayerCompositor:
         self.cover_lip = []
         self.harvest_used = dict(up=1, lo=1)
         self.fallback = []
-        self.mipmap = bool(mipmap)  # v14 (--warp-arch-mipmap): area-correct minification of the arch atlas
-        self.enamel = enamel if enamel else None  # v14 (--warp-arch-enamel): the crown material pass dict, or None (off)
-        self.detail = float(detail or 0.0)  # v14 (--warp-arch-detail): edge-aware crown detail enhancement
-        self.gums = float(gums or 0.0)  # v15 (--warp-arch-gums): pink gingiva above / below the crowns (0 = off, the v14 band)
+        self.mipmap = bool(mipmap)  # --warp-arch-mipmap: area-correct minification of the arch atlas
+        self.enamel = enamel if enamel else None  # --warp-arch-enamel: the crown material pass dict, or None (off)
+        self.detail = float(detail or 0.0)  # --warp-arch-detail: edge-aware crown detail enhancement
+        self.gums = float(gums or 0.0)  # --warp-arch-gums: pink gingiva above / below the crowns (0 = off, the earlier band)
         self.tongue_cover = float(
             tongue_cover or 0.0
-        )  # v15 (--warp-tongue-cover): the tongue rises over the lower crowns at mid-open (0 = the v8 envelope)
-        # v16 (--warp-lower-real): the lower teeth as the dim, half-hidden, soft-bottomed sibling of the uppers (0 = the v15 lowers)
+        )  # --warp-tongue-cover: the tongue rises over the lower crowns at mid-open (0 = the earlier envelope)
+        # --warp-lower-real: the lower teeth as the dim, half-hidden, soft-bottomed sibling of the uppers (0 = the earlier lowers)
         self.lower_real = float(lower_real or 0.0)
         self.lower_p = None
         self.lower_target = None
@@ -1305,7 +1303,7 @@ class LayerCompositor:
             else:
                 base = {k: 1.0 for k in keys}
             self.lower_p = {k: self.lower_real * v for k, v in base.items()}
-            # the per-take lower-vs-upper tooth-display ratio (the founder's insight): some faces show mostly top teeth, some
+            # the per-take lower-vs-upper tooth-display ratio: some faces show mostly top teeth, some
             # a blend, some mostly bottom; drive the lower dim target from the take's OWN tendency (own-pixels -> own-behaviour)
             if isinstance(lower_ratio, str) and lower_ratio.strip().lower() == "auto":
                 self.lower_ratio = self._lower_display_ratio()
@@ -1337,14 +1335,14 @@ class LayerCompositor:
             if not hasattr(self, "unit_c"):
                 self.unit_c, self.unit_info = self._anthro_unit(anthro_unit)
             # the visible pink band above the crown, scaled by the face's IPD: the UPPER is taller (a real gum band when the
-            # crowns are exposed), the LOWER stays subtle (the founder: gums at least on the top teeth)
+            # crowns are exposed), the LOWER stays subtle (gums at least on the top teeth)
             self.gum_h_up = float(np.clip(0.135 * self.unit_c / io, 0.055, 0.090))
             self.gum_h_lo = float(np.clip(0.070 * self.unit_c / io, 0.030, 0.055))  # (gum_rgb set after tongue_c, below)
         self.shadow = (0.3, 0.1, 0.15)  # contact-shadow strength: upper lip, lower lip, corners / all round
         self.ref = np.array(t.ref, float)
         self.z_up = t.z_up
         self.z_lof = t.z_up + overjet * io
-        # ---- upper arch: the v6 harvest frame, its (unmirrored) upper plate as the texture source
+        # ---- upper arch: the earlier harvest frame, its (unmirrored) upper plate as the texture source
         up_img, up_al = t._upper_plate(t.h_up, mirror=False)
         e_up = self._edge(t.h_up, up_al, self.z_up, "bottom")
         self.e_up = e_up if e_up is not None else float(t.Cm[13, 1] + 0.06 * io)
@@ -1353,7 +1351,7 @@ class LayerCompositor:
         self.tongue_c = self._tongue_colour()
         self.gum = self.tongue_c * 0.78
         if self.gums > 0:
-            self.gum_rgb, self.gum_src = self._gum_colour()  # v15 (needs tongue_c for the synth fallback)
+            self.gum_rgb, self.gum_src = self._gum_colour()  # (needs tongue_c for the synth fallback)
         if harvest_n > 1:
             srcs = [(up_img, up_al, (lambda X, h=t.h_up: t.pl.rigid(h, X)), 1.0)]
             for h in self._upper_candidates(harvest_n - 1):
@@ -1404,7 +1402,7 @@ class LayerCompositor:
                 self.harvest_used["lo"] = self.lo.harvest_many(srcs, io, log=self.harvest_log)
             else:
                 self.lo.harvest(lo_img, lo_al, lambda X: t.pl.rigid(self.h_lt, X))
-            # v16.1: the lower arch atlas is built BRIGHT (v15); --warp-lower-real applies its shadow per frame (_lower_shadow /
+            # the lower arch atlas is built BRIGHT; --warp-lower-real applies its shadow per frame (_lower_shadow /
             # _lower_depth), gated by the take's own per-frame lower display -- so a bright smile row is NOT dragged down by a
             # baked darkening, while the grill still recedes where the take hides the lowers.
             self.lo.complete(
@@ -1428,9 +1426,9 @@ class LayerCompositor:
             self._synth_lower()
         if tex_from:
             self._fallback_tex(tex_from, tex_min_h, share=bool(tex_share))
-        self.up.mipmap = self.lo.mipmap = self.mipmap  # v14: both arch atlases minify through the mip pyramid
+        self.up.mipmap = self.lo.mipmap = self.mipmap  # both arch atlases minify through the mip pyramid
         if self.lay:
-            self.layout_info = self._layout_info()  # v13: the slots, the resample, the widths as rendered
+            self.layout_info = self._layout_info()  # the slots, the resample, the widths as rendered
         if tex_out:
             self._save_tex(tex_out)
         # the jaw is now referenced to the lower harvest frame: angle 0 = that frame's jaw
@@ -1468,7 +1466,7 @@ class LayerCompositor:
         return float(q[1])
 
     def _upper_candidates(self, k, bin_deg=8.0):
-        """v8: up to k more upper-harvest frames in the same head-pose bin as h_up (out-of-plane pose within bin_deg),
+        """up to k more upper-harvest frames in the same head-pose bin as h_up (out-of-plane pose within bin_deg),
         best-scoring first, at least 2 frames apart."""
         t = self.t
         sc = t._up_score * t._ok * np.exp(-((np.linalg.norm(t.pl.par[:, 1:4] - np.median(t.pl.par[:, 1:4], 0), axis=1) / 0.25) ** 2))
@@ -1485,7 +1483,7 @@ class LayerCompositor:
         return out
 
     def _lower_display_ratio(self):
-        """v16, the founder's insight measured: this face's lower-vs-upper tooth-display tendency over its own talking frames.
+        """this face's lower-vs-upper tooth-display tendency over its own talking frames.
         From the per-frame teeth stats (up_area / lo_area = the upper / lower arch tooth-pixel counts inside the inner lip,
         apart = how far open), the openness-weighted ratio sum(lo_area)/sum(up_area) over frames that actually bare the teeth.
         -> a scalar (~0.2 a top-teeth talker .. ~0.8 a bottom-teeth talker); REF (0.45) when nothing is shown."""
@@ -1554,7 +1552,7 @@ class LayerCompositor:
         U = self.up.tex
         Tw = self.lo.Tw
         aa = self.lo.a / 0.8
-        if self.lay:  # v13 anthro: the lower slots onto the upper ones (each lower tooth from the upper tooth of its rank)
+        if self.lay:  # anthro: the lower slots onto the upper ones (each lower tooth from the upper tooth of its rank)
             lo_b, up_b = self.lay["lo"]["bounds"], self.lay["up"]["bounds"]
             m = min(len(lo_b), len(up_b))  # the up/lo arches can truncate to different tooth counts; pair them by rank
             aa = np.sign(self.lo.a) * np.interp(np.abs(self.lo.a), lo_b[:m], up_b[:m])
@@ -1568,7 +1566,7 @@ class LayerCompositor:
         self.lo.src = np.full(Tw, 3, np.int8)
 
     def _anthro_unit(self, mode="ipd"):
-        """v13: the canonical length of the anthropometric table's IOD (63 mm). 'ipd' (default) = the face's own inter-pupil
+        """the canonical length of the anthropometric table's IOD (63 mm). 'ipd' (default) = the face's own inter-pupil
         distance: the iris centres (468 / 473) of the median canonical face, or IPD_OCD x lsdub's IOD when they are missing or
         implausible (outside 0.6..0.8 of it). 'iod' = lsdub's own IOD (the outer eye corners, ~1.45 x the IPD): the table read
         literally. Logged with the denture rule's cross-check (bizygomatic 234 / 454 width / 2.2)."""
@@ -1590,7 +1588,7 @@ class LayerCompositor:
         )
 
     def _layout_info(self):
-        """v13: teeth.layers.layout -- the table, the unit, per arch the resample (detected lines, period, stretch, knots; IOD), the
+        """teeth.layers.layout -- the table, the unit, per arch the resample (detected lines, period, stretch, knots; IOD), the
         slot boundaries (IOD, both sides, within the arc), the lines and central widths of the texture AS RENDERED (IOD and
         table units)."""
         io = self.t.iod
@@ -1643,7 +1641,7 @@ class LayerCompositor:
         return float(np.median(lab[..., 0][m]))
 
     def _tex_detail(self, band):
-        """v14 (--warp-arch-tex-share): a sharpness score of a band's HARVESTED teeth (src 1 / 4 only, not the modelled /
+        """--warp-arch-tex-share: a sharpness score of a band's HARVESTED teeth (src 1 / 4 only, not the modelled /
         mirrored / extended columns): the mean gradient magnitude of L over those tooth texels, in units of IOD-pixels so
         close-ups (more take pixels per tooth) score higher than blurry mid / wide shots. The shared atlas is kept for a shot
         only when it is sharper than the shot's own harvest by this measure."""
@@ -1680,9 +1678,9 @@ class LayerCompositor:
         )
 
     def _fallback_tex(self, path, min_h, share=False):
-        """v8: when this shot's own harvested teeth are shorter than min_h IOD (a few px tall), take the arch texture of
+        """when this shot's own harvested teeth are shorter than min_h IOD (a few px tall), take the arch texture of
         another shot of the same character (teeth are the same bone), scaled by IOD and L-matched to the own harvest.
-        v14 (--warp-arch-tex-share): share = the shared SHARP atlas is the detail source for EVERY shot of that face (the
+        (--warp-arch-tex-share): share = the shared SHARP atlas is the detail source for EVERY shot of that face (the
         close-ups feed the blurry mid-shots), so it is loaded whenever it is SHARPER than this shot's own harvest (taller
         exposed teeth OR the own harvest too short), not only when the own harvest is a few px tall. Teeth identity is
         constant per face, so the same bone is simply shown at this shot's IOD; the per-frame light still scales it."""
@@ -1693,12 +1691,12 @@ class LayerCompositor:
             src_h = float(Z.get(f"{key}_h_iod", 1.0))
             own_d = self._tex_detail(band)
             src_d = float(Z.get(f"{key}_detail", 0.0))
-            if share:  # v14: take the shared atlas when it is SHARPER (gradient energy), or taller AND at least as sharp
+            if share:  # take the shared atlas when it is SHARPER (gradient energy), or taller AND at least as sharp
                 sharper = src_d > 1.05 * own_d
                 taller = src_h > own_h + 1e-4 and src_d >= own_d  # never trade detail DOWN for height
                 take = sharper or taller or (own_h < min_h)
                 why = "sharper" if sharper else ("taller" if taller else "short")
-            else:  # v8: only the short-harvest fallback
+            else:  # only the short-harvest fallback
                 take = own_h < min_h or src_h <= own_h
                 why = "short"
             if not take:
@@ -1738,14 +1736,14 @@ class LayerCompositor:
             if m.sum() >= 20:
                 px.append(img[m].astype(float))
         if not px:
-            if self.lip_ab is not None:  # v8: the lip colour, darkened
+            if self.lip_ab is not None:  # the lip colour, darkened
                 lab = np.uint8([[[int(np.clip(0.7 * t.skin_med, 0, 255)), int(self.lip_ab[0]), int(self.lip_ab[1])]]])
                 return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)[0, 0].astype(float)
             return np.array([150.0, 135.0, 205.0]) * t.skin_med / 180.0
         return np.median(np.vstack(px), 0)
 
     def _gum_colour(self):
-        """v15 (--warp-arch-gums): the take's own gingival (pink gum) colour, harvested from the widest-smile frames -- the
+        """--warp-arch-gums: the take's own gingival (pink gum) colour, harvested from the widest-smile frames -- the
         frames showing the most upper teeth, where the gum above them is exposed. In each such frame the gum pixels are inside
         the inner-lip polygon, NOT teeth (teeth_key false), reddish (Lab a* raised), of mid lightness (brighter than the dark
         cavity, not as light as enamel), and ABOVE the row band of the visible teeth (so the tongue / lower lip is excluded).
@@ -1798,7 +1796,7 @@ class LayerCompositor:
         return self._gum_pinken(bgr), "synth"
 
     def _gum_pinken(self, bgr):
-        """v15: nudge a harvested / synthesized gum colour toward a healthy gum pink so it reads as gum in the render even
+        """nudge a harvested / synthesized gum colour toward a healthy gum pink so it reads as gum in the render even
         though the baked band sits in shadow (and then takes the per-frame light + corridor dimming): lift L off a floor and
         push a* toward pink, gently (a blend, the take's own hue kept). In Lab (0..255). Our own classical colour math."""
         lab = cv2.cvtColor(np.clip(np.asarray(bgr, np.float32).reshape(1, 1, 3), 0, 255).astype(np.uint8), cv2.COLOR_BGR2LAB)[0, 0].astype(
@@ -1870,7 +1868,7 @@ class LayerCompositor:
         """the lower teeth share the chin skin's motion: per frame, the high-pass of (DIS flow track of the soft chin in
         the warped frames - where the skull pose + upper pin + planned jaw put the chin), added to the lower arch only.
         The plan keeps the slow placement, the skin gives every frame-to-frame step (as the upper pin does at the lip
-        root). v8 pin_mode 'arc': that correction is split into its slow part (kept) and its fast residual (gain
+        root). pin_mode 'arc': that correction is split into its slow part (kept) and its fast residual (gain
         pin_gain, zero-phase smoothed), then projected onto the jaw hinge's arc as an extra jaw angle per frame (dth),
         bounded by the exposure limit; pin_lo stays zero (nothing translates off the arc)."""
         t = self.t
@@ -1892,7 +1890,7 @@ class LayerCompositor:
         if self.pin_gain > 0 and self.pin_split > 0:
             fast = gaussian_filter1d(fast, 1.0, axis=0, mode="nearest")
         c2 = slow + self.pin_gain * fast
-        self._pin_slow, self._pin_fast = slow, fast  # (v9: the maker's teeth_plan re-takes one frame at gain 0)
+        self._pin_slow, self._pin_fast = slow, fast  # (the maker's teeth_plan re-takes one frame at gain 0)
         dth = np.zeros(n)
         disp = np.zeros((n, 2))
         for i in range(n):
@@ -1918,7 +1916,7 @@ class LayerCompositor:
         return self.pin_lo
 
     def dth_for(self, i, gain=0.0, P14=None):
-        """v9 (the gate's teeth_plan): the arc pin's extra jaw angle of frame i with another fast-residual gain (0 = the
+        """the arc pin's extra jaw angle of frame i with another fast-residual gain (0 = the
         lower teeth follow the slow chin motion + the jaw plan only), the exposure limit folded in as set_chin_pin does."""
         if getattr(self, "_pin_slow", None) is None:
             return float(self.dth[i])
@@ -1950,7 +1948,7 @@ class LayerCompositor:
         return self.pin_disp[i] if i < len(self.pin_disp) else np.zeros(2)
 
     def prepare(self, gaps, vis=None):
-        """v8: per-frame layer parameters over the whole clip, zero-phase eased (smooth frames): the opening share (the
+        """per-frame layer parameters over the whole clip, zero-phase eased (smooth frames): the opening share (the
         cavity's throat and the tongue's lift) and the tongue's vowel pose (dorsum rise, tip rise, retraction)."""
         t = self.t
         n = self.n
@@ -1969,8 +1967,8 @@ class LayerCompositor:
         return self
 
     def plan_single(self, P_out, sigma=1.0, tongue_sigma=2.0, lo_limit=0.09, pin="none"):
-        """v12 --warp-reg single: ONE reference for the whole interior (founder on v10/v11: the sub-elements' registrations
-        "slosh" across frames; v11 measured that the placement rule, not the pins, drives it). Physically the upper teeth
+        """--warp-reg single: ONE reference for the whole interior (the sub-elements' registrations
+        slosh across frames, and the placement rule, not the pins, drives it). Physically the upper teeth
         are bone fixed to the skull, the lower teeth rotate with the jaw about the condyle hinge (one angle), the lips slide
         over both, and the cavity is whatever the lips enclose that is not teeth or tongue. So:
           L4  the upper arch: the skull pose only (no lip-root skin pin; the caller skips set_pin), its texture fixed in
@@ -1985,12 +1983,12 @@ class LayerCompositor:
               per-frame exposure kick: nothing per frame but theta
           tongue  a slow function of theta (its own low-pass, tongue_sigma): the opening share theta implies drives the
               wedge tongue's drop / retraction and the cavity's throat; no per-frame vowel re-fit (tg = 0)
-          L2  the planned inner-lip polygon (as v11; behind the arches), its throat shading from the same slow share
+          L2  the planned inner-lip polygon (behind the arches), its throat shading from the same slow share
           guard   the planned upper inner lip never lifts above the upper arch's band: the band's gum is extended upward
               when the plan reaches past it (no cavity where gum should be)
         pin 'global' / 'nose' (--warp-reg-pin): the caller DID set one skin pin (teeth_layer.set_pin: the upper lip-root
         skin of the warped frames / the nose of the take) and it moves the WHOLE interior as one residual (both arches + the
-        tongue ride proj(), which adds it; the jaw angle is taken with it removed, as v9): the sub-elements stay registered
+        tongue ride proj(), which adds it; the jaw angle is taken with it removed): the sub-elements stay registered
         to each other, the dentition follows the real face where the skull pose misses it. 'none' (default): the skull
         pose alone, as specified.
         The lips (L5), the cover (L1) and the face (L6) are untouched."""
@@ -2074,9 +2072,9 @@ class LayerCompositor:
         )
         return self
 
-    # ------------------------------------------------------------------------- v12: the lip band (--warp-arch-build v12) --
+    # ------------------------------------------------------------------------- the lip band (--warp-arch-build v12) --
     def rim_colours(self, img, Q, Qo, io, width=0.025):
-        """v12: the colour of the PLANNED lips' inner rim in this frame (img = the warped frame's box: L5's own pixels), upper and
+        """the colour of the PLANNED lips' inner rim in this frame (img = the warped frame's box: L5's own pixels), upper and
         lower: the lip pixels (lipness > 0.5) within `width` IOD outside the planned inner contour Q (and inside the outer lip),
         darkened as L5 darkens its inner rim (lip_rim strength x its falloff); median BGR per side (None: too few pixels)."""
         h, w = img.shape[:2]
@@ -2097,8 +2095,8 @@ class LayerCompositor:
         return out
 
     def lip_band(self, rgb, hm, band, upper, col):
-        """v12: the plate's band beyond the crown (where v8..v11 drew the gum: the harvest lip's contact line and a tongue-
-        derived pink, read by the founder as the old mouth's lip bleeding through / a second row of teeth) takes the colour of
+        """the plate's band beyond the crown (where earlier builds drew the gum: the harvest lip's contact line and a tongue-
+        derived pink, which reads as the old mouth's lip bleeding through / a second row of teeth) takes the colour of
         the planned lip's inner rim (col, this frame), a little darker toward the teeth (0.9 at the crown .. 1.0 at 0.06 IOD);
         hm: the band's h per pixel (canonical px, ArchBand.render(hmap=True)). The gum guard's extended rows are in it too."""
         self._gw = None
@@ -2114,7 +2112,7 @@ class LayerCompositor:
         return (rgb * (1 - gw) + np.asarray(col, np.float32)[None, None, :] * shade * gw).astype(np.float32)
 
     def lipband_ruler(self, comp, b, width=0.02):
-        """v12 ruler (logged per frame, frames[i].reg.lipband): the composited plate band right under the planned lip (inside the
+        """ruler (logged per frame, frames[i].reg.lipband): the composited plate band right under the planned lip (inside the
         opening, within `width` IOD of the inner contour, where the arch is opaque) vs the lip's inner rim right outside it,
         upper and lower: the mean Lab distance (dE) of the two bands, their pixel counts, and the share of the plate band that
         is the band beyond the crown (gum / lip band) rather than tooth (gum)."""
@@ -2148,9 +2146,9 @@ class LayerCompositor:
             )
         return out
 
-    # --------------------------------------------------------------- v13: the buccal corridor (--warp-arch-corridor K) --
+    # --------------------------------------------------------------- the buccal corridor (--warp-arch-corridor K) --
     def corridor_fade(self, Q, h, w):
-        """v13: the buccal corridor of this frame's PLANNED opening (Q: the warped inner contour the layers use, box px): W = its
+        """the buccal corridor of this frame's PLANNED opening (Q: the warped inner contour the layers use, box px): W = its
         width corner to corner (78 -> 308), c = their mid-point, s = a pixel's position along the corner line from c. The fade is
         0 within |s| <= (0.5 - K) W (the plate is never touched there) and rises with a smootherstep to 1 at |s| = 0.5 W (the
         corners) and beyond -> (h x w float32); the geometry is kept for the log."""
@@ -2170,17 +2168,17 @@ class LayerCompositor:
         return f
 
     def corridor_dim(self, rgb, cav, f):
-        """v13: a plate's colour toward the cavity (L2's own dark at that pixel) by the corridor's fade, down to a faint crown at
+        """a plate's colour toward the cavity (L2's own dark at that pixel) by the corridor's fade, down to a faint crown at
         the corners (corridor_floor of the crown's contrast over the cavity stays: the back teeth are dark, not black); pixels
-        with fade 0 are returned unchanged. (The caller leaves v12's lip band out: f x (1 - its weight).)"""
+        with fade 0 are returned unchanged. (The caller leaves the earlier lip band out: f x (1 - its weight).)"""
         keep = (1.0 - (1.0 - self.corridor_floor) * f)[..., None]
         return np.where(f[..., None] > 0, cav + (rgb - cav) * keep, rgb).astype(np.float32)
 
     def corridor_log(self, i, f, box, io, up_a, lo_a, clip, f_up=None, f_lo=None):
-        """v13: frame i's corridor (frames[i].reg.corridor): W_f (lsdub IOD and the table's IPD unit), the corridor's start
+        """frame i's corridor (frames[i].reg.corridor): W_f (lsdub IOD and the table's IPD unit), the corridor's start
         points (+-(0.5 - K) W_f from c) in the skull-stabilised frame (reg's frame: x, y IOD from the upper arch's origin) and
         the upper arch's arc position there (IOD; the anthro slot it falls in), the dark fraction of each plate's visible part
-        (the share of its clipped alpha weighted by the fade as applied: f_up / f_lo, v12's lip band left out), and arc_short:
+        (the share of its clipped alpha weighted by the fade as applied: f_up / f_lo, the earlier lip band left out), and arc_short:
         the rendered arch ending before the corridor starts on
         a side (its unclipped alpha > 0.5 does not reach +-(0.5 - K) W_f along the corner line)."""
         g = self._cor
@@ -2225,7 +2223,7 @@ class LayerCompositor:
         return out
 
     def corridor_info(self, frames=None):
-        """v13: teeth.layers.corridor -- K, the floor, W_f (IOD) p50 / p95 / max, the dark fractions p50 / p95, the frames whose
+        """teeth.layers.corridor -- K, the floor, W_f (IOD) p50 / p95 / max, the dark fractions p50 / p95, the frames whose
         upper / lower arch ends short of the corridor (arc_short). frames: the delivered frames' own per-frame entries (the
         warp's final log; a gate candidate rendered and rejected leaves its values in cor_frames), else cor_frames."""
         F = self.cor_frames if frames is None else {i: c for i, c in enumerate(frames) if c}
@@ -2262,7 +2260,7 @@ class LayerCompositor:
         g = float(t.light[i])
         cav = np.clip(np.asarray(t.cavity, np.float32) * g / max(1e-3, t.skin_med), 0, 255)
         e = 0.03 * io
-        al = aa_poly(Q, (h, w), e)  # v17e: supersampled (the corner stair-step)
+        al = aa_poly(Q, (h, w), e)  # supersampled (the corner stair-step)
         al = cv2.GaussianBlur(al, (0, 0), 0.9)
         c = Q.mean(0)
         rx = max(2.0, np.ptp(Q[:, 0]) / 2)
@@ -2279,19 +2277,19 @@ class LayerCompositor:
         warm = 0.6 * cav + np.array([14, 18, 52], np.float32)
         k = (0.35 + 0.25 * o) * thr
         rgb = (cav * (1 - k[..., None]) + warm * k[..., None]) * (top * side)[..., None]
-        if self.lower_real > 0:  # v16: an AO ramp deepening the cavity floor (where the lowers emerge), scaled by openness,
+        if self.lower_real > 0:  # an AO ramp deepening the cavity floor (where the lowers emerge), scaled by openness,
             floor_ao = self.lower_p["ao"] * float(
                 smootherstep((o - 0.2) / 0.6)
             )  # so the lowers sit in FRONT of a receding dark, not on a lit floor
             low = smootherstep((vy - 0.1) / 0.9)
             rgb = rgb * (1.0 - 0.35 * floor_ao * low)[..., None]
-        # v17e: the corner wedges shade toward the lip crease (a dark-red fold, not a black hole poking past the lips)
+        # the corner wedges shade toward the lip crease (a dark-red fold, not a black hole poking past the lips)
         kc = np.clip((np.abs(vx) - 0.80) / 0.20, 0.0, 1.0)[..., None]
         rgb = rgb * (1 - 0.7 * kc) + np.array([46.0, 50.0, 112.0], np.float32) * (0.7 * kc)
         return np.clip(rgb, 0, 255).astype(np.float32), al
 
     def _compute_show(self, i):
-        """v16.1 (--warp-lower-real): how much of a real BRIGHT LOWER tooth row the TAKE itself bares at frame i -- the AREA
+        """--warp-lower-real: how much of a real BRIGHT LOWER tooth row the TAKE itself bares at frame i -- the AREA
         (IOD^2 units) of bright, near-neutral enamel pixels (Lab L* > 55, low chroma) in the LOWER half of the take's own
         inner-mouth polygon. An ABSOLUTE area (not a fraction of the growing opening), so a real smile row reads full from
         barely to fully open; a faint edge or tongue/lip reads near 0. ~1 = a full lower row, 0 = the lowers hidden."""
@@ -2315,10 +2313,10 @@ class LayerCompositor:
         return float(np.clip(float(teeth.sum()) / max(1.0, 0.0090 * io2), 0.0, 1.0))
 
     def _lower_show_at(self, i):
-        """v16.1 (--warp-lower-real): the founder's 'match the take' at the FRAME level. 0 = the take hides the lowers (wide-open
-        'ah', rounded 'oo'): dim / recede / de-grill them; 1 = the take bares a real lower row (a smile / laugh): keep them BRIGHT
-        (v15). The whole-clip signal is computed once from the take and TEMPORALLY SMOOTHED (a small gaussian) so the per-frame
-        gating of the lower shadow does not flicker. A per-frame override in self._lshow (tests) wins."""
+        """--warp-lower-real: 'match the take' at the FRAME level. 0 = the take hides the lowers (wide-open
+         'ah', rounded 'oo'): dim / recede / de-grill them; 1 = the take bares a real lower row (a smile / laugh): keep them BRIGHT
+        . The whole-clip signal is computed once from the take and TEMPORALLY SMOOTHED (a small gaussian) so the per-frame
+         gating of the lower shadow does not flicker. A per-frame override in self._lshow (tests) wins."""
         if i in self._lshow:
             return float(self._lshow[i])
         if self._lshow_arr is None:
@@ -2326,7 +2324,7 @@ class LayerCompositor:
         return float(self._lshow_arr[i])
 
     def _lower_depth(self, lo_rgb, lo_a, i, h, w, io):
-        """v16 (--warp-lower-real): per-frame, light the lower arch BELOW the uppers. A depth attenuation scaled by how wide
+        """--warp-lower-real: per-frame, light the lower arch BELOW the uppers. A depth attenuation scaled by how wide
         the mouth is open (wider -> dimmer) toward self.lower_target -- derived from this take's OWN lower/upper tooth-display
         ratio (a top-teeth talker dims harder, a bottom-teeth talker less) -- and a soft cast shadow of the cavity / upper lip
         onto the TOP (biting edge) of the lowers. Near-closed / smile frames stay bright (the take shows a real lower row
@@ -2348,11 +2346,11 @@ class LayerCompositor:
         return out
 
     def _lower_shadow(self, lo_rgb, lo_a, lo_h, i, io):
-        """v16.1 (--warp-lower-real): the lower-teeth incisal shadow, applied PER FRAME (the atlas is v15-bright) and gated by
+        """--warp-lower-real: the lower-teeth incisal shadow, applied PER FRAME (the atlas is bright) and gated by
         the take's own per-frame lower display, so a bright smile row is NOT dragged down by a baked darkening. Where the take
         HIDES the lowers (show -> 0, shadow -> 1): the biting tips darken into the dark cavity and their top alpha feathers (no
         bright flat strip, no hard line -- the grill fix); where the take BARES a real row (show -> 1, shadow -> 0): nothing is
-        applied, the crown stays v15-bright (the smile recovers). lo_h = the band's canonical height per pixel (0 at the incisal
+        applied, the crown stays bright (the smile recovers). lo_h = the band's canonical height per pixel (0 at the incisal
         edge, + toward the gum). Returns (lo_rgb, lo_a)."""
         p = self.lower_p
         shadow = 1.0 - self._lower_show_at(i)
@@ -2400,16 +2398,16 @@ class LayerCompositor:
         return ellipsoid_layer(c2[0] - [box[0], box[1]], Lm, (0, 0, box[2], box[3]), col)
 
     def _cover_amt(self, i, op=None):
-        """v15 (--warp-tongue-cover): how much the tongue should cover the lower crowns at frame i, from the mouth geometry:
+        """--warp-tongue-cover: how much the tongue should cover the lower crowns at frame i, from the mouth geometry:
         0 near-closed (the lowers are hidden by the lip anyway), rising to 1 at mid-open (a real tongue fills the floor and
         the lowers are naturally occluded), back to 0 wide-open (the teeth-baring 'ah' / smile poses that actually show the
-        lower teeth). The master knob --warp-tongue-cover scales it; 0 = the v8 envelope, untouched."""
+        lower teeth). The master knob --warp-tongue-cover scales it; 0 = the earlier envelope, untouched."""
         if op is None:
             op = float(self.open_s[i]) if (self.prepared and self.open_s is not None) else float(self._open)
         rise = smootherstep((op - 0.12) / 0.16)
         fall = 1.0 - smootherstep((op - 0.55) / 0.30)
         amt = rise * fall
-        if self.lower_real > 0:  # v16: where the take hides the lowers wide-open ('ah' / 'oo' show tongue + red lip, NOT a
+        if self.lower_real > 0:  # where the take hides the lowers wide-open ('ah' / 'oo' show tongue + red lip, NOT a
             wide = smootherstep((op - 0.55) / 0.35)  # row), keep the tongue partly over the crowns (exposing only the tips);
             amt = max(
                 amt, min(1.0, self.lower_p["occlude"]) * 0.55 * wide * (1.0 - self._lower_show_at(i))
@@ -2417,10 +2415,10 @@ class LayerCompositor:
         return float(np.clip(amt, 0.0, 1.0))
 
     def tongue_pose(self, i, open_=None):
-        """v8 wedge tongue in the lower-arch frame (IOD units along u, d, b from the lower incisal edge): [(centre, semi-
+        """wedge tongue in the lower-arch frame (IOD units along u, d, b from the lower incisal edge): [(centre, semi-
         axes)] for the tip (behind the lower incisors) and the dorsum (further back, higher), after the vowel pose and the
         near-closed constraint: on a near-closed frame nothing of it sits above the lower incisal edge (h < margin); as
-        the mouth opens the dorsum may rise above the edge by up to 0.06 IOD (it shows over the lower teeth). v15
+        the mouth opens the dorsum may rise above the edge by up to 0.06 IOD (it shows over the lower teeth).
         (--warp-tongue-cover): at mid-open (_cover_amt) the tongue body rises and its front face grows DOWN over the lower
         crowns so it occludes them; on the wide-open teeth-baring frames cover -> 0 and the lowers flash as before."""
         op = float(self._open if open_ is None else open_)
@@ -2433,7 +2431,7 @@ class LayerCompositor:
         ]  # dorsum
         out = []
         for k, (c, ax) in enumerate(blobs):
-            if cov > 0:  # v15: grow the front face down over the crowns and lift the body to the edge
+            if cov > 0:  # grow the front face down over the crowns and lift the body to the edge
                 c = c.copy()
                 ax = ax.copy()
                 if k == 0:
@@ -2442,7 +2440,7 @@ class LayerCompositor:
                 else:
                     c[1] = c[1] - 0.020 * cov  # the dorsum lifts behind it
             allow = 0.006 * closed + (-0.035 if k == 1 else -0.01) * (1 - closed)  # the highest point allowed (h, + = down)
-            allow = allow - 0.050 * cov  # v15: the tongue may rise further over the edge
+            allow = allow - 0.050 * cov  # the tongue may rise further over the edge
             top = c[1] - ax[1]
             if top < allow:
                 c = c.copy()
@@ -2451,7 +2449,7 @@ class LayerCompositor:
         return out
 
     def tongue_wedge(self, i, R, box, io_c, kick=0.0):
-        """L3 tongue, v8: the modelled tongue (tongue_pose) rendered as two soft ellipsoids (tip in front of the dorsum),
+        """L3 tongue, the modelled tongue (tongue_pose) rendered as two soft ellipsoids (tip in front of the dorsum),
         a wet highlight; colour from the take's own tongue pixels."""
         t = self.t
         o = self.lo.o
@@ -2496,9 +2494,9 @@ class LayerCompositor:
         Qo = Po[LIP_OUT]
         L = {}
         L["L0"] = (take[sl].astype(np.float32), np.ones((h, w), np.float32))
-        # v11 (--warp-cover-corners): how far the plan pushes each mouth corner past the take's own (+ the opening, + yaw)
+        # --warp-cover-corners: how far the plan pushes each mouth corner past the take's own (+ the opening, + yaw)
         cg = self.corner_growth(i, Pt, Po, io) if self.cover_corners > 0 else None
-        fz = self.face_of(i, box) if self.face_of is not None else None  # v12 (--warp-yaw-clamp): the take's skin / lips
+        fz = self.face_of(i, box) if self.face_of is not None else None  # --warp-yaw-clamp: the take's skin / lips
         cm = self.corner_masks(take[sl], Pt, Po, io, cg, face=fz) if cg is not None and self.lip_ab is not None else None
         # L1: the take's own mouth (inner + outer lip region) erased to its skin
         if self.cover_on:
@@ -2524,9 +2522,9 @@ class LayerCompositor:
         clip_frac = None
         v12b = getattr(self, "build", "v11") == "v12"
         band_log = v12b or getattr(self, "band_log", False)
-        rims = self.rim_colours(warped[sl], Q, Qo, io) if band_log else None  # v12: the planned lips' inner rim colour
+        rims = self.rim_colours(warped[sl], Q, Qo, io) if band_log else None  # the planned lips' inner rim colour
         if self.interior_clip and self.lip_ab is not None:
-            # v11: the interior is seen only THROUGH the warped lips (enclosed); elsewhere the warped face shows (L6)
+            # the interior is seen only THROUGH the warped lips (enclosed); elsewhere the warped face shows (L6)
             enc = self.enclosed(warped[sl], Q, Qo, io)
             a0_ = float(a2.sum())
             a2 = a2 * enc
@@ -2542,7 +2540,7 @@ class LayerCompositor:
         over, _, dn = self.exposure_over(i, R, P_out[14])
         self.clamp = max(0.0, over)
         kick = self.clamp * dn
-        if getattr(self, "single", None) is not None:  # v12 single: no per-frame kick (the jaw plan's floors hold the line)
+        if getattr(self, "single", None) is not None:  # single: no per-frame kick (the jaw plan's floors hold the line)
             self.single["over"][int(i)] = round(self.clamp / max(1e-6, io), 4)
             self.clamp = 0.0
             kick = np.zeros(2)
@@ -2560,24 +2558,24 @@ class LayerCompositor:
             lo_h = None
         k = float(t.light[i]) / max(1e-3, self.light_lo)
         lo_rgb = lo_rgb * k
-        if self.lower_real > 0:  # v16.1: the per-frame lower shadow (atlas is v15-bright), gated by the take's own display
+        if self.lower_real > 0:  # the per-frame lower shadow (atlas is bright), gated by the take's own display
             lo_rgb = self._lower_depth(lo_rgb, lo_a, i, box[3], box[2], io)  # dim below the uppers + cast where the take hides them
             lo_rgb, lo_a = self._lower_shadow(lo_rgb, lo_a, lo_h, i, io)  # incisal darken + feathered top alpha + cool-shift
         if v12b:
             lo_rgb = self.lip_band(lo_rgb, lo_h, self.lo, False, rims["lo"])
-            gw_lo = self._gw  # v12: the lower lip's colour
-        cf = self.corridor_fade(Q, h, w) if self.corridor > 0 else None  # v13: the buccal corridor of this frame's opening
-        if cf is not None:  # (the lower arch only, not the tongue; v12's lip band is the lips' own inner
+            gw_lo = self._gw  # the lower lip's colour
+        cf = self.corridor_fade(Q, h, w) if self.corridor > 0 else None  # the buccal corridor of this frame's opening
+        if cf is not None:  # (the lower arch only, not the tongue; the earlier lip band is the lips' own inner
             lo_rgb = self.corridor_dim(lo_rgb, cav, cf if not v12b or gw_lo is None else cf * (1 - gw_lo))  # surface: kept)
         if self.tongue_on:
             tg, ta = (self.tongue_wedge if self.tongue_mode == "wedge" else self.tongue)(i, R, box, io_c, kick)
             a3 = lo_a + ta * (1 - lo_a)  # the union alpha (same whichever way the two are ordered)
-            # default (v8): the lower arch composites OVER the tongue (the tongue sits behind the teeth)
+            # default: the lower arch composites OVER the tongue (the tongue sits behind the teeth)
             rgb3 = (lo_rgb * lo_a[..., None] + tg * (ta * (1 - lo_a))[..., None]) / np.maximum(a3, 1e-4)[..., None]
             cov = (
                 (self.tongue_cover * self._cover_amt(i)) if self.tongue_mode == "wedge" and getattr(self, "tongue_cover", 0.0) > 0 else 0.0
             )
-            if cov > 0:  # v15: at mid-open the tongue rides IN FRONT of the lower crowns (covering them), eased by cov
+            if cov > 0:  # at mid-open the tongue rides IN FRONT of the lower crowns (covering them), eased by cov
                 rgb_front = (tg * ta[..., None] + lo_rgb * (lo_a * (1 - ta))[..., None]) / np.maximum(a3, 1e-4)[..., None]
                 rgb3 = (1 - cov) * rgb3 + cov * rgb_front
         else:
@@ -2587,17 +2585,17 @@ class LayerCompositor:
             up_rgb, up_a, up_h = self.up.render(self.proj(i, False), box, rot_up, facing=self.facing, hmap=True)
         else:
             up_rgb, up_a = self.up.render(self.proj(i, False), box, rot_up, facing=self.facing)
-        if v12b:  # v12: the band above the crown takes the upper lip's colour (no gum)
+        if v12b:  # the band above the crown takes the upper lip's colour (no gum)
             L["L4"] = (self.lip_band(up_rgb * float(t.light[i]) / max(1e-3, self.light_up), up_h, self.up, True, rims["up"]), up_a * clip)
             gw_up = self._gw
         else:
             L["L4"] = (up_rgb * float(t.light[i]) / max(1e-3, self.light_up), up_a * clip)
-        if cf is not None:  # v13: the upper arch recedes into the corridor too; logged per frame
+        if cf is not None:  # the upper arch recedes into the corridor too; logged per frame
             fu = cf if not v12b or gw_up is None else cf * (1 - gw_up)
             fl = cf if not v12b or gw_lo is None else cf * (1 - gw_lo)
             L["L4"] = (self.corridor_dim(L["L4"][0], cav, fu), L["L4"][1])
             cor = self.corridor_log(i, cf, box, io, up_a, lo_a, clip, fu, fl)
-        if self.cavity_fill > 0:  # v17: fill the opening (tongue + lower row) instead of a dark void
+        if self.cavity_fill > 0:  # fill the opening (tongue + lower row) instead of a dark void
             cf_rgb, cf_a = self.fill_cavity(i, Q, h, w, io, L["L4"][0], L["L4"][1])
             L["L2"] = (L["L2"][0] * (1 - cf_a[..., None]) + cf_rgb * cf_a[..., None], L["L2"][1])
             om = tl.poly_mask(Q, (h, w), 0.0, 0.03 * io).astype(np.float32)
@@ -2621,7 +2619,7 @@ class LayerCompositor:
         )
         sh = np.where(opening, sh, 1.0).astype(np.float32)[..., None]  # (outside: only seen where a stray lip pixel is see-through)
         if self.cavity_fill > 0:
-            # v17c: the fill's tongue rests ON the lower lip / into the corners -- no gap for a contact shadow there. The
+            # the fill's tongue rests ON the lower lip / into the corners -- no gap for a contact shadow there. The
             # lower-lip + corner terms darkened the pink floor into a grey-mauve 1-3 px line along the bottom / corners
             # (the grey outline); on the fill they ease out by its alpha (the upper-lip shadow under the teeth stays)
             s_up = 1 - self.shadow[0] * np.exp(-np.maximum(dt_, 0) / max(1.0, 0.018 * io))
@@ -2630,7 +2628,7 @@ class LayerCompositor:
             sh2 = np.where(opening, s_up * s_lo, 1.0).astype(np.float32)[..., None]
         else:
             sh2 = sh
-        if v12b:  # v12: the lip band is the lips' own inner surface: no contact shadow of the lips on it
+        if v12b:  # the lip band is the lips' own inner surface: no contact shadow of the lips on it
             sh4 = sh if gw_up is None else sh + (1 - sh) * gw_up[..., None]
             sh3 = sh if gw_lo is None else sh + (1 - sh) * gw_lo[..., None]
             L["L2"] = (L["L2"][0] * sh2, L["L2"][1])
@@ -2667,7 +2665,7 @@ class LayerCompositor:
                 rgb5 = rgb5 * (1 - df) + fill * df
         dout = cv2.distanceTransform((~opening).astype(np.uint8), cv2.DIST_L2, 3)
         if self.cavity_fill > 0:
-            # v17c: L5's inner anti-alias edge (a5 ~0.2-0.6 on the last ~2 px) carried the WARPED frame's own pixels there -- the
+            # L5's inner anti-alias edge (a5 ~0.2-0.6 on the last ~2 px) carried the WARPED frame's own pixels there -- the
             # take's grey teeth / dark cavity squeezed to the lip line -- which over the pink fill read as a grey outline (bottom
             # + corners). Those edge pixels take the lip colour from just outside them (normalised blur of the lip ring)
             src = ((dout >= 2.5) & outer).astype(np.float32)
@@ -2677,7 +2675,7 @@ class LayerCompositor:
             rgb5 = rgb5 * (1 - ew) + lipc * ew
         rim = np.exp(-dout / max(0.8, self.rim[1] * io)) * outer
         rgb5 = rgb5 * (1 - self.rim[0] * rim)[..., None]
-        if self.wet > 0:  # v8: the lip's wet inner edge -- a faint 1-2 px lift where it turns over the teeth, only on
+        if self.wet > 0:  # the lip's wet inner edge -- a faint 1-2 px lift where it turns over the teeth, only on
             wl = np.exp(-(((dout - 1.3) / 0.9) ** 2)) * outer  # lip pixels and scaled by their own light
             if lp is not None:
                 wl = wl * np.clip(lp * 1.5, 0, 1)
@@ -2685,7 +2683,7 @@ class LayerCompositor:
             rgb5 = rgb5 + (0.25 * self.wet * wl)[..., None] * (255.0 - rgb5) * 0.6
         nf5 = None
         if cm is not None:
-            # v11 corner face guard: where the planned lip ring reaches past the take's face at a corner (hair / background
+            # corner face guard: where the planned lip ring reaches past the take's face at a corner (hair / background
             # in the take, and not lip in the warped frame), no lip is drawn: the warped frame (L6) shows there
             nf5 = cm["region"] & outer & ~opening & ~cm["face_t"] & (lp < 0.5)
             nf5 = cv2.GaussianBlur(nf5.astype(np.float32), (0, 0), 0.8)
@@ -2710,9 +2708,9 @@ class LayerCompositor:
             nl, lbl, cc, _ = cv2.connectedComponentsWithStats(st)
             big = np.isin(lbl, [k for k in range(1, nl) if cc[k, cv2.CC_STAT_AREA] >= (0.03 * io) ** 2])
             if fz is not None:
-                big &= fz  # v12: old lip only on the face (auburn hair reads lip-coloured)
+                big &= fz  # old lip only on the face (auburn hair reads lip-coloured)
             if cg is not None:
-                # v11: at the mouth corners, as far as the plan pushed them (corner_growth), old-mouth material the warp
+                # at the mouth corners, as far as the plan pushed them (corner_growth), old-mouth material the warp
                 # MOVED onto what was skin in the take -- lip-coloured, cavity-dark or tooth in the warped frame where the
                 # take shows skin at the same pixel (hair / shadow dark in both is left alone) -- outside the new outer lip
                 mv = self.corner_residue(warped[sl], outer, lp, cm, io) if cm is not None else np.zeros_like(big)
@@ -2720,7 +2718,7 @@ class LayerCompositor:
                 self.corner_log[i] = int(mv.sum())
             big = cv2.dilate(big.astype(np.uint8), np.ones((3, 3), np.uint8), iterations=max(1, int(0.01 * io)))
             if self.cover_mode == "fill":
-                # v8: the blob is filled with skin in the WARPED frame itself (membrane + grain from around it): L6 stays
+                # the blob is filled with skin in the WARPED frame itself (membrane + grain from around it): L6 stays
                 # opaque, nothing of L1 shows, no texture seam between the bald cover and the warped face
                 if big.any():
                     hole = cv2.dilate(big, np.ones((3, 3), np.uint8), iterations=max(1, int(0.015 * io))) > 0
@@ -2732,20 +2730,20 @@ class LayerCompositor:
             else:
                 stray = np.clip(cv2.GaussianBlur(big.astype(np.float32), (0, 0), max(1.0, 0.02 * io)) * 1.5, 0, 1) * L["L1"][1]
                 a6 = a6 * (1 - stray)
-        if enc is not None:  # v11: an opening the warped lips do not enclose is no mouth: the warped face shows there
+        if enc is not None:  # an opening the warped lips do not enclose is no mouth: the warped face shows there
             a6 = np.maximum(a6, inner_aa * (1.0 - enc))
         if nf5 is not None:
-            a6 = np.maximum(a6, nf5)  # v11: the corner face guard (above)
+            a6 = np.maximum(a6, nf5)  # the corner face guard (above)
         L["L6"] = (reg6, a6.astype(np.float32))
         self.reg[i] = self.reg_entry(i, box, np.asarray(P_out, float), gap_t, R, kick, a2, clip_frac)
         if cf is not None:
-            self.reg[i]["corridor"] = cor  # v13
+            self.reg[i]["corridor"] = cor
         if band_log:
             self._band.update(Q=Q, io=io, a4=L["L4"][1], a3=L["L3"][1])
         return L, box
 
     def fill_cavity(self, i, Q, h, w, io, up_rgb, up_a):
-        """v17 (--warp-cavity fill): what a real open mouth shows under the upper teeth instead of a dark void, painted in the
+        """--warp-cavity fill: what a real open mouth shows under the upper teeth instead of a dark void, painted in the
         2D opening (Q = target inner contour, box px) so it always sits INSIDE the lips whatever the 3D arches did:
           tongue  a shaded dark-pink dome rising from the floor of the opening (higher in the centre, lower at the corners),
                   the take's own tongue colour, a soft dorsum highlight + a faint median groove; grows in with the opening;
@@ -2791,7 +2789,7 @@ class LayerCompositor:
         # tongue: its dorsum line per column, a share of that column's opening (never above ~half of it)
         tw = float(smootherstep(op / 0.35))
         if tw > 0:
-            # v17b: the vowel's tongue pose (prepare(): eased dorsum rise, tip rise, retraction, IOD) shapes the fill --
+            # the vowel's tongue pose (prepare(): eased dorsum rise, tip rise, retraction, IOD) shapes the fill --
             # E / ih ride high and forward, DD / nn / TH / RR lift the tip toward the teeth, aa / oh / ou sit low and back
             tgi = self.tg[min(i, len(self.tg) - 1)] if getattr(self, "tg", None) is not None and len(self.tg) else (0.0, 0.0, 0.0)
             rise = float(np.clip(tgi[0] / 0.045, -1, 1))
@@ -2799,18 +2797,18 @@ class LayerCompositor:
             ret = float(np.clip(tgi[2] / 0.035, 0, 1))
             share = (0.42 + 0.14 * op + 0.16 * rise - 0.10 * ret) * dome ** (0.8 + 0.6 * ret)
             share = share + 0.22 * tip * np.exp(-((vx[0] / 0.28) ** 2))  # the tip, centred, up behind the incisors
-            tk = float(getattr(self, "tongue_fill", 0.45))  # v17d: tongue presence (1 = v17c; founder: 'too present, a lisp')
+            tk = float(getattr(self, "tongue_fill", 0.45))  # tongue presence (1 = full, which reads as a lisp)
             share = (
                 np.clip(share * tk, 0.0, 0.72 * tk) * np.clip(dome, 0, 1) ** 0.6
-            )  # v17e: low at the corners (a full-width band read as a 2nd lower lip)
+            )  # low at the corners (a full-width band read as a 2nd lower lip)
             yt = bot - share * hc  # the dorsum line (per column)
             d = yy - yt[None, :]  # >0 below the dorsum
             ta = (
                 np.clip(d / fe + 0.5, 0, 1) * np.clip((dome[None, :] - 0.25) / 0.35, 0, 1) ** 1.5
-            )  # v17c: fades into the dark corners (a hard cut left a thin grey tongue sliver along the corner's floor)
+            )  # fades into the dark corners (a hard cut left a thin grey tongue sliver along the corner's floor)
             base = 0.3 * np.asarray(self.tongue_c, np.float32) + 0.7 * np.array(
                 [58.0, 64.0, 128.0], np.float32
-            )  # v17e: toward a warm tongue red (the +blue lift read lilac, a 2nd lower lip)
+            )  # toward a warm tongue red (the +blue lift read lilac, a 2nd lower lip)
             base = np.clip(base * g * (0.70 + 0.30 * tk), 0, 255)  # less present = deeper in the shadow
             th = np.maximum(share * hc, 1.0)[None, :]
             depth = np.clip(d / th, 0, 1)  # 0 at the dorsum .. 1 at the floor
@@ -2865,7 +2863,7 @@ class LayerCompositor:
         return np.clip(rgb, 0, 255).astype(np.float32), a.astype(np.float32)
 
     def corner_growth(self, i, Pt, Po, io, yaw_k=0.15):
-        """v11: per mouth corner (left, right), px, x cover_corners: how far the plan moves the outer corner (61 / 291)
+        """per mouth corner (left, right), px, x cover_corners: how far the plan moves the outer corner (61 / 291)
         outward past the take's own along the corner line, + half the planned opening increase (13-14), + yaw_k IOD x
         |sin yaw| (the far corner -- the one closer to the nose in the picture -- in full, the near one a third)."""
         e = Po[291] - Po[61]
@@ -2885,11 +2883,11 @@ class LayerCompositor:
         return (k * (dl + 0.5 * op + yaw_k * io * sy * yl), k * (dr + 0.5 * op + yaw_k * io * sy * yr))
 
     def corner_masks(self, take, Pt, Po, io, cg, r0=0.06, face=None):
-        """v11: the two corner regions (box): discs of r0 IOD + the corner's growth around the NEW outer corners (61 / 291);
+        """the two corner regions (box): discs of r0 IOD + the corner's growth around the NEW outer corners (61 / 291);
         and face_t: where the TAKE shows face at a pixel -- skin (mouth_morph.skin_px), lip (lipness >= 0.35) or its own
-        mouth (its outer-lip hull grown 0.12) -- vs hair / background (never painted over, never drawn as lip). v12 face
+        mouth (its outer-lip hull grown 0.12) -- vs hair / background (never painted over, never drawn as lip). face
         (a bool box, --warp-yaw-clamp on a frame it clamps, mouth_warp.YawClamp.face_box): the take's own skin / lips instead
-        (on long auburn hair the strands pass lipness >= 0.35, so v11's face_t let the residue fill paint skin over the hair)."""
+        (on long auburn hair the strands pass lipness >= 0.35, so the earlier face_t let the residue fill paint skin over the hair)."""
         from . import mouth_morph as mm
 
         h, w = take.shape[:2]
@@ -2903,7 +2901,7 @@ class LayerCompositor:
         return dict(region=reg_, face_t=face_t, lp_t=lp_t)
 
     def corner_residue(self, img, outer, lp, cm, io, min_area=0.015):
-        """v11: bool mask (box) of the old-mouth residue at the corners (see layers()): in the corner regions, outside the
+        """bool mask (box) of the old-mouth residue at the corners (see layers()): in the corner regions, outside the
         new outer lip, old-mouth-like in the warped frame (lipness > 0.5, L < 0.45 skin, or tooth) on a pixel where the
         take shows face (corner_masks' face_t: the take's own lips left in place, or old-mouth material the warp moved
         onto its skin; hair / background are left alone); blobs of at least (min_area IOD)^2."""
@@ -2915,7 +2913,7 @@ class LayerCompositor:
         return np.isin(lbl, [k for k in range(1, nl) if cc[k, cv2.CC_STAT_AREA] >= max(4.0, (min_area * io) ** 2)])
 
     def enclosed(self, img, Q, Qo, io, lip_thr=0.35, grow=0.15, side=0.04):
-        """v11: float mask over the box (img = the warped frame's box, BGR): the part of the planned opening (inner contour Q,
+        """float mask over the box (img = the warped frame's box, BGR): the part of the planned opening (inner contour Q,
         box px) that the warped lips enclose -- for each pixel, lip-coloured pixels of the frame (lipness vs the shot's own
         lip / skin colour > lip_thr, L5's own non-lip line) both above AND below it along the mouth's vertical axis
         (perpendicular to the inner corners' line), searched within the planned outer lip grown by `grow` IOD and over
@@ -2953,7 +2951,7 @@ class LayerCompositor:
         return cv2.GaussianBlur(ok.astype(np.float32), (0, 0), 0.5)
 
     def reg_entry(self, i, box, P_out, gap_t, R, kick, a2, clip_frac=None):
-        """v11: frame i's inter-layer registration (see the module doc, REG), every layer's anchor where it was rendered,
+        """frame i's inter-layer registration (see the module doc, REG), every layer's anchor where it was rendered,
         mapped into the skull-stabilised frame: canonical (x, y) on the upper-teeth plane through frame i's skull pose
         only (no pin), origin the upper arch's reference point, IOD units."""
         t = self.t
@@ -3025,7 +3023,7 @@ class LayerCompositor:
         out = warped.copy()
         new = np.clip(acc + 0.5, 0, 255).astype(np.uint8)
         if getattr(self, "_band", None) is not None and self._band.get("i") == i and i in self.reg:
-            self.reg[i]["lipband"] = self.lipband_ruler(new, self._band)  # v12: the plate's band under the lips vs their rim
+            self.reg[i]["lipband"] = self.lipband_ruler(new, self._band)  # the plate's band under the lips vs their rim
         diff = np.abs(new.astype(np.int16) - warped[y0 : y0 + h, x0 : x0 + w].astype(np.int16)).max(2) > 0
         out[y0 : y0 + h, x0 : x0 + w] = np.where(diff[..., None], new, warped[y0 : y0 + h, x0 : x0 + w])
         M = np.zeros((H, W), np.float32)
@@ -3042,7 +3040,7 @@ class LayerCompositor:
         c = self.ref
         sx = cw / (1.0 * io)
         x0c, y0c = c[0] - 0.5 * io, c[1] - 0.33 * io
-        pin = t.pin[i] if self.dbg_stab == "pin" else np.zeros(2)  # v11 'skull': the skull pose only (the pin's motion shows)
+        pin = t.pin[i] if self.dbg_stab == "pin" else np.zeros(2)  # 'skull': the skull pose only (the pin's motion shows)
         A = tl.shift_aff(tl.plane_affine(t.pl, i, self.z_up, ref=t.ref), pin - np.array(box[:2], float))
         M = tl.compose(A, np.array([[1 / sx, 0, x0c], [0, 1 / sx, y0c]]))
         return cv2.warpAffine(
@@ -3120,7 +3118,7 @@ class LayerCompositor:
         cv2.imwrite(os.path.join(d, "layers.jpg"), np.vstack([row(i) for i in sf]), [cv2.IMWRITE_JPEG_QUALITY, 90])
 
     def bite_overlap(self, P_out, gaps, close_thr=0.2):
-        """v8 check: on near-closed frames (target opening below close_thr of the take's p95), how far the lower incisal
+        """check: on near-closed frames (target opening below close_thr of the take's p95), how far the lower incisal
         edge sits above the upper one along the head's down axis (IOD; the overbite it should be) -> summary."""
         t = self.t
         g = np.asarray(gaps, float)
@@ -3198,7 +3196,7 @@ class LayerCompositor:
             rim=list(self.rim),
             wet=self.wet,
             smooth=self.smooth_f,
-            # v11: what frames[i].reg is measured in (the skull-stabilised frame: canonical plane z, origin, IOD)
+            # what frames[i].reg is measured in (the skull-stabilised frame: canonical plane z, origin, IOD)
             reg_meta=dict(
                 origin=[round(float(x), 4) for x in self.ref[:2]],
                 iod=round(float(self.t.iod), 4),
@@ -3206,17 +3204,17 @@ class LayerCompositor:
                 end_arc_iod=REG_END,
             ),
             interior_clip=self.interior_clip,
-            **({"single": self.single_info()} if getattr(self, "single", None) is not None else {}),  # v12 --warp-reg single
-            **({"plate_build": self.plate_build_info()} if getattr(self, "build", "v11") == "v12" else {}),  # v12 --warp-arch-build v12
-            **({"layout": self.layout_info} if getattr(self, "lay", None) else {}),  # v13 --warp-arch-layout anthro
-            **({"corridor": self.corridor_info()} if getattr(self, "corridor", 0.0) > 0 else {}),  # v13 --warp-arch-corridor
-            **({"mipmap": True} if getattr(self, "mipmap", False) else {}),  # v14 --warp-arch-mipmap
-            **({"enamel": self.enamel} if getattr(self, "enamel", None) else {}),  # v14 --warp-arch-enamel
+            **({"single": self.single_info()} if getattr(self, "single", None) is not None else {}),  # --warp-reg single
+            **({"plate_build": self.plate_build_info()} if getattr(self, "build", "v11") == "v12" else {}),  # --warp-arch-build v12
+            **({"layout": self.layout_info} if getattr(self, "lay", None) else {}),  # --warp-arch-layout anthro
+            **({"corridor": self.corridor_info()} if getattr(self, "corridor", 0.0) > 0 else {}),  # --warp-arch-corridor
+            **({"mipmap": True} if getattr(self, "mipmap", False) else {}),  # --warp-arch-mipmap
+            **({"enamel": self.enamel} if getattr(self, "enamel", None) else {}),  # --warp-arch-enamel
             **({"detail": self.detail} if getattr(self, "detail", 0.0) > 0 else {}),
-        )  # v14 --warp-arch-detail
+        )  # --warp-arch-detail
 
     def plate_build_info(self):
-        """v12 --warp-arch-build v12: the harvest choice (teeth_layer.TeethLayer.build_log), the lower harvest frame, the
+        """--warp-arch-build the harvest choice (teeth_layer.TeethLayer.build_log), the lower harvest frame, the
         crown heights, and the double-edge ruler (lsdub/audits/layer_reg.plate_edges) of the built upper / lower plates."""
         from ..audits import layer_reg as lr_
 
@@ -3232,7 +3230,7 @@ class LayerCompositor:
         )
 
     def single_info(self):
-        """v12: the single-reference placement's log (plan_single): settings, how often the floors bound, the jaw's step
+        """the single-reference placement's log (plan_single): settings, how often the floors bound, the jaw's step
         p95 before / after the low-pass, the upper gum guard, the per-frame exposure the kick would have taken (IOD)."""
         s = dict(self.single)
         ov = np.array(list(s.pop("over").values()) or [0.0])

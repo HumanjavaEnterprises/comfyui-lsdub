@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 # fmt: off
-"""lip_layers.py: v4 mouth layering helpers, shared by --mode warp and --mode morph (all CPU, opt-in by flags).
+"""lip_layers.py: mouth layering helpers, shared by --mode warp and --mode morph (all CPU, opt-in by flags).
 
   SIZE     the new mouth is calibrated to the TAKE's own mouth: its rest width / lip thickness and its natural opening
            range per face. size_cap() keeps a target from going past the take's own p95 (per dimension) unless the
@@ -127,7 +127,7 @@ def harmonic_fill(img, mask):
 
 
 def corner_points(q, c, corner):
-    """v11: the outer-lip polygon q (about its centre c) with its two mouth CORNERS pushed outward along the corner line
+    """the outer-lip polygon q (about its centre c) with its two mouth CORNERS pushed outward along the corner line
     by corner = (left px, right px), tapering to 0 toward the lips' middle (|u|^2, u = the position along the line)."""
     q = np.asarray(q, float)
     e = q[LIP_OUT.index(291)] - q[LIP_OUT.index(61)]
@@ -143,7 +143,7 @@ def corner_points(q, c, corner):
 def lip_erase_mask(img, P, grow=0.22, key=True, lip_ab=None, skin_ab=None, corner=None):
     """bool mask of everything lip in img: the outer-lip hull of landmarks P grown by `grow` (fraction of its size,
     about its centre) + a few px, and (key) any lip-coloured pixel within a wider hull (the anti-aliased red edge and
-    lipstick that sits just outside the landmark outline). v11 corner = (left px, right px): the hull is also grown at the
+    lipstick that sits just outside the landmark outline). corner = (left px, right px): the hull is also grown at the
     two mouth corners (corner_points), as far as the plan moves them (mouth_layers' --warp-cover-corners)."""
     P = np.asarray(P, float)[:, :2]
     H, W = img.shape[:2]
@@ -168,7 +168,7 @@ def lip_erase_mask(img, P, grow=0.22, key=True, lip_ab=None, skin_ab=None, corne
             if la - sa > 4:
                 m |= wide & (lab[..., 1] > sa + 0.35 * (la - sa))
     if lip_ab is not None and skin_ab is not None:
-        # v8: any lip-coloured pixel (vs the SHOT's lip / skin colour) within a wide hull joins the hole, so the membrane's
+        # any lip-coloured pixel (vs the SHOT's lip / skin colour) within a wide hull joins the hole, so the membrane's
         # boundary never sits on lip and the fill never turns pink (a wide-open or lipsticked mouth outgrows the landmark hull)
         lab = cv2.cvtColor(np.clip(img, 0, 255).astype(np.uint8), cv2.COLOR_BGR2LAB).astype(np.float32)
         lp = lipness(lab, lip_ab, skin_ab) > 0.4

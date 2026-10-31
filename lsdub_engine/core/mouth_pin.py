@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""mouth_pin.py — pin the painted lower face to the REAL skin motion of the take (founder 2026-10-15:
-"the mouth is swimming behind the locked-in spot on the face").
+"""mouth_pin.py — pin the painted lower face to the REAL skin motion of the take.
 
 Why it swims: every paint stage places the mouth from MediaPipe landmarks, and on this take those landmarks miss the
 real skin motion by 2-8 px (worst on the fast head swing, f13-19; slip_audit: landmark-vs-flow err p95 ~7 px). The
@@ -19,7 +18,7 @@ Fix = decouple position from shape:
     at the take's true position; the nose/eyes/cheekbones are untouched
   - a second pass re-measures and removes what is left
 
-  lsdub pin --video v11.mp4 --take body.mp4 --frames 47 --out v11_pin.mp4 [--json pin.json] [--passes 2]
+  lsdub pin --video render.mp4 --take body.mp4 --frames 47 --out pinned.mp4 [--json pin.json] [--passes 2]
 """
 
 from ..io import ff

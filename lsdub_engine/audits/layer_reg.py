@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""layer_reg.py: the inter-layer REGISTRATION ruler (v11). CPU.
+"""layer_reg.py: the inter-layer REGISTRATION ruler. CPU.
 
-Founder on v10: "the sloppiness in the mouth has gone from the lips to the registration of the sub-elements of the mouth
-... it doesn't show on any one frame, it's across frames where all those registrations have a weird sloshing to them."
-Every layer of the v7 / v8 stack carries its own per-frame correction -- the upper teeth the lip-root skin pin, the lower
+The fault this ruler reads does not show on any one frame: the sub-elements of the mouth slosh against each other across frames.
+Every layer of the stack carries its own per-frame correction -- the upper teeth the lip-root skin pin, the lower
 teeth the chin pin on the jaw arc and the exposure kick, the tongue its vowel pose, the cavity the planned inner-lip
 contour -- so the sub-elements can move against each other and against the lips from frame to frame. This audit
 MEASURES that, from the anchors the layer stack logs per frame (warp.json frames[i].reg, mouth_layers.reg_entry: each
@@ -22,7 +21,7 @@ pose only, IOD units; x along the head's left-right axis, y down).
     (a) jaw residual: each component regressed on the jaw angle used (+ an intercept, least squares; the jaw is the only
         thing these offsets should depend on); RMS and p95 of |residual| (IOD)
     (b) jitter: |o[t] - o[t-1]| p50 / p95 (IOD / frame)
-    (c) slosh: the v9 gate's windowed ruler (W = 4, audits/frame_gate.Checker._slosh's window and arithmetic) on the
+    (c) slosh: the earlier gate's windowed ruler (W = 4, audits/frame_gate.Checker._slosh's window and arithmetic) on the
         offset's velocity: per window centre, sum over both components of (sum |v| - |sum v|) / steps -- back-and-forth
         motion minus the net -- mean / p95 / max (IOD / frame)
   (d) tex_drift: the visible upper-teeth TEXTURE's shift vs the previous frame in the skull-stabilised crop (NCC over
@@ -33,12 +32,12 @@ pose only, IOD units; x along the head's left-right axis, y down).
 The gate (--warp-gate-reg) runs gate_report on the frames it finished with: windows whose summed slosh is >= FLOOR are
 reported in gate.json (not repaired).
 
-v12: the PIXEL ruler (--pix; pix_measure). The ruler above reads the layer stack's own log, so it cannot score the take.
+the PIXEL ruler (--pix; pix_measure). The ruler above reads the layer stack's own log, so it cannot score the take.
 The pixel ruler measures the picture of the TAKE and of a RENDER alike: in the skull-stabilised crop (the warp's own
 skull pose and teeth plane, skull_frame / stab_crop) the upper-teeth patch (and the lower-arch patch when visible: masks
 from the video's own IMAGE-mode landmarks + the teeth key) is template-tracked from frame to frame (patch_shift: masked
 NCC + sub-pixel); per frame a velocity in IOD / frame. Rulers (pix_stats): jitter |v| p50 / p95 and the low-frequency
-wander (W = 4, 8: the v9 gate's window, back-and-forth energy per finite velocity), mean / p95. Plus a nose-base
+wander (W = 4, 8: the earlier gate's window, back-and-forth energy per finite velocity), mean / p95. Plus a nose-base
 rectangle (the stabilisation's own floor: skin the warp does not move) and the lower arch split along / across the jaw
 arc of the hinge model (across: what no jaw angle explains; along - the logged jaw of a render). The take's own numbers
 on its open-mouth frames are the floor.
@@ -58,7 +57,7 @@ OFFSETS = (
     ("tip_lo", "tongue tip - lower incisal edge"),
     ("bite", "upper - lower incisal edge"),
 )
-FLOOR = 0.0528  # gate_report: a window whose summed slosh (5 offsets, IOD / frame) is >= this is reported: v9's own
+FLOOR = 0.0528  # gate_report: a window whose summed slosh (5 offsets, IOD / frame) is >= this is reported: the earlier own
 # p95 of the per-window sum over its 7 test shots (re-rendered bit for bit with the reg log)
 
 
@@ -74,7 +73,7 @@ def series(frames):
     """warp.json frames -> dict: the five offsets (n x 2, nan where a frame has no reg entry), jaw (deg), pin_up_iod (n x 2),
     the logged anchors (up / lo: n x 3 x 2, contour: n x 20 x 2, stab: n x 2 x 3)."""
     n = len(frames)
-    # a frame shown as the take's own (a skipped vocalisation at strength 0, v10a) shows none of the layers: not measured
+    # a frame shown as the take's own (a skipped vocalisation at strength 0) shows none of the layers: not measured
     R = [f.get("reg") if float(f.get("vocal_s", 1.0) if f.get("vocal_s") is not None else 1.0) > 0 else None for f in frames]
     up = np.array([_pt(r, "up") if r else np.full((3, 2), np.nan) for r in R], float).reshape(n, 3, 2)
     lo = np.array([_pt(r, "lo") if r else np.full((3, 2), np.nan) for r in R], float).reshape(n, 3, 2)
@@ -114,7 +113,7 @@ def osc(v):
 
 
 def slosh(o, W=4):
-    """per window centre c: the v9 gate's window (velocities of frames max(1, c - W + 1) .. min(n - 1, c + W)), sum over the
+    """per window centre c: the earlier gate's window (velocities of frames max(1, c - W + 1) .. min(n - 1, c + W)), sum over the
     components of osc(v) / steps; nan where the window has < max(3, W) steps or < 3 finite velocities."""
     o = np.asarray(o, float)
     n = len(o)
@@ -385,12 +384,12 @@ def line(label, r):
     )
 
 
-# ----------------------------------------------------------------------------------------- v12: the pixel ruler --
+# ----------------------------------------------------------------------------------------- the pixel ruler --
 PIX_WIN = (-0.6, 0.6, -0.5, 0.45)  # the stabilised crop: canonical window (IOD about ref, the inner-lip centre): x0, x1, y0, y1
 PIX_NOSE = (-0.22, 0.22, -0.42, -0.22)  # the nose-base reference rectangle (IOD about ref; canonical lm 1 / 2 / 98 / 327 sit at
 # y ~ -0.375 / -0.29 / -0.30 / -0.30 IOD, the nostrils at x ~ +-0.17): skin the warp does not move
 PIX_MIN_PX = 150  # a patch is measured with >= this many mask px at ppi 200 (scaled with ppi^2)
-PIX_R_IOD = 0.05  # search range +- (IOD / frame; v11's renders move up to ~0.035)
+PIX_R_IOD = 0.05  # search range +- (IOD / frame; the earlier renders move up to ~0.035)
 PIX_MIN_SCORE = 0.5  # a match is used when its NCC peak is >= this (and not on the search border)
 
 
@@ -620,7 +619,7 @@ def arch_track(frames, lm, sf, skin_L, ppi=200.0, skip=None, win=PIX_WIN, r_iod=
 
 
 def wander(v, W=4):
-    """per window centre c: the velocities of frames max(1, c - W + 1) .. min(n - 1, c + W) (the v9 gate's window, as
+    """per window centre c: the velocities of frames max(1, c - W + 1) .. min(n - 1, c + W) (the earlier gate's window, as
     slosh), sum over the components of osc over the FINITE velocities, / the number of finite velocities in the window;
     nan where the window has < max(3, W) steps or < 3 finite velocities (the teeth are invisible on closed frames)."""
     v = np.asarray(v, float)
@@ -907,9 +906,9 @@ def pix_main(a):
     return 0
 
 
-# ------------------------------------------------------------------------------------ v12: the double-edge ruler --
+# ------------------------------------------------------------------------------------ the double-edge ruler --
 def plate_edges(tex, upper=True, iod=1.0, texel=1.0, h0=0.0, centre_iod=0.2, cav=30.0, drop=0.2, max_run=0.05, sigma=0.004):
-    """v12 'double edge' ruler on a BUILT arch plate (mouth_layers.ArchBand.tex: BGRA, rows = h from h0 at texel per
+    """'double edge' ruler on a BUILT arch plate (mouth_layers.ArchBand.tex: BGRA, rows = h from h0 at texel per
     canonical px, h along the head's down axis, the incisal edge at h = 0; columns = arc length a from -A at texel).
     Per column, composited over a dark cavity grey (cav, Lab L), the luminance profile from the root (gum) toward the incisal
     edge and on into the cavity (the lower plate is read bottom-up: its edge is on top), smoothed (sigma IOD); an
@@ -982,8 +981,7 @@ def main(argv=None):
     ap.add_argument(
         "--pix",
         action="store_true",
-        help="v12: the pixel registration ruler (template-tracked teeth patches in "
-        "the skull-stabilised crop) on --video: a take or a render",
+        help="the pixel registration ruler (template-tracked teeth patches in the skull-stabilised crop) on --video: a take or a render",
     )
     ap.add_argument("--take-trk", help="--pix: npz with S3 = the take's raw MediaPipe 3D track (the warp's input)")
     ap.add_argument("--frames", type=int, help="--pix: frame count (default: the track's)")

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v15 teeth (mouth_layers): Feature 1 = pink gingiva above / below the crowns with a scalloped gum line (--warp-arch-gums),
-Feature 2 = the tongue covering the lower crowns at mid-open (--warp-tongue-cover). Both opt-in; the v14 defaults are bit for
+"""teeth (mouth_layers): Feature 1 = pink gingiva above / below the crowns with a scalloped gum line (--warp-arch-gums),
+Feature 2 = the tongue covering the lower crowns at mid-open (--warp-tongue-cover). Both opt-in; the earlier defaults are bit for
 bit. Synthetic, CPU only, our own classical graphics."""
 
 import os, sys
@@ -75,7 +75,7 @@ def test_gum_margin_is_scalloped_at_the_interdental_papillae():
 
 def test_gum_margin_drops_onto_the_crown_top():
     """with drop > 0 the gumline comes DOWN onto the cervical enamel: the top of the crown (just below th) is pink, while the
-    body of the crown lower down stays enamel. The founder's 'bring the gums down the teeth' ask."""
+    body of the crown lower down stays enamel."""
     band = _band(texel=2.0)
     T, r_e, th = _grey_crown(band)
     iod = 100.0

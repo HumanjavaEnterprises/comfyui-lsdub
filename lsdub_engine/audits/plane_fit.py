@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""plane_fit.py — does the mouth sit ON the face's 3D surface, or is it a flat sticker? (founder 2026-10-15: "more
-accurate to the face and the facial plane").
+"""plane_fit.py — does the mouth sit ON the face's 3D surface, or is it a flat sticker?
 
 Reference = the take's own most-closed, well-tracked frame: its 3D landmarks (MediaPipe x, y px; z relative depth).
 For every frame of a video, the reference is moved by the 3D similarity fitted on head-rigid anchors (forehead, nose,

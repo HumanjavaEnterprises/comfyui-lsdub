@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v10a `lsdub annotate` (lsdub/audits/viseme_overlay.py), CPU only, no MediaPipe (--no-mediapipe; the face boxes come
+"""`lsdub annotate` (lsdub/audits/viseme_overlay.py), CPU only, no MediaPipe (--no-mediapipe; the face boxes come
 from a keep-out JSON): every viseme class has its own glyph; the card shows the word between its neighbours, a skipped
 vocalisation struck through; the FACE RULE: lower-right, else lower-left, else a band below the picture for that clip
 (the whole clip); the EDL maps video frames to track frames; the card layer (--overlay-out) is where the card is."""
@@ -50,7 +50,7 @@ def tracks(tmp_path):
 def test_card_words_and_states(tracks):
     p, q = tracks
     tv = vo.TrackView(str(p), "auto")
-    assert tv.mode == "mouth" and tv.state(14) == "ad-lib"  # unmarked: v9, tagged
+    assert tv.mode == "mouth" and tv.state(14) == "ad-lib"  # unmarked: mouthed, tagged
     assert tv.prev_next(14) == ("dance", "ooh", "day") and tv.prev_next(21) == ("ooh", "", "day")
     tk = vo.TrackView(str(q), "auto")
     assert tk.mode == "skip" and tk.state(14) == "skip" and tk.state(3) == ""
@@ -215,8 +215,8 @@ def test_edl_maps_video_frames_to_track_frames(tmp_path, tracks):
 
 
 def test_annotate_default_is_skip_like_paint(tmp_path, tracks, monkeypatch):
-    # v11: lsdub paint skips vocalisations by default, so the card's default describes that render: an UNMARKED track's
-    # 'ooh' (found here by the same lexicon) is struck through as 'skip'; mouth keeps v9's 'ad-lib'
+    # lsdub paint skips vocalisations by default, so the card's default describes that render: an UNMARKED track's
+    # 'ooh' (found here by the same lexicon) is struck through as 'skip'; mouth keeps the earlier 'ad-lib'
     p, q = tracks
     tv = vo.TrackView(str(p))
     assert tv.mode == "skip" and tv.state(14) == "skip" and tv.state(3) == ""

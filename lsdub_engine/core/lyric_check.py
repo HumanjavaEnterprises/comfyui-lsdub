@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""lyric_check.py — v12: what the aligner already knows about every sung word, for the mouth card and the lyric check.
+"""lyric_check.py — what the aligner already knows about every sung word, for the mouth card and the lyric check.
 
 `lsdub align` (lyric_align.py, read here, never changed) records per aligned word what Whisper HEARD (`heard`, the raw
 token), how the word was reconciled with the lyric sheet (`src`: lyric | lyric~ | sung | sung-only), how it was timed

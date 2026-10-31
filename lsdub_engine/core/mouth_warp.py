@@ -35,12 +35,12 @@ dense warp of the take's own pixels (lighting, texture and skin stay the render'
        used; ONE interior donor per opening segment; donor fill own-or-donor (interior_alpha), tight feather
      - Lanczos resampling
 
-  v5 (opt-in): --warp-teeth rigid -- the interior inside the target inner lip comes from rigid teeth plates (teeth_layer.py):
+  opt-in: --warp-teeth rigid -- the interior inside the target inner lip comes from rigid teeth plates (teeth_layer.py):
      upper arch at the skull pose, lower arch at skull + jaw rotation about the condyle hinge; no donors, no stretched teeth.
-  v7 (opt-in): --warp-compose layers -- the mouth as an explicit back-to-front layer stack (mouth_layers.py): frame,
+  opt-in: --warp-compose layers -- the mouth as an explicit back-to-front layer stack (mouth_layers.py): frame,
      mouth cover (the take's mouth erased to its skin), back of mouth, lower arch + tongue, upper arch, lips, face; full
      curved 3D arches; lower teeth pinned to the chin skin (--warp-teeth-chin-pin); a bite floor in the jaw plan.
-  v6 (opt-in, on top of v5): --warp-teeth-anchor skin (teeth ride the upper-lip root skin's own flow, not the pose alone),
+  opt-in: --warp-teeth-anchor skin (teeth ride the upper-lip root skin's own flow, not the pose alone),
      --warp-teeth-jaw plan (one smooth, speed-limited jaw trajectory for the whole clip; lower teeth hidden on near-closed
      frames), --warp-teeth-tongue-drop, --warp-teeth-plates N (per-head-angle upper plates), --warp-teeth-throat.
 
@@ -95,7 +95,7 @@ V_WIDTH = {
 
 
 def _enamel_params(strength, mix=None):
-    """v14 (--warp-arch-enamel): the enamel material-pass dict from the strength S and an optional "spec,transl,ao,warm" mix
+    """--warp-arch-enamel: the enamel material-pass dict from the strength S and an optional "spec,transl,ao,warm" mix
     (default preset 1.0 / 0.8 / 0.7 / 1.0, each x S). a_target 128 = Lab neutral (the warm pull holds a* low)."""
     s = float(strength)
     r = [1.0, 0.8, 0.7, 1.0]
@@ -157,7 +157,7 @@ def class_floor(bands, wmin, rng=None, ref="half"):
         return bo, bw
     ws, wr = wmin, wmin
     if ref == "wide" and rng is not None:
-        # v3: the floor in units of the take's WIDER half-range. A take that sits near its p90 width most of the time
+        # the floor in units of the take's WIDER half-range. A take that sits near its p90 width most of the time
         # (p90 - median tiny) otherwise gets a 'spread' floor that is barely above its own median, and a 'round' floor
         # the same the other way; both halves are expressed in their own units, so convert the wide half's distance.
         up, dn = max(1e-6, rng["w_hi"] - rng["w_med"]), max(1e-6, rng["w_med"] - rng["w_lo"])
@@ -233,7 +233,7 @@ def target_features(fr_t, F, rng, open_gain=1.0, width_gain=1.0, sigma=1.0, band
     bands in the take's own range; vowels' lower bound is raised by the audio's openness (A2F jaw / envelope).
     centre (0..1): a shape outside its band is moved past the band edge toward the band centre (0 = edge, r1 behaviour).
     width_mix: 'switch' (r2) = the width band of vis2 once mix >= 0.5, even when vis2 has none (a spread E whose vis2 is
-    sil / aa then loses its width target mid-vowel); 'primary' (v3) = vis's band unless vis2 has its own band and mix > 0.5.
+    sil / aa then loses its width target mid-vowel); 'primary' = vis's band unless vis2 has its own band and mix > 0.5.
     close_depth: PP targets this far BELOW the take's shut gap (units of its range): a press, not a touch, so the closure
     survives the field's smoothing and reads shut."""
     n = len(F)
@@ -401,7 +401,7 @@ def interior_fill(out, donor_img, donor_in, dst_in, alpha, mode="donor", erode=0
 
 
 def seal_fill(out, dst_in, u, thr, grow=1.6):
-    """v3 closure seal: when the target opening u (x the take's range above its shut gap) is below thr, the slit the
+    """closure seal: when the target opening u (x the take's range above its shut gap) is below thr, the slit the
     compressed mouth still shows (a line of teeth / cavity between the moved lips) is inpainted from the SAME frame's
     lips around it (cv2 Telea), blended in by how shut the target is. No other frame's texture is used (no swap).
     Returns (image, blend alpha)."""
@@ -592,7 +592,7 @@ def al_kind(gap, egap, rng, thr):
 
 
 def erase_alpha(gap, egap, rng, thr=0.12, reductions=False, width=None, ewidth=None, sigma=0.7):
-    """per-frame strength (0..1) of the v4 erase layer. Closures: the target opening u is below thr (x the take's range)
+    """per-frame strength (0..1) of the erase layer. Closures: the target opening u is below thr (x the take's range)
     while the take itself shows more (a gap the warp would only compress: teeth line). reductions=True also layers
     frames whose target is clearly SMALLER than the take (gap or width), so the old lips never show around the new ones.
     Eased zero-phase (sigma frames)."""
@@ -631,7 +631,7 @@ def lip_frame(P):
 
 
 class EraseLayer:
-    """v4 "blank out the lips, then put ours in front" for the warp. ONE bald image (the take's most-closed frame with
+    """ "blank out the lips, then put ours in front" for the warp. ONE bald image (the take's most-closed frame with
     its lips erased to its own skin, lip_layers.erase_lips) and that frame's own closed lips are carried into each frame
     by a mesh: an outer ring that follows the rigid skull pose, and the lip points that land on the TARGET lip shape
     (dst). Layer = closed lips (soft lip-shaped mask) over the bald skin; it replaces the region where either the take's
@@ -705,7 +705,7 @@ class EraseLayer:
         return {i: s for (i, _), s in zip(self.lab, st)}
 
     def stat_for(self, i):
-        """v9 (re-made frame): the round-0 eased stats of frame i; a frame that was not layered in round 0 takes them
+        """the round-0 eased stats of frame i; a frame that was not layered in round 0 takes them
         interpolated from the layered frames around it."""
         ez = getattr(self, "eased", {})
         if i in ez:
@@ -776,7 +776,7 @@ FACE_OVAL = [
 
 
 def face_region(img, P, io, box):
-    """v12: bool mask over box (x0, y0, x1, y1) of where the take's FACE is at this frame: the skull pose's face (the projected
+    """bool mask over box (x0, y0, x1, y1) of where the take's FACE is at this frame: the skull pose's face (the projected
     face mesh's outline, FACE_OVAL, filled) and, beyond it, the take's own pixels: skin (mouth_morph.skin_px) or its own mouth
     (outer lip + 0.03 IOD), specks opened (0.012 IOD), gaps closed (0.03 IOD), only the piece that holds the mouth, holes
     filled; all within the mesh hull grown 0.3 IOD (a skin-coloured background beside the head never counts as face).
@@ -810,7 +810,7 @@ def face_region(img, P, io, box):
 
 
 class YawClamp:
-    """v12 (--warp-yaw-clamp M, opt-in): the PLAN keeps the mouth inside the face under yaw. On a turned head the
+    """--warp-yaw-clamp M, opt-in: the PLAN keeps the mouth inside the face under yaw. On a turned head the
     FAR corner of a wider, more open planned mouth crossed the cheek's silhouette onto the hair; the lip layer then
     drew the warped hair there and its non-lip cleanup painted it over with skin (a mottled patch with dark strokes).
     Per frame an allowed region = the take's own face (face_region: the skull pose's face mesh outline, extended by the take's
@@ -823,7 +823,7 @@ class YawClamp:
     gaussian of its 3-frame max: never less than a frame needs, no one-frame pop); a re-made frame (the gate) takes the
     eased b or what its own outline needs, whichever is larger. On the frames it clamps, the layer stack's corner cover
     (--warp-cover-corners: the residue fill and the old-lip blobs, the corner face guard) takes the take's own skin / lips as
-    its face test (face_box; v11's lipness test reads the auburn hair as face and painted skin over it). A frame whose plan
+    its face test (face_box; the earlier lipness test reads the auburn hair as face and painted skin over it). A frame whose plan
     stays inside the face is untouched (a frontal shot renders bit-for-bit as without the flag)."""
 
     def __init__(self, clip, margin, src, dst):
@@ -916,7 +916,7 @@ class YawClamp:
         """the corner cover's face test (LayerCompositor.face_of) over a layer box (x0, y0, w, h) of frame i, on the frames the
         clamp acts on (b > 0): the take's own pixels only, strictly -- skin (mouth_morph.skin_px) or its own lips (outer lip
         + 0.01 IOD); no mesh, no closing (the dark hair band beside the lips is not face, so nothing paints skin over it).
-        None elsewhere (the layer stack keeps v11's own face test there)."""
+        None elsewhere (the layer stack keeps the earlier own face test there)."""
         if self.b[i] <= 0:
             return None
         from . import teeth_layer as tl
@@ -956,18 +956,18 @@ def _track(a, n):
 
 
 class WarpClip:
-    """v9: the --mode warp pipeline as an object, so one frame can be re-made without re-running the clip.
+    """the --mode warp pipeline as an object, so one frame can be re-made without re-running the clip.
 
       __init__      the whole-clip analysis up to the per-frame loop (track, pose, mouth model, targets, size cap, fold
                     guard, donors)
-      run_batch()   round 0 = the v8 batch: every frame warped, then the teeth / layer stack, the erase layer and the lip
-                    lock over all frames, in the same order and with the same arithmetic as the pre-v9 run()
+      run_batch()   round 0 = the earlier batch: every frame warped, then the teeth / layer stack, the erase layer and the lip
+                    lock over all frames, in the same order and with the same arithmetic as the earlier run()
                     (bit-identical output)
       render_frame(i, ov)   frame i through the whole chain again (warp -> layers -> erase -> lip lock) with per-frame
                     parameter OVERRIDES ov; the clip-level series (pins, jaw plan, eased layer parameters, Lab and
                     lip-lock fits) stay as round 0 computed them unless an override replaces frame i's own value
       write()       the video, the masks and warp.json
-    Overrides (all optional, frame i only): layers_off (v11: the frame without the layer stack -- the plain own-pixel
+    Overrides (all optional, frame i only): layers_off (the frame without the layer stack -- the plain own-pixel
     warp, then the erase layer and the lip lock as usual), S (478 x 3 landmarks of the take at i), dFe (the applied residual), ell
     (another HeadEllipse: falloff / ring), lam (TPS regularisation), jaw (planned jaw angle, rad), dth (the chin pin's
     extra jaw angle, rad), pin (upper-lip-root pin, px), open_s / tg (eased opening share / tongue pose), light (the
@@ -1004,7 +1004,7 @@ class WarpClip:
         # small motion stays in its pixels; only the smooth (target - shape) correction is added on top.
         Fs = gaussian_filter1d(F, g("warp_feat_smooth", 0.0), axis=0, mode="nearest") if g("warp_feat_smooth", 0.0) > 0 else F
         pp = np.array([fr_t[min(i, len(fr_t) - 1)]["vis"] == "PP" for i in range(n)])
-        # ---- v10c (opt-in): --warp-target coart = the coarticulation planner (lsdub/core/coart.py) instead of the per-frame
+        # (opt-in): --warp-target coart = the coarticulation planner (lsdub/core/coart.py) instead of the per-frame
         # step targets: one planned trajectory (dominance-blended phone targets, duration undershoot, fitted to the take's own
         # motion statistics and shape manifold, closures hard; the jaw / lip split set on model.J); pp = its closure frames
         if g("warp_target", "v9") == "coart":
@@ -1026,12 +1026,12 @@ class WarpClip:
                 g("warp_width_mix", "switch"),
                 g("warp_close_depth", 0.0),
             )
-        # ---- end v10c
+        # ---- end coart
         dl = np.array([np.linalg.norm(S[i][33, :2] - S[i][168, :2]) for i in range(n)])
         dr = np.array([np.linalg.norm(S[i][263, :2] - S[i][168, :2]) for i in range(n)])
-        self.fs = gaussian_filter1d(2 * np.minimum(dl, dr) / np.maximum(dl + dr, 1e-6), 1.0, mode="nearest")  # v18: 1 frontal, -> 0 profile
+        self.fs = gaussian_filter1d(2 * np.minimum(dl, dr) / np.maximum(dl + dr, 1e-6), 1.0, mode="nearest")  # 1 frontal, -> 0 profile
         if g("warp_yaw_width", 0.0) > 0:
-            # v18: the planned width follows the head turn. A turned head shows its mouth foreshortened; the plan's width
+            # the planned width follows the head turn. A turned head shows its mouth foreshortened; the plan's width
             # comes from the take's whole-clip range, so on a near-profile frame it asked for the frontal width and the far
             # corner went onto the cheek (sky B f61-63). Per frame the foreshortening = the eyes' balance about the nose
             # bridge (1 frontal, -> 0 in profile), relative to the clip's median; the width target is scaled by it.
@@ -1055,7 +1055,7 @@ class WarpClip:
             )
         cap_k = g("warp_size_cap", 0.0)
         if cap_k > 0:
-            # v4 size cap: the new mouth is never bigger than this face's own mouth would be. Per dimension the target stays
+            # size cap: the new mouth is never bigger than this face's own mouth would be. Per dimension the target stays
             # within the take's own p95 opening and p5..p95 width (x cap_k), unless the take's own frame is already past it
             # (that frame IS the face's own mouth and is never shrunk by the cap); the cut is eased zero-phase
             Fe0 = F + dFe
@@ -1102,7 +1102,7 @@ class WarpClip:
         )
         self.ix, self.iin, self.Ft, self.scale, self.conf, self.Fe, self.rot, self.pose = ix, iin, Ft, scale, conf, Fe, rot, pose
         self.interp, self.ell, self.ring_f, self.W, self.H, self.frames = interp, ell, ring_f, W, H, frames
-        self.dFe_pre_fold = dFe.copy()  # (v9: the residual before the fold guard)
+        self.dFe_pre_fold = dFe.copy()  # (the residual before the fold guard)
         fscale = np.ones(n)
         if g("warp_fold_guard", 0.0) > 0 and ell is not None:
             # fold guard: per frame, the largest share of the residual whose warp does not fold; min-filtered (a fold's
@@ -1126,7 +1126,7 @@ class WarpClip:
         self.fscale, self.dFe, self.Fe = fscale, dFe, Fe
         self.yc = None
         if g("warp_yaw_clamp", 0.0) > 0:
-            # v12 (opt-in): the planned outline kept inside the take's face under yaw (YawClamp: the far half clamped)
+            # the planned outline kept inside the take's face under yaw (YawClamp: the far half clamped)
             self.yc = YawClamp(
                 self,
                 a.warp_yaw_clamp,
@@ -1193,7 +1193,7 @@ class WarpClip:
             soft_sources(donors, xf if g("warp_donor_hold", "frame") == "frame" else 0.0),
         )  # cross-fades between sources / donors
         self.choice, self.src_j, self.donors, self.msrc, self.mdon = choice, src_j, donors, msrc, mdon
-        self.rigid_teeth = g("warp_teeth", "off") == "rigid"  # v5: the interior comes from the rigid teeth layer, no donors
+        self.rigid_teeth = g("warp_teeth", "off") == "rigid"  # the interior comes from the rigid teeth layer, no donors
         self.teeth = self.comp = self.erase = self.lock = None
         self.er_al = None
         self.md = None
@@ -1221,10 +1221,10 @@ class WarpClip:
         dFe_i = self.dFe[i] if dFe_i is None else dFe_i
         src = Si[CTRL, :2]
         dst = src + (self.model.delta(dFe_i) @ self.rot[i].T)[:, :2]
-        return src, (dst if getattr(self, "yc", None) is None else self.yc.apply(i, src, dst))  # v12: --warp-yaw-clamp
+        return src, (dst if getattr(self, "yc", None) is None else self.yc.apply(i, src, dst))  # --warp-yaw-clamp
 
     def fold_det_of(self, i, dFe_i=None, Si=None, ell=None, lam=None):
-        """v9 (the gate's fold ruler): the minimum Jacobian determinant of frame i's applied warp (1.0: no move)."""
+        """the minimum Jacobian determinant of frame i's applied warp (1.0: no move)."""
         src, dst = self.dst_of(i, dFe_i, Si)
         if np.abs(dst - src).max() < 0.25:
             return 1.0
@@ -1277,7 +1277,7 @@ class WarpClip:
                 Xt = C[k, CTRL] + model.delta(Fe_i - F[k])
                 dst = pl.rigid(i, Xt) - pl.rigid(i, C[i, CTRL]) + src
                 if getattr(self, "yc", None) is not None:
-                    dst = self.yc.apply(i, src, dst, ent)  # v12
+                    dst = self.yc.apply(i, src, dst, ent)
                 anchors, wmap = self.geometry(i, src, dst, ell)
                 M, _ = cv2.estimateAffinePartial2D(Si[LOWER_FACE_REF, :2].astype(np.float32), S[k][LOWER_FACE_REF, :2].astype(np.float32))
                 a_src = anchors @ M[:, :2].T + M[:, 2]
@@ -1288,7 +1288,7 @@ class WarpClip:
                 dl = model.delta(dFe_i)
                 dst = src + (dl @ self.rot[i].T)[:, :2]
                 if getattr(self, "yc", None) is not None:
-                    dst = self.yc.apply(i, src, dst, ent)  # v12: inside the face
+                    dst = self.yc.apply(i, src, dst, ent)  # inside the face
                 if np.abs(dst - src).max() < 0.25:
                     out, w = fr, np.zeros((H, W), np.float32)
                 else:
@@ -1331,12 +1331,12 @@ class WarpClip:
 
     # -------------------------------------------------------------------------------------------- layer stack --
     def setup_layers(self):
-        """v5..v8: the rigid teeth / layer compositor, its pins (DIS flow of the round-0 warped frames), the jaw plan and
+        """the rigid teeth / layer compositor, its pins (DIS flow of the round-0 warped frames), the jaw plan and
         the eased per-frame layer parameters."""
         g, n = self.g, self.n
         frames, S, pl, C, F, Fe, model = self.frames, self.S, self.pl, self.C, self.F, self.Fe, self.model
         fr_t, P_out, outs = self.fr_t, self.P_out, self.warped
-        # v5 rigid teeth: teeth are bone. The interior (inside the target inner-lip contour) is replaced by the rigid
+        # rigid teeth: teeth are bone. The interior (inside the target inner-lip contour) is replaced by the rigid
         # teeth layer: upper plate at the skull pose, lower plate at skull + jaw angle (from the target opening), a dark
         # cavity behind; the warped lips occlude them. No stretched or per-segment donor teeth reach the output.
         from . import teeth_layer as tl_
@@ -1364,7 +1364,7 @@ class WarpClip:
         layered = g("warp_compose", "plates") == "layers"
         comp = None
         if layered:
-            # v7: the mouth as an explicit layer stack (mouth_layers.py): frame, cover, cavity, lower arch + tongue, upper
+            # the mouth as an explicit layer stack (mouth_layers.py): frame, cover, cavity, lower arch + tongue, upper
             # arch, lips, face; full curved arches in head space, the lower one pinned to the chin skin
             from . import mouth_layers as ml_
 
@@ -1387,7 +1387,7 @@ class WarpClip:
                 None,
                 g("warp_teeth_pin_sigma", 4.0),
                 g("warp_arch_expose", 0.03),
-                # v8 (all default to v7's behaviour)
+                # (all default to the earlier behaviour)
                 pin_mode=g("warp_teeth_chin_pin", "skin"),
                 pin_gain=g("warp_chin_pin_gain", 0.4),
                 pin_split=g("warp_chin_pin_split", 1.5),
@@ -1406,12 +1406,12 @@ class WarpClip:
                 facing=g("warp_arch_facing", 0.0),
                 tongue_lit=g("warp_tongue_lit", 1.0),
                 harvest_lo=g("warp_arch_harvest_lower", None),
-                # v11 (opt-in): the interior only through the warped lips; the debug view's stabilisation
+                # the interior only through the warped lips; the debug view's stabilisation
                 interior_clip=bool(g("warp_interior_clip", False)),
                 dbg_stab=g("warp_layers_debug_stab", "pin"),
                 cover_corners=g("warp_cover_corners", 0.0),
                 **({"build": "v12"} if g("warp_arch_build", "v11") == "v12" else {}),
-                # v13 (opt-in): the anthropometric slots, the buccal corridor
+                # the anthropometric slots, the buccal corridor
                 **(
                     {"layout": "anthro", "anthro_unit": g("warp_arch_anthro_unit", "ipd")}
                     if g("warp_arch_layout", "harvest") == "anthro"
@@ -1422,7 +1422,7 @@ class WarpClip:
                     if g("warp_arch_corridor", 0.0) > 0
                     else {}
                 ),
-                # v14 (opt-in): area-correct minification of the arch atlas, the enamel material pass
+                # area-correct minification of the arch atlas, the enamel material pass
                 **({"mipmap": True} if g("warp_arch_mipmap", False) else {}),
                 **(
                     {"enamel": _enamel_params(g("warp_arch_enamel", 0.0), g("warp_arch_enamel_mix", None))}
@@ -1430,10 +1430,10 @@ class WarpClip:
                     else {}
                 ),
                 **({"detail": g("warp_arch_detail", 0.0)} if g("warp_arch_detail", 0.0) > 0 else {}),
-                # v15 (opt-in): pink gingiva above / below the crowns, and the tongue covering the lower crowns at mid-open
+                # pink gingiva above / below the crowns, and the tongue covering the lower crowns at mid-open
                 **({"gums": g("warp_arch_gums", 0.0)} if g("warp_arch_gums", 0.0) > 0 else {}),
                 **({"tongue_cover": g("warp_tongue_cover", 0.0)} if g("warp_tongue_cover", 0.0) > 0 else {}),
-                # v16 (opt-in): the lower teeth as the dim, half-hidden, soft-bottomed sibling of the uppers
+                # the lower teeth as the dim, half-hidden, soft-bottomed sibling of the uppers
                 **(
                     {
                         "lower_real": g("warp_lower_real", 0.0),
@@ -1442,7 +1442,7 @@ class WarpClip:
                     if g("warp_lower_real", 0.0) > 0
                     else {}
                 ),
-                # v17 (opt-in): the opening filled (tongue + lower row) instead of a dark void
+                # the opening filled (tongue + lower row) instead of a dark void
                 **({"cavity_fill": g("warp_cavity_strength", 1.0)} if g("warp_cavity", "off") == "fill" else {}),
                 tongue_fill=g("warp_tongue_fill", 0.45),
                 lower_ratio=g("warp_lower_ratio", "auto"),
@@ -1452,19 +1452,19 @@ class WarpClip:
 
                 mouth_paint.warn_paint(mouth_paint.lip_stats_warnings(g))
         if comp is not None and g("warp_arch_band_log", False):
-            comp.band_log = True  # v12: the lip-band ruler, logging only
+            comp.band_log = True  # the lip-band ruler, logging only
         if comp is not None and getattr(self, "yc", None) is not None:
-            comp.face_of = self.yc.face_box  # v12: the cover's face test
-        single = comp is not None and g("warp_reg", "v11") == "single"  # v12: one reference (mouth_layers.plan_single)
-        gpin = g("warp_reg_pin", "none") if single else "none"  # v12: + ONE skin residual for the whole interior
+            comp.face_of = self.yc.face_box  # the cover's face test
+        single = comp is not None and g("warp_reg", "v11") == "single"  # one reference (mouth_layers.plan_single)
+        gpin = g("warp_reg_pin", "none") if single else "none"  # + ONE skin residual for the whole interior
         if single and gpin == "nose":  # (nose: the take's own head motion the pose misses)
             teeth.set_pin(frames, S, g("warp_teeth_pin_sigma", 4.0), idx=tl_.NOSE)
         elif g("warp_teeth_anchor", "pose") == "skin" and (not single or gpin == "global"):
-            # v6: the teeth take the upper-lip ROOT skin's own motion (DIS flow of the philtrum / nose base in the warped
+            # the teeth take the upper-lip ROOT skin's own motion (DIS flow of the philtrum / nose base in the warped
             # frames), not the MediaPipe skull pose alone (that pose misses the skin by ~2x the flow floor and lags it)
             teeth.set_pin(outs, S, g("warp_teeth_pin_sigma", 4.0))
         if g("warp_teeth_jaw", "frame") == "plan":
-            # v6: the jaw is planned over the whole clip at once (smooth, speed / acceleration limited, holds on sustained
+            # the jaw is planned over the whole clip at once (smooth, speed / acceleration limited, holds on sustained
             # vowels, lower teeth hidden below the lower lip on near-closed frames) instead of per frame from the target lip
             u_open = (Fe[:, 0] - model.rng["g_lo"]) / max(1e-6, model.rng["g_hi"] - model.rng["g_lo"])
             teeth.plan(
@@ -1481,9 +1481,9 @@ class WarpClip:
                 floor=comp.jaw_floor([P_out[i][14] for i in range(n)]) if comp is not None else None,
             )
         if comp is not None and g("warp_teeth_chin_pin", "skin") in ("skin", "arc") and not single:
-            comp.set_chin_pin(outs, P_out)  # v7: lower teeth take the chin skin's frame-to-frame motion (v8 arc: on the hinge arc)
+            comp.set_chin_pin(outs, P_out)  # lower teeth take the chin skin's frame-to-frame motion (arc: on the hinge arc)
         if comp is not None and (g("warp_layers_smooth", 0.0) > 0 or g("warp_tongue", "on") == "wedge"):
-            comp.prepare(Fe[:, 0], [fr_t[min(i, len(fr_t) - 1)]["vis"] for i in range(n)])  # v8: eased per-frame layer parameters
+            comp.prepare(Fe[:, 0], [fr_t[min(i, len(fr_t) - 1)]["vis"] for i in range(n)])  # eased per-frame layer parameters
         if single:
             comp.plan_single(P_out, g("warp_reg_jaw_sigma", 1.0), g("warp_reg_tongue_sigma", 2.0), g("warp_reg_lo_limit", 0.09), gpin)
         self.teeth, self.comp, self.md, self.fit_t = teeth, comp, md, fit_t
@@ -1500,7 +1500,7 @@ class WarpClip:
             undo.append((arr, i, np.array(arr[i], copy=True)))
             arr[i] = val
 
-        if "pose" in ov:  # v9 lm_hold (re-detect): the skull pose of frame i from its repaired landmarks
+        if "pose" in ov:  # lm_hold (re-detect): the skull pose of frame i from its repaired landmarks
             s_, R_, t3 = ov["pose"]
             put(self.pl, "s", s_)
             put(self.pl, "R", R_)
@@ -1565,9 +1565,9 @@ class WarpClip:
                 lg["chin_pin_raw"] = [round(float(x), 2) for x in comp.pin_raw[i]]
                 lg["arc_tan"] = [round(float(x), 3) for x in comp.arc_tangent(i, comp.jaw_R(i, gap, P_out[14], extra=False))]
                 if i in comp.reg:
-                    lg["reg"] = comp.reg[i]  # v11: the inter-layer registration (lsdub layer-reg)
+                    lg["reg"] = comp.reg[i]  # the inter-layer registration (lsdub layer-reg)
                 if i in comp.corner_log:
-                    lg["corner_px"] = comp.corner_log[i]  # v11: corner residue px filled
+                    lg["corner_px"] = comp.corner_log[i]  # corner residue px filled
             else:
                 out, tm = teeth.render(out, i, P_out[LIP_IN], gap, None if md is None else md[1:3], None if md is None else md[3:5])
             lg["jaw_deg"] = round(float(np.degrees(teeth.jaw_at(i, gap, P_out[14]))), 2)
@@ -1641,7 +1641,7 @@ class WarpClip:
         try:
             pre = out
             out, lw = lk.apply(out, P_out, i)
-            if comp is not None and i in comp.interior:  # v7: the lip colour lock never tints the teeth / tongue
+            if comp is not None and i in comp.interior:  # the lip colour lock never tints the teeth / tongue
                 (x0_, y0_, w_, h_), im_ = comp.interior[i]
                 o_ = out.copy()
                 sub = o_[y0_ : y0_ + h_, x0_ : x0_ + w_]
@@ -1654,7 +1654,7 @@ class WarpClip:
 
     # ------------------------------------------------------------------------------------------- whole frames --
     def render_frame(self, i, ov=None, fold=False):
-        """v9: frame i re-made through the whole chain with overrides ov (see the class doc) -> (image, mask, log entry,
+        """frame i re-made through the whole chain with overrides ov (see the class doc) -> (image, mask, log entry,
         P_out). With ov = {} after run_batch() this reproduces the batch frame bit-for-bit. fold: also log the applied
         warp's min Jacobian determinant (ent['fold_det'])."""
         ov = dict(ov or {})
@@ -1673,7 +1673,7 @@ class WarpClip:
                 mask = np.maximum(mask, tm)
                 ent.update(lg)
             elif self.rigid_teeth:
-                ent["layers_off"] = True  # v11 gate (h): the plain own-pixel warp, no layer stack
+                ent["layers_off"] = True  # gate (h): the plain own-pixel warp, no layer stack
             if self.erase is not None:
                 o2, em, lg = self.erase_one(i, out, ov, rerender=True)
                 if em is not None:
@@ -1690,17 +1690,17 @@ class WarpClip:
         return out, mask, ent, P_out
 
     def profile(self, i):
-        """v18 (--warp-profile-plain T): a frame turned past T (eye balance about the nose bridge) keeps the plain
+        """--warp-profile-plain T: a frame turned past T (eye balance about the nose bridge) keeps the plain
         own-pixel warp, no synthetic teeth / cavity: in near-profile their far end was a hard cut past the lip (sky B f61-63)."""
         t = self.g("warp_profile_plain", 0.0)
         return t > 0 and getattr(self, "fs", None) is not None and self.fs[i] < t
 
     def run_batch(self):
-        """round 0 (the v8 batch, bit-identical to the pre-v9 run())."""
+        """round 0 (the earlier batch, bit-identical to the earlier run())."""
         g, n = self.g, self.n
         for i in range(n):
             self.warped[i], self.masks[i], self.log[i], self.dsts[i] = self.warp_one(i)
-        # v4 layers (opt-in): lip erase + the take's own closed lips at closures, then the lip colour lock
+        # layers (opt-in): lip erase + the take's own closed lips at closures, then the lip colour lock
         for i in range(n):
             self.P_out[i] = self.p_out_of(i, self.dsts[i])  # where the lips ARE in each output
         outs, masks, log = self.outs, self.masks, self.log
@@ -1756,7 +1756,7 @@ class WarpClip:
         if self.comp is not None:
             info["layers"] = self.comp.info()
             info["layers"]["bite_overlap"] = self.comp.bite_overlap(self.P_out, self.Fe[:, 0])
-            if "corridor" in info["layers"]:  # v13: the corridor's summary from the delivered frames' own entries
+            if "corridor" in info["layers"]:  # the corridor's summary from the delivered frames' own entries
                 info["layers"]["corridor"] = self.comp.corridor_info([((l or {}).get("reg") or {}).get("corridor") for l in self.log])
         return info
 
@@ -1825,8 +1825,8 @@ class WarpClip:
 
 
 def run(a):
-    # --- v10a: --vocalisations skip | rest (lsdub/core/vocalisations.py). vx is None with --vocalisations mouth or a
-    # track without vocalisations: then this is exactly the v9 run.
+    # --- --vocalisations skip | rest (lsdub/core/vocalisations.py). vx is None with --vocalisations mouth or a
+    # track without vocalisations: then this is exactly the run.
     from . import vocalisations
 
     vx = vocalisations.for_warp(a)
@@ -1836,10 +1836,10 @@ def run(a):
     clip.run_batch()
     if vx:
         vx.after_batch(clip)
-    # --- (v10a end)
+    # --- (end)
     extra = None
     if getattr(a, "warp_gate", "off") not in (None, "off"):
-        # v9: the per-frame maker / checker / confirmation gate (lsdub/core/frame_gate.py)
+        # the per-frame maker / checker / confirmation gate (lsdub/core/frame_gate.py)
         from . import frame_gate
 
         extra = frame_gate.gate(clip, a)

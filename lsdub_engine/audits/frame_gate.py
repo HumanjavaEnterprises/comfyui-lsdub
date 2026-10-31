@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""frame_gate.py: the CHECKER of the v9 per-frame gate (the maker / confirmation loop is lsdub/core/frame_gate.py). CPU.
+"""frame_gate.py: the CHECKER of the per-frame gate (the maker / confirmation loop is lsdub/core/frame_gate.py). CPU.
 
 Every frame of a render is checked against its neighbours and against the source take, in the SKULL-STABILISED mouth
 crop: the take's own rigid skull pose (RigidPlacement on the strict skull points: the pose the warp itself rides) maps a
@@ -63,7 +63,7 @@ UP_LINE = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 415, 310, 311, 312, 
 LO_LINE = [146, 91, 181, 84, 17, 314, 405, 321, 375, 324, 318, 402, 317, 14, 87, 178, 88, 95]
 GEOM = [0, 13, 14, 17, 61, 291]  # the outline points whose jerk / drift is measured
 CTRL = LIP_OUT + LIP_IN + [18, 200, 199, 175]  # mouth_warp.CTRL
-# cause codes (the taxonomy of the founder's "random frames where we error out")
+# cause codes (the taxonomy of random bad frames)
 CAUSES = {
     "lm_jump": "(a) MediaPipe landmark jump on the input, consumed by the warp",
     "fold": "(b) warp fold / tear",
@@ -82,7 +82,7 @@ CAUSES = {
     "lost": "no face found on the output",
 }
 
-# thresholds, calibrated on the 7 takes (Stage 0, v9/work/calibration.md): floor (SOFT, with robust z >= Z) = the
+# thresholds, calibrated on the 7 takes (Stage 0): floor (SOFT, with robust z >= Z) = the
 # takes' own p99.5 of the same ruler (the take checked against itself: its series minus its running median), fail
 # (FAIL) = just above the takes' own MAXIMUM, so no take frame reaches FAIL; scale = the floor of the robust scale (MAD)
 # so a near-constant series does not turn noise into a huge z. Units: pop / step / mc in 8-bit levels (mean over the
@@ -108,11 +108,11 @@ TH = dict(
 HARD = dict(fold=0.0, outside=0.02, drift_slide=0.05, held_lm_err=0.06)
 # which rulers make a frame's verdict (the others are evidence for the cause attribution / logged)
 VERDICT_KEYS = ("pop", "step", "mc", "geom", "drift", "teeth", "colour", "leak", "lipleak", "viseme", "lm_err")  # seam / teeth_ncc: logged
-# v11: a re-detection is only used when it is a plausible fit of the face the take's track follows (redet_ok /
-# redet_check). MediaPipe's IMAGE mode can lock onto a false, smaller face on a single frame (seen in v10d and
+# a re-detection is only used when it is a plausible fit of the face the take's track follows (redet_ok /
+# redet_check). MediaPipe's IMAGE mode can lock onto a false, smaller face on a single frame (seen in and
 # s2718 f82: the whole mesh 0.8 IOD off at a third of the size). Trusted, such a fit became the gate's "repaired" input
 # track (lm_hold through held_fix, k5-smoothed over 5 frames) and the warp drew the new mouth at the nostrils; it also
-# raised false lm_err FAILs on the frames around it. Bounds, from v9's 7 takes and their renders (the take side and the
+# raised false lm_err FAILs on the frames around it. Bounds, from the earlier 7 takes and their renders (the take side and the
 # output side): the skull points' median distance to the track reaches 0.22 IOD, the spread ratio 0.76..1.04, the jump of
 # the skull offset vs the neighbouring re-detections 0.14 IOD; the two false fits: 0.78 / 0.84, 0.31 / 0.46, 0.82 / 0.84.
 REDET = dict(skull=0.4, spread=(0.6, 1.6), jump=0.3)
@@ -130,7 +130,7 @@ def skull_offset(lm, ref):
 
 
 def redet_ok(lm, ref):
-    """v11: one re-detection is a plausible fit of the tracked face (the single-frame part of redet_check)."""
+    """one re-detection is a plausible fit of the tracked face (the single-frame part of redet_check)."""
     if lm is None or not np.isfinite(lm).all():
         return False
     d, _, r = skull_offset(lm, ref)
@@ -138,7 +138,7 @@ def redet_ok(lm, ref):
 
 
 def redet_check(R, T):
-    """v11: which re-detections R (n x 478 x 3, nan = none) to trust, given the take's track T: redet_ok on each, and
+    """which re-detections R (n x 478 x 3, nan = none) to trust, given the take's track T: redet_ok on each, and
     the skull offset within REDET['jump'] IOD of the median offset of the plausible re-detections at t-2..t+2 (a one-frame
     flip to another face). -> (bool mask, [dict(i, skull, spread, jump)] of the rejected ones)"""
     R = np.asarray(R, float)
@@ -333,7 +333,7 @@ class Checker:
         o = dict(i=i, det=True)
         if lm is None and redetect:
             lm = self.landmarks(img, i)
-            if lm is not None and not redet_ok(lm, self.S3raw[i]):  # v11: a false face fit is no detection
+            if lm is not None and not redet_ok(lm, self.S3raw[i]):  # a false face fit is no detection
                 o["redet_rejected"] = True
                 lm = None
         if lm is None or not np.isfinite(lm).all():  # no face found: the masks from the planned / take outline,
@@ -412,7 +412,7 @@ class Checker:
         roi = poly(Pl, LIP_OUT, sh, 0.35)
         inter = ((lab[..., 0] < 0.45 * self.skin_L) | tl.teeth_key(lab, self.skin_L)) & roi & ~poly(Pl, LIP_IN, sh, 0.0, 0.03 * io)
         if getattr(self, "leak_scene", False) and i is not None:
-            # v11 (opt-in): the SCENE is not a leak -- a pixel that is just as dark / tooth-like in the take at the same
+            # the SCENE is not a leak -- a pixel that is just as dark / tooth-like in the take at the same
             # place, outside the take's own mouth (its outer lip grown 25 %), is hair / a nostril / background the bigger
             # ROI of a wider planned mouth reaches (on a turned head ~80 % of the "leak" was the hair at the far corner)
             tk = self.take[i][y0:y1, x0:x1]
@@ -433,7 +433,7 @@ class Checker:
         P = self.plan.get("P_out")
         tk = self.plan.get("take")
         if tk is not None and i < len(tk) and tk[i]:
-            return None  # v10a: the take's own frame: no plan, its own lips (as the take side)
+            return None  # the take's own frame: no plan, its own lips (as the take side)
         return None if P is None or P[i] is None else np.asarray(P[i], float)
 
     def _teeth(self, crop, q):
@@ -833,7 +833,7 @@ class Checker:
         ws = max(1e-6, r["w_hi"] - r["w_lo"])
         rg = (O["gap_m"] - Fe[:, 0]) / gs
         rw = (O["width_m"] - Fe[:, 1]) / ws
-        sk = self.plan.get("skip")  # v10a: a skipped vocalisation has no audio target (not scored, not in the bias)
+        sk = self.plan.get("skip")  # a skipped vocalisation has no audio target (not scored, not in the bias)
         if sk is not None:
             sk = np.asarray(sk, bool)[: self.n]
             rg = np.where(sk, np.nan, rg)
@@ -964,7 +964,7 @@ class Checker:
         for w in wins:
             for i in range(w["frames"][0], w["frames"][1] + 1):
                 slosh_frames[i] = True
-        # attribution: the founder's cause list (a)..(k)
+        # attribution: the cause list (a)..(k)
         lmz = (np.asarray(M["lm_in"], float) - ref["lm_in"][0]) / ref["lm_in"][1] if "lm_in" in M and "lm_in" in ref else np.zeros(n)
         lm_hit = np.nan_to_num(lmz, nan=0) >= Z
         lm_hit &= np.nan_to_num(np.asarray(M.get("lm_in", np.zeros(n)), float), nan=0) >= th["lm_in"]["floor"]
@@ -1037,7 +1037,7 @@ def replay(warp_json, S3raw, shape, lam=0.01, pose_smooth="sg7", track_smooth="k
         src = S[i][mw.CTRL, :2]
         dst = src + (np.tensordot(Fe[i] - F[i], J, axes=(0, 0)) @ (pl.s[i] * pl.R[i]).T)[:, :2]
         if "yaw_clamp_dst" in fr[i]:
-            dst = np.asarray(fr[i]["yaw_clamp_dst"], float)  # v12: --warp-yaw-clamp's own outline
+            dst = np.asarray(fr[i]["yaw_clamp_dst"], float)  # --warp-yaw-clamp's own outline
         P = S[i][:, :2].copy()
         P[mw.CTRL] = dst
         P_out.append(P)
@@ -1047,7 +1047,7 @@ def replay(warp_json, S3raw, shape, lam=0.01, pose_smooth="sg7", track_smooth="k
         fold.append(mw.fold_det(src, dst, ell.anchors(pl, i), ell.weight(pl, i, shape), lam, inner=dst[iin]))
     jaw = [f.get("jaw_deg", np.nan) + f.get("jaw_dth_deg", 0.0) for f in fr[:n]]
     pin = [f.get("teeth_pin", [0.0, 0.0]) for f in fr[:n]]
-    sk_ = (w.get("vocal") or {}).get("mode") == "skip"  # v10a
+    sk_ = (w.get("vocal") or {}).get("mode") == "skip"
     skip = [bool(f.get("vocal_skip", False)) for f in fr[:n]] if sk_ else None
     take = [float(f.get("vocal_s", 1.0)) <= 0.0 for f in fr[:n]] if sk_ else None
     return dict(P_out=P_out, fold=fold, Fe=Fe, F=F, jaw=jaw, pin=pin, S=S, pl=pl, range=w.get("range"), n=n, skip=skip, take=take)
@@ -1066,7 +1066,7 @@ def read_frames(path, n=None):
 
 def landmark_cache(frames, path=None, lmk=None, boxes_from=None, check=True):
     """IMAGE-mode landmarks of every frame (n x 478 x 3, nan when no face), cached in path (raw). boxes_from: a track whose
-    per-frame face box crops the frame first (the take's raw track); v11 (check): the re-detections that are not a
+    per-frame face box crops the frame first (the take's raw track); (check): the re-detections that are not a
     plausible fit of that track's face (redet_check) are returned as nan (the cache keeps them raw)."""
     out = None
     if path and os.path.exists(path):
@@ -1168,14 +1168,13 @@ def main(argv=None):
     ap.add_argument(
         "--leak-scene",
         action="store_true",
-        help="v11: the leak ruler ignores the scene (pixels as dark / tooth-like "
+        help="the leak ruler ignores the scene (pixels as dark / tooth-like "
         "in the take at the same place, outside its own mouth: hair, nostrils, background)",
     )
     ap.add_argument(
         "--reg",
         action="store_true",
-        help="v11: also the inter-layer registration ruler (lsdub layer-reg) on the "
-        'warp.json reg series (reported in the json under "reg")',
+        help='also the inter-layer registration ruler (lsdub layer-reg) on the warp.json reg series (reported in the json under "reg")',
     )
     a = ap.parse_args(argv)
     S3raw = np.load(a.take_trk)["S3"]

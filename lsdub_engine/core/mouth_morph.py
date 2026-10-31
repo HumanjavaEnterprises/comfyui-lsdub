@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""mouth_morph.py: the --mode morph engine of lsdub paint (v5 viseme paint). Called through mouth_paint.py.
+"""mouth_morph.py: the --mode morph engine of lsdub paint (viseme paint). Called through mouth_paint.py.
 
-What it changes vs the v4 (legacy) paint, one option per problem:
+What it changes vs the (legacy) paint, one option per problem:
   SNAPPING  the viseme weights are eased in time (--weight-sigma); the frame's mouth SHAPE is the weighted blend of the
             library landmarks (all 478 MediaPipe points), filtered over time (--smooth sg|euro). Every contributing
             library image is mesh-warped (Delaunay piecewise-affine) to that SAME shape before blending, so the lips
@@ -13,7 +13,7 @@ What it changes vs the v4 (legacy) paint, one option per problem:
             paint mask is the face-mesh lower-face region (--mask face), warped with the mouth; --blend laplacian does a
             pyramid blend; per-frame Lab colour stats are smoothed over time; --grain matches sharpness and re-adds grain.
             The mic in the library frame is masked out (--mic-guard), which killed the grey blob on the chin.
-  COLLAGE   --motion-blur blurs the paint along the head's motion (shutter fraction). The v2v pass is
+  COLLAGE   --motion-blur blurs the paint along the head's motion (shutter fraction). The pass is
             lsdub refine.
 """
 
@@ -347,7 +347,7 @@ class CleanPlate:
         cap.release()
         self.sr = S[self.r].copy()
         self.open_ref = float(op[self.r])
-        if erase:  # v4 --lip-erase: the plate's reference loses its lips to its own skin (one static bald frame,
+        if erase:  # --lip-erase: the plate's reference loses its lips to its own skin (one static bald frame,
             # carried by the pose like the rest of the plate), so no take lip ever shows around a smaller painted mouth
             from . import lip_layers as ll
 
@@ -637,7 +637,7 @@ def run(a):
     if P3D or STRICT:
         S3, S = S, S[..., :2]
     if getattr(a, "mouth_scale", "none") == "take" or getattr(a, "mouth_open_cap", 0.0) > 0:
-        # v4 size calibration: the painted mouth is scaled to THIS take's own mouth (rest width / lip thickness, in
+        # size calibration: the painted mouth is scaled to THIS take's own mouth (rest width / lip thickness, in
         # inter-ocular units, library base vs the take's track), and its opening is capped at the take's own p95
         from . import lip_layers as ll
 

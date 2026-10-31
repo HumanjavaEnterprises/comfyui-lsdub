@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""frame_gate.py (core): the MAKER and the CONFIRMATION of the v9 per-frame gate (the CHECKER: audits/frame_gate.py).
+"""frame_gate.py (core): the MAKER and the CONFIRMATION of the per-frame gate (the CHECKER: audits/frame_gate.py).
 
-Round 0 is the v8 render (mouth_warp.WarpClip.run_batch). The checker reads every frame against its neighbours and the
+Round 0 is the render (mouth_warp.WarpClip.run_batch). The checker reads every frame against its neighbours and the
 source take (PASS / SOFT / FAIL + causes, SLOSH windows). For each FAIL frame (worst first; SOFT too with
 --warp-gate-soft) the maker re-makes the frame from ALTERNATIVES -- per-frame parameter overrides through
 WarpClip.render_frame, never a blend of pixels from other frames -- and runs each through the checker against the
@@ -18,7 +18,7 @@ CURRENT neighbours:
                  angle, opening share, tongue pose) for the layer stack
   d teeth_plan   the lower teeth from the jaw plan only (the chin pin's fast residual at gain 0)
   e layers_hold  the mouth cover with a wider hull (0.32) + the lip lock's colour state of t-1
-  h layers_off   (v11, opt-in: add h to --warp-gate-cands) the plain own-pixel warp without the layer stack, tried after
+  h layers_off   (opt-in: add h to --warp-gate-cands) the plain own-pixel warp without the layer stack, tried after
                  a..e and before f
   f param_interp (last resort) the target features and every layer parameter interpolated between the nearest PASS
                  frames on both sides (parameters, never pixels)
@@ -56,13 +56,13 @@ def plan_of(clip, fold=True):
         pin=pin,
         S_in=[np.asarray(x, float) for x in clip.S],
         held_fixed=[False] * n,
-        skip=getattr(clip, "vocal_skip", None) if getattr(clip, "vocal_mode", None) == "skip" else None,  # v10a: no audio target
+        skip=getattr(clip, "vocal_skip", None) if getattr(clip, "vocal_mode", None) == "skip" else None,  # no audio target
         take=(np.asarray(clip.vocal_s) <= 0.0) if getattr(clip, "vocal_mode", None) == "skip" else None,
-    )  # v10a: the take's own
+    )  # the take's own
 
 
 def is_take(clip, t):
-    """v10a: frame t is the take's own (a skipped vocalisation at strength 0): nothing to re-make."""
+    """frame t is the take's own (a skipped vocalisation at strength 0): nothing to re-make."""
     s = getattr(clip, "vocal_s", None)
     return s is not None and t < len(s) and s[t] <= 0.0
 
@@ -82,9 +82,9 @@ def make_checker(clip, a, lmk=None):
         getattr(a, "warp_gate_slosh_w", 4),
         lmk,
     )
-    ck.leak_scene = bool(getattr(a, "warp_gate_leak_scene", False))  # v11 (opt-in): the scene is not a leak
+    ck.leak_scene = bool(getattr(a, "warp_gate_leak_scene", False))  # the scene is not a leak
     raw = chk.landmark_cache(clip.frames, None, lmk, clip.S3raw, check=False)
-    ck.take_lm, ck.redet_rejected = chk.filter_redet(raw, clip.S3raw)  # v11: a false face fit is never used
+    ck.take_lm, ck.redet_rejected = chk.filter_redet(raw, clip.S3raw)  # a false face fit is never used
     if ck.redet_rejected:
         print(
             "gate: implausible re-detection(s) of the take not used: "
@@ -247,9 +247,9 @@ def cand_layers_hold(clip, ck, t, ctx, base):
 
 
 def cand_layers_off(clip, ck, t, ctx, base):
-    """v11 (h): the frame re-made as the plain own-pixel warp, without the layer stack (the take's own mouth moved to the
+    """the frame re-made as the plain own-pixel warp, without the layer stack (the take's own mouth moved to the
     target: its own teeth / interior, no cover, cavity, arches or lip layer); the erase layer and the lip lock as usual.
-    v12 (--warp-gate-h-guard): only where it cannot switch the interior's look for a frame (h_allowed)."""
+    (--warp-gate-h-guard): only where it cannot switch the interior's look for a frame (h_allowed)."""
     if not clip.rigid_teeth or base.get("layers_off"):
         return None
     if clip.g("warp_gate_h_guard", False) and not h_allowed(clip, t, ctx):
@@ -257,7 +257,7 @@ def cand_layers_off(clip, ck, t, ctx, base):
     return dict(base, layers_off=True), "plain warp", {}
 
 
-# ---- v12 (opt-in, --warp-gate-h-guard): candidate h without one-frame switches of the interior's look -----------------
+# (opt-in, --warp-gate-h-guard): candidate h without one-frame switches of the interior's look -----------------
 STYLE_PEN = 1.0  # the ranking penalty (a FAIL's worth) per frame whose interior style differs from both neighbours
 
 
@@ -503,7 +503,7 @@ def repair_run(clip, ck, run, cands, ref, V, rnd, ctx, log):
     keys = sorted((k for k in cands if k in CANDS), key=ORDER.index) + (["f"] if "f" in cands else [])
     guard = clip.g("warp_gate_h_guard", False)
     if guard:
-        ctx["run"] = list(hs if "a" in cands else run)  # v12: h_allowed sees the run being re-made
+        ctx["run"] = list(hs if "a" in cands else run)  # h_allowed sees the run being re-made
     for key in keys:
         if key == "f" and best is not None and best[0]:
             break  # (f) only as the last resort
@@ -527,7 +527,7 @@ def repair_run(clip, ck, run, cands, ref, V, rnd, ctx, log):
             )
         )
         r["ovs"] = ovs
-        if guard:  # v12: the style-continuity term: a one-frame switch of the interior's look ranks a FAIL's worth lower
+        if guard:  # the style-continuity term: a one-frame switch of the interior's look ranks a FAIL's worth lower
             sw = style_switches(clip, ovs)
             tried[-1]["style_switch"] = sw
             sc = sc + STYLE_PEN * sw
@@ -831,7 +831,7 @@ def gate(clip, a, lmk=None):
     unresolved = [f["i"] for f in V["frames"] if f["verdict"] == "FAIL"]
     reg = None
     if getattr(a, "warp_gate_reg", False):
-        # v11: the inter-layer registration ruler on the frames as they leave the gate (reported, not repaired)
+        # the inter-layer registration ruler on the frames as they leave the gate (reported, not repaired)
         from ..audits import layer_reg
 
         reg = layer_reg.gate_report(clip.log, ck.W, getattr(a, "warp_gate_reg_floor", None))
@@ -852,7 +852,7 @@ def gate(clip, a, lmk=None):
         seconds=round(time.time() - t0, 1),
         thresholds=dict(TH=ck.th, HARD=chk.HARD),
         redet_rejected=getattr(ck, "redet_rejected", []),
-    )  # v11: the take's re-detections not used (false face fits)
+    )  # the take's re-detections not used (false face fits)
     if reg is not None:
         out["reg"] = reg
     rp = getattr(a, "warp_gate_report", None)

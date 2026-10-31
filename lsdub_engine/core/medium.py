@@ -20,7 +20,7 @@ recommendation 4). CPU.
 from ..io import ff
 import argparse, json, os, sys, tempfile, time
 import cv2, numpy as np
-from . import steps
+from . import paint_api
 
 # MediaPipe 478: the lower face oval (cheek to cheek through the chin) + the nose base -> the nose-to-chin mask
 OVAL_LOW = [93, 132, 58, 172, 136, 150, 149, 176, 148, 152, 377, 400, 378, 379, 365, 397, 288, 361, 323]
@@ -295,24 +295,9 @@ def run(
     write([c for c in crops for _ in range(m_)], cpath, fps * m_, crf=10)
     t_.append(time.perf_counter())
     wj = os.path.join(work, "crop_painted_warp.json")
-    cmd = [
-        "--mode",
-        "warp",
-        "--video",
-        cpath,
-        "--track",
-        track,
-        "--frames",
-        str(n * m_),
-        *paint_args,
-        "--out",
-        ppath,
-        "--warp-json",
-        wj,
-        "--no-watermark",
-    ]
+    cmd = paint_api.argv(cpath, track, n * m_, user_overrides=paint_args, out=ppath, warp_json=wj)
     print("paint " + " ".join(cmd), file=sys.stderr)
-    steps.call("paint", cmd)
+    paint_api.call(cmd)
     t_.append(time.perf_counter())
     PH, _ = read(ppath, n * m_)
     PH += [crops[-1]] * (n * m_ - len(PH))

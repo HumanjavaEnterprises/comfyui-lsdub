@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""teeth_layer.py: v5 rigid teeth for --mode warp (--warp-teeth rigid). All CPU.
+"""teeth_layer.py: rigid teeth for --mode warp (--warp-teeth rigid). All CPU.
 
 Teeth are bone: they never stretch, squash or change size. Lips may move and resize; teeth may only move as the skull
 and the jaw move.
@@ -24,7 +24,7 @@ and the jaw move.
   LIGHT     the plates' and cavity's L are scaled by a low-frequency gain: the frame's own mouth-surround brightness /
             the harvest frame's, eased zero-phase over time.
 
-v6 (opt-in; founder: "sized right but floating around like loose dentures"). Measured on the v5 output by DIS flow:
+Opt-in: teeth that are the right size can still float like loose dentures. Measured on the output by DIS flow:
 the MediaPipe skull pose misses the real upper-lip-root skin motion by ~2x the flow floor and lags it 0.1-0.7 frame, so
 pose-placed teeth swam against flow-true lips; the per-frame jaw from the noisy target lip jittered (15-21 direction
 flips per shot). So:
@@ -161,9 +161,9 @@ def shift_aff(A, c):
     return A
 
 
-# ------------------------------------------------------------------------------------------------- v6: pin --
+# ------------------------------------------------------------------------------------------------- pin --
 ROOT = [2, 97, 326, 167, 393, 164, 165, 391]  # the upper-lip ROOT: philtrum + nose base (the upper teeth hang here)
-NOSE = [1, 4, 5, 195, 197, 6, 45, 275, 48, 278, 64, 294, 98, 327]  # v12: the nose (tip, bridge, alae): bone + cartilage, no lip
+NOSE = [1, 4, 5, 195, 197, 6, 45, 275, 48, 278, 64, 294, 98, 327]  # the nose (tip, bridge, alae): bone + cartilage, no lip
 
 
 def _hull_mask(P, idx, shape, k=0.9):
@@ -231,7 +231,7 @@ def skin_pin(frames, S, pose_pts, ref, idx=ROOT, sigma=4.0, noise=0.5, iod=None)
     return c
 
 
-# --------------------------------------------------------------------------------------------- v6: jaw plan --
+# --------------------------------------------------------------------------------------------- jaw plan --
 def plan_jaw(
     th_t,
     w=None,
@@ -259,7 +259,7 @@ def plan_jaw(
       hide     mu * hide_w * max(0, hide - th): on near-closed frames the lower teeth sit hidden below the lower lip
                (hide = the angle that puts the lower incisal edge at the target lower lip line)
       limits   mu * max(0, |d th| - vmax), mu * max(0, |d2 th| - amax): a real jaw's speed / acceleration
-      floor    (v7, optional; scalar or per frame) mu * max(0, floor - th): the bite (lower incisors never rise through
+      floor    (optional; scalar or per frame) mu * max(0, floor - th): the bite (lower incisors never rise through
                the upper ones) and the exposure limit (never more than a sliver above the target lower lip)
     Returns th (n,), clipped to lim degrees."""
     from scipy.optimize import least_squares
@@ -422,14 +422,14 @@ class TeethLayer:
         self._up_score, self._sharp, self._ok = up / np.maximum(front, 1e-6), sharp, ok
         self.build, self.build_log = build, None
         if build == "v12" and up_idx is None:
-            self._harvest_v12(front, sharp, okl, apart_d)  # v12: no clenched harvest
+            self._harvest_v12(front, sharp, okl, apart_d)  # no clenched harvest
         self._build_plates()
         self.cavity = self._cavity_colour()
         if plates > 1:
             self._pose_plates(plates, plate_min_deg)
 
     def exposed_up(self, i):
-        """v12: the exposed upper tooth height of frame i (IOD): per central column (|x - the mouth centre| <= 0.12 IOD) the
+        """the exposed upper tooth height of frame i (IOD): per central column (|x - the mouth centre| <= 0.12 IOD) the
         upper arch's run from the opening's top to its incisal edge (arch_split: the teeth + the dark gaps between them),
         the median over the columns that have one (0 when fewer than 3 do)."""
         img = self.frames[i]
@@ -446,7 +446,7 @@ class TeethLayer:
         return float(np.median(hh)) / io if len(hh) >= 3 else 0.0
 
     def _harvest_v12(self, front, sharp, okl, apart_d):
-        """v12 build (--warp-arch-build v12): the upper plate is harvested from the frame with the most EXPOSED upper tooth
+        """build (--warp-arch-build v12): the upper plate is harvested from the frame with the most EXPOSED upper tooth
         height (exposed_up) whose arches are clearly APART (a DARK run of >= ~0.04 IOD below the upper incisal edge,
         stats apart_dark), near the median head pose and sharp -- not the largest tooth area: a smile over clenched teeth
         has a large area but carries the lower row on the same plate under a dark bite line, so the plate showed two
@@ -458,7 +458,7 @@ class TeethLayer:
         sc_ = h * gap * front * np.sqrt(sharp) * okl
         old = int(self.h_up)
         if sc_.max() <= 0:
-            self.build_log = dict(up=dict(h_up=old, fallback="v11 (no frame shows the upper teeth with the arches apart)"))
+            self.build_log = dict(up=dict(h_up=old, fallback="older build (no frame shows the upper teeth with the arches apart)"))
             return
         self.h_up = int(np.argmax(sc_))
         self._up_score = h * np.sqrt(sharp)
@@ -571,7 +571,7 @@ class TeethLayer:
         Lt = float(np.percentile(Ll[lo], 40)) if lo.sum() > 20 else 1.0
         lit = smootherstep((Ll - Lc) / max(8.0, Lt - Lc)).astype(np.float32)
         if self.tongue_drop > 0:
-            # v6 lower tongue: the plate's non-teeth part (the tongue's front) is carried tongue_drop IOD DOWN behind the
+            # lower tongue: the plate's non-teeth part (the tongue's front) is carried tongue_drop IOD DOWN behind the
             # lower teeth (which stay); the space it leaves is the cavity, so the tongue no longer rides up toward the
             # upper teeth / shows in a near-closed slit
             tk = cv2.GaussianBlur(
@@ -595,7 +595,7 @@ class TeethLayer:
             lit = ((lit * g_t + lit_s * (1 - g_t) * g_s) / np.maximum(geo2, 1e-3)).astype(np.float32)
             geo = geo2 * (boty[None, :] >= np.arange(img_l.shape[0])[:, None])  # nothing below the harvest lip line
         if self.v6_plate:
-            # v6: the lower plate's lateral ends feather out (no straight-edged cut where it stops; the columns it does not
+            # the lower plate's lateral ends feather out (no straight-edged cut where it stops; the columns it does not
             # reach are cavity). Not mirrored: a mirrored tongue prints its shading creases as dark V lines
             cov = geo.max(0) > 0.3
             if cov.any():
@@ -622,7 +622,7 @@ class TeethLayer:
             self.e_lo = 0.0
 
     def _upper_plate(self, h, mirror=None):
-        """the upper plate of harvest frame h: (image, alpha). v6 (mirror; --warp-teeth-mirror): columns the harvest frame does not show (the far side of a turned head, a lip corner) are filled from
+        """the upper plate of harvest frame h: (image, alpha). (mirror; --warp-teeth-mirror): columns the harvest frame does not show (the far side of a turned head, a lip corner) are filled from
         the arch's mirror image about the face midline on the canonical plane (teeth are symmetric), and the arch's
         lateral ends recede into shadow and feather out (no rectangular cut where the plate ends)."""
         img_u, _, upper, ramp, _, io = self._region(h)
@@ -656,7 +656,7 @@ class TeethLayer:
         return np.clip(img, 0, 255).astype(np.uint8), a2.astype(np.float32)
 
     def _pose_plates(self, k, min_deg=12.0, sigma_t=2.0):
-        """v6 per-head-angle upper plates: a frontal harvest cannot show what a far-turned head shows. Over the head's
+        """per-head-angle upper plates: a frontal harvest cannot show what a far-turned head shows. Over the head's
         out-of-plane pose (pitch, yaw; roll is in the image plane and the affine carries it), up to k harvests: h_up,
         then greedily the best-scoring open-bite frame >= min_deg from the plates already chosen. Each is registered to
         the main plate on the canonical plane (phase correlation of the teeth) so all share one position and size; per
@@ -728,11 +728,11 @@ class TeethLayer:
             Wt = Wt / Wt.sum(1, keepdims=True)
         self.plate_w = Wt
 
-    # ---------------------------------------------------------------------------------------------- v6 anchoring --
+    # anchoring --
     def set_pin(self, frames, S=None, sigma=4.0, noise=0.5, idx=None):
         """teeth share the upper-lip root's motion: the per-frame correction (frame px) from the DIS flow of the root
         skin (philtrum + nose base) in `frames` (the warped output, before the teeth). Applied to both plates (the lower
-        through the jaw hinge), so nothing moves relative to the upper lip root except by the jaw. idx (v12): another
+        through the jaw hinge), so nothing moves relative to the upper lip root except by the jaw. idx: another
         skin region (e.g. NOSE: the head's own fast motion the skull pose misses, without the lip's)."""
         idx = ROOT if idx is None else list(idx)
         S = self.S if S is None else S
@@ -796,7 +796,7 @@ class TeethLayer:
         return float(np.clip(th, np.radians(lim[0]), np.radians(lim[1])))
 
     def jaw_at(self, i, gap_t=None, p14=None):
-        """the jaw used for frame i: the clip plan when one was solved (plan), else per frame (v5)."""
+        """the jaw used for frame i: the clip plan when one was solved (plan), else per frame."""
         return float(self.jaw_plan[i]) if self.jaw_plan is not None else self.jaw(gap_t, i, p14)
 
     def affines(self, i, gap_t, p14=None, A_h=None):
@@ -809,7 +809,7 @@ class TeethLayer:
         return A_up, A_lo
 
     def cavity_field(self, box, Q, gap_t, cav):
-        """v6 soft throat: on wide-open targets the flat cavity tone gets depth -- darker toward the throat (centre,
+        """soft throat: on wide-open targets the flat cavity tone gets depth -- darker toward the throat (centre,
         slightly low), a little lighter and warmer toward the cheeks / palate at the edge of the opening. Strength ~
         throat x how wide open the target is (0 below 45 % of the take's p95 opening, full at 100 %)."""
         o = float(smootherstep((gap_t / max(1e-6, self.g_hi) - 0.45) / 0.55)) * self.throat
@@ -862,7 +862,7 @@ class TeethLayer:
             cav = self.cavity_field(box, Q, gap_t, cav)
         if self.plate_w is None or len(self.up_plates) < 2:
             up, aup = plate(self.up_img, self.up_alpha, A_up, self.h_up)
-        else:  # v6 per-head-angle upper plates, blended by yaw (premultiplied)
+        else:  # per-head-angle upper plates, blended by yaw (premultiplied)
             acc, aacc = 0.0, 0.0
             for k, pk in enumerate(self.up_plates):
                 wk = float(self.plate_w[i, k])
@@ -881,7 +881,7 @@ class TeethLayer:
         first = np.where(ca, cov.argmax(0), box[0])
         last = np.where(ca, box[0] - 1 - cov[::-1].argmax(0), -1)
         if not ca.all() and self.v6_plate:  # (also when the plate is fully hidden: a near-closed frame)
-            # v6: in columns the lower plate does not reach, the cavity / take boundary follows the opening's own shape
+            # in columns the lower plate does not reach, the cavity / take boundary follows the opening's own shape
             # (half way between the target lips; a thin corner or a closed slit stays the take's lips) instead of a
             # straight line carried across from the plate (that printed a rectangular notch); softened horizontally below
             cb = core.any(0)

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""scorecard.py: `lsdub scorecard`, score a delivered film SHOT BY SHOT, so the weak shots show up front (founder: "score
-the videos shot to shot, so we see up front which shots score lower vs higher"). CPU.
+"""scorecard.py: `lsdub scorecard`, score a delivered film SHOT BY SHOT, so the weak shots show up front. CPU.
 
 Per cut (every cut of cut.json):
   sung cuts   sync      measured singer mouth opening vs the aligned vocal opening (sync-qa film mode): corr, best lag

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""slip_audit.py — does the painted mouth stay PINNED to the face, or swim behind it? (founder 2026-10-15:
-"the mouth is swimming behind the locked-in spot on the face ... it's mouthing accurately, just positioning")
+"""slip_audit.py — does the painted mouth stay PINNED to the face, or swim behind it?
 
 Shape changes are allowed; POSITION is not. So we measure motion, not shape:
   - LK-track skin features (forward-backward checked) from frame 0 in each region of each video:

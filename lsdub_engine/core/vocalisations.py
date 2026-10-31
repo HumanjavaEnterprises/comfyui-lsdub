@@ -3,7 +3,7 @@
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """vocalisations.py — the non-lexical vocalisations / ad-libs of a song ("uh uh uh", "ah ah ah", "da da da", "mm",
 "hey", "whoa") found in a viseme track, marked, and handled by the warp: skip them (the take's own mouth), drive them to
-rest, or mouth them (v9).
+rest, or mouth them.
 
   lsdub track skip --track vis.json --out vis_skip.json [--skip-words words.txt] [--lyrics lyrics.txt] [--align a.json]
   lsdub track scan --align align.json [--lyrics lyrics.txt] [--skip-words words.txt] [--shots shots.json]
@@ -26,23 +26,23 @@ TRACK FIELDS (lsdub track skip): frames[i].skip = true and frames[i].skip_reason
 'markup:paren', 'markup:tag', 'yeah:bare', 'gap') on the skipped frames; top level skips = [{f0, f1, t0, t1, words,
 reasons}] (an empty list = processed, nothing found) and skip_rules (what was applied).
 THE CONSUMER (lsdub paint --mode warp, mouth_warp.run -> for_warp): the track's own fields when it carries them, else
-the same detection at paint time (so tracks written before v10a work). The default is --vocalisations skip (since v11:
-the platform skips ad-libs by default, on marked and unmarked tracks alike); --vocalisations mouth is v9 (a v9 command
-with --vocalisations mouth added renders v9 bit for bit); auto is v10a's default (skip on a track marked by `lsdub
+the same detection at paint time (so older tracks work). The default is --vocalisations skip (
+the platform skips ad-libs by default, on marked and unmarked tracks alike); --vocalisations mouth is the old behaviour (an old command
+with --vocalisations mouth added renders the same bit for bit); auto is the earlier default (skip on a track marked by `lsdub
 track skip`, mouth on an unmarked one, the log saying how many spans it mouthed). A track without vocalisations
-renders exactly the v9 frames in every mode:
+renders exactly the frames in every mode:
   skip  the span is the TAKE's own frame (LTX already rendered something natural there): no warp, no teeth /
-        layer stack, no erase. The warp strength s (1 = v9, 0 = the take) is eased zero-phase at each span edge: a
+        layer stack, no erase. The warp strength s (1 = full, 0 = the take) is eased zero-phase at each span edge: a
         centred box filter of --vocal-ease frames (3) over the keep mask, then a C2 smootherstep, so 1 -> 0.79 -> 0.21
         -> 0 across the edge, symmetric about it (no lag, no step). The residual (target - take) is scaled by s before
         the frame is rendered and the finished frame is dissolved toward the take by s (s = 0: the take exactly). The
-        v9 gate does not score the fit to the audio on a skipped frame (there is no target) and does not re-make a frame
+        gate does not score the fit to the audio on a skipped frame (there is no target) and does not re-make a frame
         that is the take; its other rulers still run.
   rest  the span's visemes become the library's REST mouth: closed lips at ease, the rest band of the 'sil' mouth
         narrowed to the library's own resting opening (lsdub's mouthlib: 0 .. 0.15 of the take's range), written into
         the track as 'sil' mixed toward the closure 'PP' (mouth_warp's band arithmetic gives exactly that band). The
         warp's own zero-phase target smoothing makes the transitions.
-  mouth v9: the vocalisations are mouthed like words.
+  mouth the vocalisations are mouthed like words.
 """
 
 import argparse, copy, difflib, json, os, re, sys, tempfile
@@ -50,7 +50,7 @@ import numpy as np
 
 LEXICON = frozenset(
     (
-        # the founder's list (2026-10-24)
+        # common sung ad-libs
         "uh",
         "uh-huh",
         "ah",
@@ -541,7 +541,7 @@ class Vocal:
 
     def after_batch(self, clip):
         """skip: every finished frame dissolved toward the take by its strength (0: the take exactly), the masks scaled;
-        the per-frame render (the v9 gate's maker) does the same. The gate reads clip.vocal_skip / vocal_s."""
+        the per-frame render (the earlier gate's maker) does the same. The gate reads clip.vocal_skip / vocal_s."""
         n = clip.n
         clip.vocal_skip = self.mask[:n].copy()
         clip.vocal_s = self.s[:n].copy()
@@ -602,7 +602,7 @@ class Vocal:
 
 def for_warp(a):
     """mouth_warp.run's hook: a Vocal for --vocalisations skip | rest when the track has vocalisations, else None (then
-    the render is exactly the v9 one)."""
+    the render is exactly the one)."""
     mode = getattr(a, "vocalisations", "mouth") or "mouth"
     if mode == "mouth":
         return None
@@ -612,7 +612,7 @@ def for_warp(a):
     if mode == "auto":
         if "skips" in T:
             mode = "skip"
-        else:  # an unmarked track: v9 behaviour, and say so when it has vocalisations
+        else:  # an unmarked track: behaviour, and say so when it has vocalisations
             try:
                 f = find_spans(
                     T,

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""sung_dyn.py — v14: a SUNG mouth-dynamics curve from the vocal itself, for the warp's coarticulation planner.
+"""sung_dyn.py — a SUNG mouth-dynamics curve from the vocal itself, for the warp's coarticulation planner.
 
 The coart planner (lsdub/core/coart.py) sets each phone segment's opening from the segment's MEAN audio openness, so
 inside a held sung vowel the mouth is flat and its motion comes from the take, not the singing. In singing the vowel

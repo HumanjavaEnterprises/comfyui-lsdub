@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""tooth_scale.py: the TOOTH-SCALE ruler (v13). CPU.
+"""tooth_scale.py: the TOOTH-SCALE ruler. CPU.
 
-Founder on v12: the rendered teeth look about 1/5 too wide relative to the head on the close-ups. Teeth are bone: their
+Rendered teeth can read about 1/5 too wide for the head on close-ups. Teeth are bone: their
 size is fixed by the face, so the ruler measures them against the face's own landmarks, never against the mouth opening.
 
   span      per frame, the VISIBLE TOOTH SPAN of a video, read on the TAKE's raw MediaPipe track (the same landmarks for the
@@ -431,7 +431,7 @@ def _plate_ipd(res, unit):
 
 def load_tex(path):
     """the upper and lower plates of a tex npz: paint --warp-arch-tex-out (up_tex, up_a, up_h in IOD units, lo_*, iod) or
-    v12/reg/tools/platediag.py (up, lo, up_h0, lo_h0, texel, iod) -> {'up': kw, 'lo': kw} for plate_teeth(**kw)."""
+    the plate diagnostic (up, lo, up_h0, lo_h0, texel, iod) -> {'up': kw, 'lo': kw} for plate_teeth(**kw)."""
     Z = np.load(path)
     iod = float(Z["iod"])
     out = {}
@@ -522,7 +522,7 @@ def measure(take, render, track, frames=None, tex=None, label=None, stills=None,
 
 
 def acceptance(summary):
-    """the v13 tooth-scale acceptance lines of a measure() summary: per key PASS iff render span p90 <= 1.05 x take span p90
+    """the earlier tooth-scale acceptance lines of a measure() summary: per key PASS iff render span p90 <= 1.05 x take span p90
     AND the ratio median <= 1.05 (IPD, over the frames where both spans > 0.12); the upper central width (plate, IPD) in
     [0.12, 0.15]; the visible upper teeth at the render's widest frame (key tl) <= 8. -> list of dict(name, status
     'PASS' | 'FAIL' | 'n/a', text); n/a = not measurable here (no frame with both spans, no --tex)."""

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""coart.py: the COARTICULATION target planner of --mode warp (v10c: --warp-target coart; the default v9 keeps
+"""coart.py: the COARTICULATION target planner of --mode warp (--warp-target coart; the default keeps
 mouth_warp.target_features, the per-frame step targets).
 
-v9 aims every frame at its own viseme's band (the take's shape clipped into the band, pushed toward the class centre):
+aims every frame at its own viseme's band (the take's shape clipped into the band, pushed toward the class centre):
 every phone reaches its shape, the shapes step from frame to frame, the openings sit in a compressed middle of the take's
 range and the mouth keeps moving through the pauses. Here the targets are PLANNED over the whole clip, in the face's own
 feature space (inner-lip gap and mouth width, in units of the take's own range):
 
   1. SEGMENTS: the phones of the alignment the track was built from (on the track's own timing: its lead is detected by
      rebuilding it), short gaps as weak 'sil', aligner silences >= --coart-rest-ms as REST, `skip` spans as free segments
-     (with v10a's --vocalisations rest: rests; --vocalisations mouth: planned as words).
-  2. TARGETS: v9's band rule (library bands + class floor, the centre aim, the audio's openness) on the take's mean shape
+     (with the earlier --vocalisations rest: rests; --vocalisations mouth: planned as words).
+  2. TARGETS: the earlier band rule (library bands + class floor, the centre aim, the audio's openness) on the take's mean shape
      over each segment, + the take's own small drift inside sustained segments; a rest = the face's own rest mouth (the
      take's closed mode, at most the library's resting opening).
   3. DOMINANCE BLENDING (Cohen & Massaro), per dimension: a plateau over the segment, rising from 10 % over
@@ -22,7 +22,7 @@ feature space (inner-lip gap and mouth width, in units of the take's own range):
      opening times (the naturalness ruler's fall / rise), its plateau inside the pause. DURATION-DEPENDENT UNDERSHOOT: a
      segment shorter than its class's reach time (its excursion / the take's own transition speed) keeps
      1 - U (1 - dur / reach) of its dominance (U = --coart-undershoot).
-  4. (optional) an EXTERNAL DYNAMICS source (--coart-dyn csv, e.g. v10b's Audio2Face-3D run on the song timeline):
+  4. (optional) an EXTERNAL DYNAMICS source (--coart-dyn csv, e.g. the earlier Audio2Face-3D run on the song timeline):
      percentile-mapped onto the take's range and mixed into the target by --coart-dyn-mix outside pauses / skip spans.
   5. THE TAKE'S OWN RANGE (--coart-range): the plan's p5 / p95 mapped onto the take's own, the neutral level fixed (shut
      stays shut, round stays round), class targets far outside the face's range clipped first; before and after the fit.
@@ -33,7 +33,7 @@ feature space (inner-lip gap and mouth width, in units of the take's own range):
      (acceleration + jerk, zero-phase by construction, closures as hard hinges, a soft speed limit at the take's own p99
      speed) whose weight moves the plan's velocity / acceleration p95 --coart-prior of the way toward the take's own.
   9. JAW / LIP SPLIT (--coart-jaw-share auto | 0..1): the share of an opening carried by the jaw (lower lip + chin; the rest
-     by the upper lip) set on the mouth model's J. v9 = 1; auto = the take's own share as the naturalness ruler measures it,
+     by the upper lip) set on the mouth model's J. 1 = the default; auto = the take's own share as the naturalness ruler measures it,
      moved 20 % toward the jaw for singing. The jaw part reaches the teeth hinge plan through the planned lower lip.
 
 plan_clip() returns the planned target features (T x 2, canonical px), which then go through mouth_warp's residual,
@@ -70,7 +70,7 @@ DOM = {
 }
 ROUNDED = ("ou", "oh", "RR", "CH")
 CLOSURES = ("PP", "FF")
-OPEN_FROM_AUDIO = ("aa", "E", "oh", "ih")  # v9: the track's openness raises these vowels' lower bound
+OPEN_FROM_AUDIO = ("aa", "E", "oh", "ih")  # the track's openness raises these vowels' lower bound
 NEUTRAL_DOM = 0.1  # the face's neutral shape: a weak pull everywhere
 DRIFT_CAP = 0.1  # the take's own drift kept inside a sustained segment, +- (units of its range)
 DRIFT_MIN = 0.15  # s: a segment this long starts keeping the take's drift (all of it from 2x)
@@ -109,7 +109,7 @@ def smootherstep(t):
 
 
 def to_band_soft(u, lo, hi, centre, ramp=0.1):
-    """v9's band rule (mouth_warp._to_band: inside the band untouched; outside, past the edge toward the band centre by
+    """the earlier band rule (mouth_warp._to_band: inside the band untouched; outside, past the edge toward the band centre by
     `centre`), made continuous: the push grows from 0 at the edge to its full size `ramp` outside it."""
     if lo <= u <= hi:
         return float(u)
@@ -119,7 +119,7 @@ def to_band_soft(u, lo, hi, centre, ramp=0.1):
 
 
 def class_bands(v, bands, open_audio, a):
-    """(open lo, hi), (width lo, hi) of viseme v in the take's units: the library bands (+ class floor) as v9 uses
+    """(open lo, hi), (width lo, hi) of viseme v in the take's units: the library bands (+ class floor) as uses
     them, the open-gain / width-gain flags, the audio's openness on vowels, the PP press."""
     VO, VW = bands or (mw.V_OPEN, mw.V_WIDTH)
     og, wg = getattr(a, "warp_open_gain", 1.0), getattr(a, "warp_width_gain", 1.0)
@@ -186,7 +186,7 @@ def segments(fr_t, n, fps, t0, align=None, shift=0.0, rest_s=0.0, skip_kind="fre
     a longer lead than the planner's own anticipation starts its shapes that much earlier; the ends stay), else from the track's own viseme runs;
     gaps -> sil, a gap of rest_s s or more (> 0) -> 'rest' (a pause: the mouth goes to the face's rest shape); frames
     with a truthy `skip` -> one segment per span (phones centred inside it dropped): 'skip' (free: the take's own shape;
-    skip_kind 'free', v10a's --vocalisations skip / auto), 'rest' (v10a's --vocalisations rest), or the flags are ignored
+    skip_kind 'free', the earlier --vocalisations skip / auto), 'rest' (the earlier --vocalisations rest), or the flags are ignored
     and the phones planned as words (skip_kind 'ignore': --vocalisations mouth)."""
     tc = t0 + (np.arange(n) + 0.5) / fps
     lo_t, hi_t = t0 - 1.0, t0 + n / fps + 1.0
@@ -302,7 +302,7 @@ def reach_times(u, neutral, bands, a, fps, centre, lo=0.04, hi=0.3):
 
 # ----------------------------------------------------------------------------------------------- targets --
 def segment_targets(segs, u, fr_t, bands, a, centre, rest=None):
-    """per segment: the band per dimension and its target = v9's band rule on the take's mean shape over the segment
+    """per segment: the band per dimension and its target = the earlier band rule on the take's mean shape over the segment
     (a segment shorter than a frame: the frame whose centre is nearest, s['near']); a 'rest' segment: the face's rest
     shape `rest` (no band, no drift)."""
     for s in segs:
@@ -533,7 +533,7 @@ def take_jaw_share(S3raw):
 def jaw_split(model, share, ctrl=None, jaw_gain=1.0, s_take=None):
     """set the gap column of the mouth model's J for a jaw share s (lower lip + chin carry s of an opening, the upper
     lip 1 - s): J_gap = J_fit - (s U + (1 - s) L), U / L = the upper / lower lip's mean response in the take's own fit
-    (s = 1: mouth_warp's jaw_reference, v9). share: 'auto' (the take's own share s_take -- take_jaw_share(), else its
+    (s = 1: mouth_warp's jaw_reference). share: 'auto' (the take's own share s_take -- take_jaw_share(), else its
     lip-point regression -- moved SING_BIAS of the way toward 1: singing opens with the jaw) or 0..1.
     -> (s, the take's own share)."""
     ctrl = ctrl or mw.CTRL
@@ -636,7 +636,7 @@ def take_times(uo, fps):
 # --------------------------------------------------------------------------------- an external dynamics source --
 def load_dyn(path, t0, n, fps, gap="geo_gap_cm", width="geo_width_cm"):
     """a model's mouth trajectory on the song timeline (e.g. Audio2Face-3D's 52 ARKit weights + its mesh's lip gap /
-    width, v10b `a2f_cut_25fps.csv`: one row per `time_s` = the start of a 1/fps exposure interval, each row the mean over
+    width, an `a2f_cut_25fps.csv`: one row per `time_s` = the start of a 1/fps exposure interval, each row the mean over
     it) -> per frame of this clip (frame k = song t0 + k / fps, its exposure centre t0 + (k + 0.5) / fps): (gap, width)
     in the model's units, or None."""
     import csv
@@ -686,7 +686,7 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     if keep.sum() < 8:
         keep = np.ones(n, bool)
     neutral = np.array([float(np.median(u[keep, 0])), 0.0]) if neutral is None else np.asarray(neutral, float)
-    # a vocalisation span (track frames with `skip`): free by default; with v10a's --vocalisations rest a rest, with
+    # a vocalisation span (track frames with `skip`): free by default; with the earlier --vocalisations rest a rest, with
     # --vocalisations mouth mouthed as words (the flags ignored)
     skip_kind = {"rest": "rest", "mouth": "ignore"}.get(str(getattr(a, "vocalisations", None)), "free")
     segs, tc = segments(fr_t, n, fps, t0, align, lead_shift, rest_s, skip_kind)
@@ -746,7 +746,7 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
                 T0[:, d] = np.clip(T0[:, d], lo1[d] - mg[d], hi99[d] + mg[d])  # (a degenerate take: none)
     T1, rm_done = range_match(T0, ref, rho, wact, act, RANGE_ANCHORS)
     # hard closures: the opening at a P / B / M (F / V) segment's core frames <= its target and <= the take's own closure
-    # depth (its p5 opening); the track's own closure runs too (its lead / minimum hold: a closure lasts as long as v9's)
+    # depth (its p5 opening); the track's own closure runs too (its lead / minimum hold: a closure lasts as long as before)
     p5 = float(np.percentile(Ft_u[keep, 0], 5))
     caps, pp = {}, np.zeros(n, bool)
     tvis = [fr_t[min(i, len(fr_t) - 1)]["vis"] for i in range(n)]
@@ -908,7 +908,7 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
         if match < 0.9:
             lead = None
         else:
-            shift = lead - 0.06  # the timing v9 had: the 0.06 s lead is the planner's own anticipation
+            shift = lead - 0.06  # the timing had: the 0.06 s lead is the planner's own anticipation
     s, s_take = jaw_split(
         model,
         getattr(a, "coart_jaw_share", "auto"),

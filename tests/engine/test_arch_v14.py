@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v14 teeth cleanup (mouth_layers): Part 1 = supersample + area-correct minification of the arch atlas (--warp-arch-mipmap, a
+"""teeth cleanup (mouth_layers): Part 1 = supersample + area-correct minification of the arch atlas (--warp-arch-mipmap, a
 trilinear INTER_AREA mip pyramid sampled per column-quad). Part 3 = the enamel material pass (--warp-arch-enamel). Both opt-in;
-the v13 defaults are bit for bit. Synthetic, CPU only."""
+the earlier defaults are bit for bit. Synthetic, CPU only."""
 
 import os, sys
 import numpy as np, cv2
@@ -265,7 +265,7 @@ def _atlas_npz(src_up, src_lo, up_h_iod, lo_h_iod, path, io=100.0, up_detail=0.0
 
 def test_tex_share_uses_the_sharp_atlas_when_the_own_harvest_is_shorter_even_if_above_min_h():
     """the shared atlas (taller exposed teeth, 0.11 IOD) drives a shot whose own harvest is only 0.07 IOD -- ABOVE the 0.05
-    min-h that the v8 short-harvest fallback needs. Without share the shot keeps its own (shorter) harvest; with share it
+    min-h that the short-harvest fallback needs. Without share the shot keeps its own (shorter) harvest; with share it
     loads the sharp atlas (src 4)."""
     with tempfile.TemporaryDirectory() as d:
         src_up = _filled(_band())

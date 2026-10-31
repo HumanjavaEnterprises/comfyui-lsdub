@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""mouth_card.py — v12: the mouth card (lsdub annotate's per-frame card) as a toggle on the paint path.
+"""mouth_card.py — the mouth card (lsdub annotate's per-frame card) as a toggle on the paint path.
 
   lsdub paint ... --out shot.mp4 --annotate [--annotate-corner auto|lower-right|lower-left|band] [--annotate-faces heads.json]
   mouth_paint.paint(video, track, out, show_mouth_card=True, ...)      # the one call a ComfyUI node wraps (docs/node-contract.md)
 
 After the normal render, and only then, the clean output is READ (never written) and next to it go:
   shot_annotated.mp4         the clean frames + the card (lsdub annotate: the word between its neighbours, the viseme
-                             glyph, openness, the next 1 s of visemes, a struck 'skip' on vocalisations; v12: weak-alignment
+                             glyph, openness, the next 1 s of visemes, a struck 'skip' on vocalisations; weak-alignment
                              marks and 'heard:' diffs); the card is never over a face (lower-right, else lower-left, else a
                              band below the picture), audio copied
   shot_lyric_check.json/.md  every heard / lyric mismatch, weak word and vocalisation span (lsdub/core/lyric_check.py)

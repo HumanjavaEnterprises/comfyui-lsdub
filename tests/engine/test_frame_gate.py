@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v9 per-frame gate, the CHECKER (lsdub/audits/frame_gate.py): synthetic sequences, CPU only, no MediaPipe (the
+"""per-frame gate, the CHECKER (lsdub/audits/frame_gate.py): synthetic sequences, CPU only, no MediaPipe (the
 landmarks are given). A smooth sequence passes; an injected one-frame jump, a warp fold, a ghost lip, a lip colour
 flicker, a held input track and a sloshing lip texture are each flagged with their own cause."""
 
@@ -207,7 +207,7 @@ def test_verdict_strip_marks_each_frame():
     assert tuple(img[11, 350]) == (200, 60, 160)
 
 
-# ------------------------------------------------------------------------- v11: implausible re-detections --
+# ------------------------------------------------------------------------- implausible re-detections --
 def _false_fit(P, up=-0.8, scale=0.33, iod=120.0):
     """a false face fit (MediaPipe IMAGE mode): the whole mesh `up` IOD higher at `scale` of the size."""
     Q = np.array(P, float)
@@ -309,5 +309,5 @@ def test_leak_scene_option_ignores_dark_scene_but_not_old_mouth():
         return np.array([o["leak"] for o in ck.obs])
 
     a, b = leak(False), leak(True)
-    assert a[3] > 0 and b[3] == 0  # the dark patch: a leak for v9's ruler, scene with the option
+    assert a[3] > 0 and b[3] == 0  # the dark patch: a leak for the earlier ruler, scene with the option
     assert b[6] > 0  # the output-only residue is still a leak

@@ -17,15 +17,15 @@ HELP_SHIP = """
   lsdub cone      dub-safe cone report for a scan (shared vs per-shot library vs re-stage)
   lsdub mouths    mouth library from one frame (prep | gen | sheet; gen needs ComfyUI + Qwen-Image-Edit-2511)
   lsdub animate   animator pass: phones + vocal -> eased, coarticulated track (jaw/lip split, G gain)
-  lsdub paint     paint the viseme track onto a take (morph, tame, open cap 0.85)          [watermarked]
+  lsdub paint     paint the viseme track onto a take (morph, tame, open cap 0.85; --recipe NAME) [watermarked]
   lsdub interior  one steady mouth interior per shot (upper teeth hang from the upper lip)     [watermarked]
   lsdub calm      flow-guided temporal calm inside the mouth (kills per-frame texture boil)  [watermarked]
   lsdub motion-audit  in-motion metrics: boil, ghost, slide, step; frame-by-frame mouth crops
   lsdub pin       pin the painted lower face to the take's REAL skin motion (dense flow), so the mouth never swims  [watermarked]
   lsdub slip-audit  does the painted mouth stay pinned? philtrum / lip slip vs the nose, in px, and its lag
-  lsdub frame-gate   v9 per-frame checker: every frame vs its neighbours and the take (PASS / SOFT / FAIL + causes, slosh windows)
-  lsdub track     v10a: skip = mark a viseme track's vocalisations (uh uh, ah, da da, mm, hey) for the warp; scan = list a song's spans
-  lsdub annotate  v10a: per-frame card in a corner: the sung word, its mouth shape (a line glyph), openness, the next second of visemes
+  lsdub frame-gate   per-frame checker: every frame vs its neighbours and the take (PASS / SOFT / FAIL + causes, slosh windows)
+  lsdub track     skip = mark a viseme track's vocalisations (uh uh, ah, da da, mm, hey) for the warp; scan = list a song's spans
+  lsdub annotate  per-frame card in a corner: the sung word, its mouth shape (a line glyph), openness, the next second of visemes
   lsdub skull-lock  put the mouth back on the skull: one midline, mouth line parallel to the pupils, rigid upper lip  [watermarked]
   lsdub constraints anatomy-rule violations per video vs the character's own take
   lsdub skull-audit midline / axis / teeth-plane alignment metrics
@@ -33,9 +33,9 @@ HELP_SHIP = """
   lsdub posemix   blend paints from several per-pose libraries by head pose                  [watermarked]
   lsdub check     lip-sync checker: viseme agreement, word hits, jaw correlation
   lsdub jerk      temporal metrics: mouth jerk p95, seam
-  lsdub naturalness  v10c ruler: a render's mouth MOTION vs the take's own, statistically (kinematics, spectrum, shape manifold, dynamics)
-  lsdub layer-reg    v11 ruler: inter-layer registration -- teeth / cavity / tongue vs the lips over time in the skull frame (slosh, jitter, jaw residual)
-  lsdub tooth-scale  v13 ruler: are the teeth the face's size? visible tooth span vs the take (IPD), teeth counted, plate central widths
+  lsdub naturalness  ruler: a render's mouth MOTION vs the take's own, statistically (kinematics, spectrum, shape manifold, dynamics)
+  lsdub layer-reg    ruler: inter-layer registration -- teeth / cavity / tongue vs the lips over time in the skull frame (slosh, jitter, jaw residual)
+  lsdub tooth-scale  ruler: are the teeth the face's size? visible tooth span vs the take (IPD), teeth counted, plate central widths
   lsdub cast      who is in the shot: enroll characters, scan clips (track + identify + dub_safe), plan the dub from lyrics
   lsdub grammar   shot-grammar gate: every sung word on a big-enough face of its OWN singer (CU hooks, medium verses, wides on held notes)
   lsdub medium    tier-2: track + crop + upscale a 120-300 px singer face, warp it, paste ONLY the feathered lower face back  [watermarked]
@@ -58,7 +58,7 @@ HELP_DEV = ""
 HELP = HELP_SHIP + HELP_DEV
 
 SHIP = {
-    "naturalness": "audits.naturalness",  # v10c
+    "naturalness": "audits.naturalness",
     "align": "core.lyric_align",
     "visemes": "core.viseme_track",
     "rhubarb": "core.rhubarb_cues",
@@ -99,8 +99,8 @@ SHIP = {
     "scorecard": "audits.scorecard",
     "qa": "audits.qa",
     "mouth-ruler": "audits.mouth_ruler",
-    "layer-reg": "audits.layer_reg",  # v11
-    "tooth-scale": "audits.tooth_scale",  # v13
+    "layer-reg": "audits.layer_reg",
+    "tooth-scale": "audits.tooth_scale",
 }
 DEV = {}
 CMDS = {**SHIP, **DEV}
@@ -180,7 +180,7 @@ def main(argv=None):
         elif not watermark.verify(out, frames=8)["watermark"]:
             watermark.apply_inplace(out)
             print(f"watermarked {out}", file=sys.stderr)
-    if cmd == "paint" and out and "--annotate" in rest and not no_wm:  # v12: paint --annotate's card video, marked as the clean one
+    if cmd == "paint" and out and "--annotate" in rest and not no_wm:  # paint --annotate's card video, marked as the clean one
         from .core.mouth_card import annotated_path
         from . import watermark
 

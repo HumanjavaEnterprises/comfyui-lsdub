@@ -38,7 +38,8 @@ class Recipe:
     def expand(self, overrides=()):
         """the recipe's argv with a face's overrides in their slot."""
         at = len(self.argv) if self.overrides_at is None else self.overrides_at
-        return (*self.argv[:at], *overrides, *self.argv[at:])
+        named = {t for t in overrides if t.startswith("--")}  # a flag the face sets is the face's
+        return (*without(self.argv[:at], named), *overrides, *without(self.argv[at:], named))
 
 
 def _rigid(a):
@@ -147,11 +148,11 @@ L3_FLAGS = ("--warp-tongue", "--warp-tongue-lit", "--warp-tongue-cover", "--warp
 RULES = (
     Rule(
         ("--coart-",),
-        "read only by the coart planner, no --warp-target coart here (sing appends --coart-dyn on every run)",
+        "read only by the coart planner, no --warp-target coart here",
         lambda a: a.warp_target != "coart",
         prefix=True,
     ),
-    Rule(("--warp-sigma",), "read only by the v9 targets, --warp-target is not v9", lambda a: a.warp_target in ("coart", "own")),
+    Rule(("--warp-sigma",), "read only by the plain targets, not under this --warp-target", lambda a: a.warp_target in ("coart", "own")),
     Rule(
         ("--warp-tongue",),
         "--warp-reg single zeroes the vowel part of the tongue's pose (rise, tip, retraction: plan_single, tg = 0); the tongue is still "

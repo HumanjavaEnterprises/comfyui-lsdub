@@ -20,7 +20,7 @@ from ..io import ff
 import argparse, functools, json, os, sys
 import numpy as np, cv2
 
-from . import recipes
+from . import paint_api, recipes
 from .._models import face_landmarker_path
 
 MODEL = face_landmarker_path()
@@ -58,7 +58,7 @@ def _box(p):
 
 
 def track_chain(video, n, z=False, grow=2.2, jump=0.6):
-    """v18 tracker for medium / moving shots. The full-frame pass can lock onto something face-like (a sleeve) and
+    """tracker for medium / moving shots. The full-frame pass can lock onto something face-like (a sleeve) and
     lose a face cut by the frame edge. Here every full-frame detection is re-checked on its own padded, enlarged
     crop; the anchor is a frame where both agree; from it the face is followed frame to frame, forward and back,
     each frame detected inside a crop around the previous face (grown x `grow`) and refused if its centre jumps more
@@ -205,6 +205,7 @@ def lab_match(src, ref, w):
 @functools.lru_cache(maxsize=1)
 def _parser():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--recipe", help="a named recipe (recipes.py): its flags go in at this point, later flags override them")
     ap.add_argument("--video", required=True)
     ap.add_argument("--track", required=True)
     ap.add_argument("--lib", help="mouth library: legacy/morph paint from it; --mode warp reads only its viseme bands")
@@ -219,7 +220,7 @@ def _parser():
         "--mode",
         choices=["legacy", "morph", "cutout", "warp"],
         default="morph",
-        help="legacy = v4 paint_a (affine + cross-fade); morph = mesh warp; "
+        help="legacy = paint_a (affine + cross-fade); morph = mesh warp; "
         "cutout = fixed-region paint (no face tracking, for non-human faces); "
         "warp = no library mouth: warp the take's OWN lips toward the audio's shape (opt-in, see mouth_warp.py)",
     )
@@ -331,7 +332,7 @@ def _parser():
         "--warp-track-mode",
         choices=["full", "chain"],
         default="full",
-        help="warp (v18): full = MediaPipe on the whole "
+        help="warp: full = MediaPipe on the whole "
         "frame (x2); chain = verified anchor, then each frame detected in a padded, enlarged crop around the previous "
         "face with a jump check (medium / moving shots, faces cut by the frame edge)",
     )
@@ -339,7 +340,7 @@ def _parser():
         "--warp-yaw-width",
         type=float,
         default=0.0,
-        help="warp (v18): P > 0 = the planned width is scaled by the "
+        help="warp: P > 0 = the planned width is scaled by the "
         "head turn's foreshortening (eye balance about the nose bridge vs the clip median, ^P), never below the take's own "
         "width: a near-profile frame no longer asks for the frontal width (the far corner on the cheek); 0 = off",
     )
@@ -347,7 +348,7 @@ def _parser():
         "--warp-profile-plain",
         type=float,
         default=0.0,
-        help="warp (v18, layers): T > 0 = a frame whose head turn "
+        help="warp (layers): T > 0 = a frame whose head turn "
         "(eye balance about the nose bridge, 1 frontal .. 0 profile) is below T keeps the own-pixel warp without the "
         "synthetic teeth / cavity layers; 0 = off",
     )
@@ -379,14 +380,14 @@ def _parser():
         "--warp-width-mix",
         choices=["switch", "primary"],
         default="primary",
-        help="warp (v3 default primary): width band on a vis/vis2 "
+        help="warp (default primary): width band on a vis/vis2 "
         "mix. switch (r2) = vis2's band once mix >= .5 even if vis2 has none; primary = vis's band unless vis2 has one and mix > .5",
     )
     ap.add_argument(
         "--warp-class-ref",
         choices=["half", "wide"],
         default="wide",
-        help="warp (v3 default wide): --warp-class-width in units of "
+        help="warp (default wide): --warp-class-width in units of "
         "the matching half-range (half, r2) or of the take's wider width half-range (wide: a take parked near p90 "
         "still gets a spread floor clearly above its median)",
     )
@@ -418,19 +419,19 @@ def _parser():
         "--warp-seal-grow", type=float, default=1.6, help="warp: vertical growth of the sealed slit (x the target inner-lip polygon)"
     )
     ap.add_argument("--warp-json", help="warp: per-frame log (observed / target features, confidence, donor)")
-    # --- v4 layering (opt-in; lip_layers.py) ---
+    # layering (opt-in; lip_layers.py) ---
     ap.add_argument(
         "--warp-size-cap",
         type=float,
         default=0.0,
-        help="warp (v4): the target mouth never goes past the take's "
+        help="warp: the target mouth never goes past the take's "
         "own p95 opening and p5..p95 width (x this) unless the take's own frame already does; 0 = off",
     )
     ap.add_argument(
         "--warp-erase",
         choices=["off", "closures", "all"],
         default="off",
-        help="warp (v4): lip-erase layer. "
+        help="warp: lip-erase layer. "
         "closures = at a closure over an open take, the take's lips are erased to its own skin (bald plate from its "
         "most-closed frame, carried by the head pose) and its own closed lips go on top in the target shape; all = also "
         "frames whose target is smaller than the take (the warped lips on top of the bald plate)",
@@ -444,7 +445,7 @@ def _parser():
     ap.add_argument("--warp-erase-grow", type=float, default=0.22, help="warp: growth of the erased lip region (x the lip hull)")
     ap.add_argument(
         "--warp-lip-lock",
-        help='warp (v4): one lip colour for the character: "L,a,b" (OpenCV 8-bit Lab) or a PNG '
+        help='warp: one lip colour for the character: "L,a,b" (OpenCV 8-bit Lab) or a PNG '
         "of a reference face. a*/b* of the lips are locked to it (lip mask x lip-ness, feathered), L follows the shot",
     )
     ap.add_argument("--warp-lip-lock-sigma", type=float, default=4.0, help="warp: zero-phase gaussian (frames) on the lip colour shift")
@@ -455,20 +456,20 @@ def _parser():
         "--warp-teeth",
         choices=["off", "rigid"],
         default="off",
-        help="warp (v5): rigid = teeth are bone: the "
+        help="warp: rigid = teeth are bone: the "
         "interior inside the target inner lip comes from rigid teeth plates harvested from the take (upper at the "
         "skull pose, lower at skull + jaw rotation about the condyle hinge), never from stretched pixels or donors",
     )
     ap.add_argument("--warp-teeth-hinge", default="0.25,0.6", help='warp: jaw hinge "down,back" from the outer-canthi mid-point, x IOD')
     ap.add_argument("--warp-teeth-jaw-gain", type=float, default=1.0, help="warp: lower-teeth drop per unit of target opening change")
-    # --- v6 (opt-in; teeth_layer.py): teeth anchored to the skin, the jaw planned over the clip ---
+    # (opt-in; teeth_layer.py): teeth anchored to the skin, the jaw planned over the clip ---
     ap.add_argument(
         "--warp-teeth-anchor",
         choices=["pose", "skin"],
         default="pose",
-        help="warp (v6): skin = the teeth plates take "
+        help="warp: skin = the teeth plates take "
         "the upper-lip root skin's own motion (DIS flow of philtrum + nose base in the warped frames, high-passed onto "
-        "the skull pose) so teeth and upper lip share one motion source; pose = the skull pose alone (v5)",
+        "the skull pose) so teeth and upper lip share one motion source; pose = the skull pose alone",
     )
     ap.add_argument(
         "--warp-teeth-pin-sigma",
@@ -481,9 +482,9 @@ def _parser():
         "--warp-teeth-jaw",
         choices=["frame", "plan"],
         default="frame",
-        help="warp (v6): plan = the jaw (lower teeth) "
+        help="warp: plan = the jaw (lower teeth) "
         "solved once over the whole clip: target + smoothness + speed / acceleration limits + holds on sustained "
-        "vowels + lower teeth hidden below the lower lip on near-closed frames; frame = per frame from the target lip (v5)",
+        "vowels + lower teeth hidden below the lower lip on near-closed frames; frame = per frame from the target lip",
     )
     ap.add_argument(
         "--warp-teeth-jaw-lead",
@@ -510,18 +511,18 @@ def _parser():
         "--warp-teeth-tongue-drop",
         type=float,
         default=0.0,
-        help="warp (v6): the lower plate's tongue is carried this far down (x IOD) behind the lower teeth",
+        help="warp: the lower plate's tongue is carried this far down (x IOD) behind the lower teeth",
     )
     ap.add_argument(
         "--warp-teeth-plates",
         type=int,
         default=1,
-        help="warp (v6): up to N upper plates harvested across the head's yaw range, blended by pose (1 = one frontal plate, v5)",
+        help="warp: up to N upper plates harvested across the head's yaw range, blended by pose (1 = one frontal plate)",
     )
     ap.add_argument(
         "--warp-teeth-mirror",
         action="store_true",
-        help="warp (v6): upper-plate columns the harvest frame does not "
+        help="warp: upper-plate columns the harvest frame does not "
         "show are filled from the arch's mirror image about the face midline; the arch's ends recede into shadow and "
         "feather out (no rectangular cut where the plate ends)",
     )
@@ -529,58 +530,58 @@ def _parser():
         "--warp-teeth-throat",
         type=float,
         default=0.0,
-        help="warp (v6): soft throat / palate shading of the cavity on wide-open targets (0 = flat cavity tone, v5; 1 = full)",
+        help="warp: soft throat / palate shading of the cavity on wide-open targets (0 = flat cavity tone; 1 = full)",
     )
-    # --- v7 (opt-in; mouth_layers.py): the mouth as an explicit layer stack ---
+    # (opt-in; mouth_layers.py): the mouth as an explicit layer stack ---
     ap.add_argument(
         "--warp-compose",
         choices=["plates", "layers"],
         default="plates",
-        help="warp (v7): layers = the mouth is "
+        help="warp: layers = the mouth is "
         "composited back to front from explicit RGBA layers: L0 frame, L1 mouth cover (the take's mouth erased to "
         "its skin), L2 back of mouth, L3 lower arch + tongue, L4 upper arch, L5 lips, L6 face; full curved 3D arches "
-        "(needs --warp-teeth rigid); plates = the v5/v6 plate render",
+        "(needs --warp-teeth rigid); plates = the plate render",
     )
-    ap.add_argument("--warp-arch-k", type=float, default=3.2, help="warp (v7): arch curvature, z = k x^2 in IOD units")
-    ap.add_argument("--warp-arch-upper", type=float, default=0.40, help="warp (v7): upper arch half arc length, x IOD")
-    ap.add_argument("--warp-arch-lower", type=float, default=0.36, help="warp (v7): lower arch half arc length, x IOD")
-    ap.add_argument("--warp-arch-overjet", type=float, default=0.03, help="warp (v7): lower arch this far behind the upper, x IOD")
+    ap.add_argument("--warp-arch-k", type=float, default=3.2, help="warp: arch curvature, z = k x^2 in IOD units")
+    ap.add_argument("--warp-arch-upper", type=float, default=0.40, help="warp: upper arch half arc length, x IOD")
+    ap.add_argument("--warp-arch-lower", type=float, default=0.36, help="warp: lower arch half arc length, x IOD")
+    ap.add_argument("--warp-arch-overjet", type=float, default=0.03, help="warp: lower arch this far behind the upper, x IOD")
     ap.add_argument(
         "--warp-arch-overbite",
         type=float,
         default=0.03,
-        help="warp (v7): the lower incisal edge may rise this far "
+        help="warp: the lower incisal edge may rise this far "
         "above the upper one (behind it) on a closed bite, x IOD (the jaw plan's floor)",
     )
     ap.add_argument(
         "--warp-arch-expose",
         type=float,
         default=0.03,
-        help="warp (v7): the lower incisal edge sits at most this far above the lower lip line (x IOD) at the lower harvest frame's jaw",
+        help="warp: the lower incisal edge sits at most this far above the lower lip line (x IOD) at the lower harvest frame's jaw",
     )
     ap.add_argument(
         "--warp-teeth-chin-pin",
         choices=["skin", "arc", "off"],
         default="skin",
-        help="warp (v7, layers): skin = the lower "
-        "arch takes the soft chin's own frame-to-frame motion (DIS flow, high-passed onto the jaw plan); arc (v8) = that "
+        help="warp (layers): skin = the lower "
+        "arch takes the soft chin's own frame-to-frame motion (DIS flow, high-passed onto the jaw plan); arc = that "
         "motion split into its slow part (kept) + fast residual (x --warp-chin-pin-gain), projected onto the jaw hinge's arc "
         "as an extra jaw angle (the teeth never translate off the arc), the exposure limit folded in",
     )
     ap.add_argument(
-        "--warp-chin-pin-gain", type=float, default=0.4, help="warp (v8, arc pin): share of the fast chin residual the lower teeth follow"
+        "--warp-chin-pin-gain", type=float, default=0.4, help="warp (arc pin): share of the fast chin residual the lower teeth follow"
     )
     ap.add_argument(
         "--warp-chin-pin-split",
         type=float,
         default=1.5,
-        help="warp (v8, arc pin): frames; gaussian sigma that splits the chin pin into its slow part and the fast residual",
+        help="warp (arc pin): frames; gaussian sigma that splits the chin pin into its slow part and the fast residual",
     )
     ap.add_argument(
         "--warp-tongue",
         choices=["on", "off", "wedge"],
         default="on",
-        help="warp (v7, layers): the tongue layer; wedge (v8) = "
+        help="warp (layers): the tongue layer; wedge = "
         "a modelled tongue (tip behind the lower incisors + dorsum, rises on narrow vowels, drops / retracts on open ones, "
         "wet highlight; never above the lower incisal edge on near-closed frames)",
     )
@@ -588,55 +589,51 @@ def _parser():
         "--warp-cover",
         choices=["on", "off", "fill"],
         default="on",
-        help="warp (v7, layers): the mouth cover layer (L1); fill "
-        "(v8) = an old-lip blob outside the new lips is filled with skin in the warped frame itself (membrane + grain), no seam",
+        help="warp (layers): the mouth cover layer (L1); fill "
+        "= an old-lip blob outside the new lips is filled with skin in the warped frame itself (membrane + grain), no seam",
     )
     ap.add_argument(
         "--warp-arch-harvest",
         type=int,
         default=1,
-        help="warp (v8): median arch texture over up to N harvest frames in the same head-pose bin",
+        help="warp: median arch texture over up to N harvest frames in the same head-pose bin",
     )
-    ap.add_argument(
-        "--warp-arch-harvest-lower", type=int, help="warp (v8): harvest frames for the LOWER arch (default = --warp-arch-harvest)"
-    )
+    ap.add_argument("--warp-arch-harvest-lower", type=int, help="warp: harvest frames for the LOWER arch (default = --warp-arch-harvest)")
     ap.add_argument(
         "--warp-arch-texel",
         type=float,
         default=1.0,
-        help="warp (v8): arch texture texels per canonical px (2 = super-resolved; v14: 4 with --warp-arch-mipmap = render 4x, shrink)",
+        help="warp: arch texture texels per canonical px (2 = super-resolved; 4 with --warp-arch-mipmap = render 4x, shrink)",
     )
     ap.add_argument(
         "--warp-arch-mipmap",
         action="store_true",
-        help="warp (v14): area-correct minification of the arch atlas into the frame -- a trilinear mip "
+        help="warp: area-correct minification of the arch atlas into the frame -- a trilinear mip "
         "pyramid (INTER_AREA 2x levels) sampled per column-quad by the local minification ratio, instead of raw bilinear. Groove / slot lines "
         "become soft sub-pixel lines, not hard 1 px aliasing, and a super-resolved atlas (--warp-arch-texel 4) is shrunk with its detail kept. "
-        "Off (default) = the v13 raw-bilinear path, bit for bit",
+        "Off (default) = the earlier raw-bilinear path, bit for bit",
     )
     ap.add_argument(
         "--warp-arch-synth",
         action="store_true",
-        help="warp (v8): side teeth beyond the harvest are modelled (rounded crown, "
+        help="warp: side teeth beyond the harvest are modelled (rounded crown, "
         "interproximal line, enamel highlight on the key-light side, premolar / molar widths) instead of column-repeated",
     )
     ap.add_argument(
         "--warp-arch-enamel",
         type=float,
         default=0.0,
-        help="warp (v14): S > 0 = the enamel material pass on the crowns -- a "
+        help="warp: S > 0 = the enamel material pass on the crowns -- a "
         "glossy specular highlight on the key-light side, incisal translucency (the biting edge lighter / warmer), interdental + "
-        "gum-line ambient occlusion, and the hue warmed toward the take's yellowish teeth (the v13 render read flat grey / blue). "
-        "S scales a balanced preset (spec 1.0, transl 0.8, ao 0.7, warm 1.0); 0 (default) = off, the v13 enamel bit for bit",
+        "gum-line ambient occlusion, and the hue warmed toward the take's yellowish teeth (the earlier render read flat grey / blue). "
+        "S scales a balanced preset (spec 1.0, transl 0.8, ao 0.7, warm 1.0); 0 (default) = off, the earlier enamel bit for bit",
     )
-    ap.add_argument(
-        "--warp-arch-enamel-mix", default=None, help='warp (v14): override the enamel preset ratio "spec,transl,ao,warm" (each x S)'
-    )
+    ap.add_argument("--warp-arch-enamel-mix", default=None, help='warp: override the enamel preset ratio "spec,transl,ao,warm" (each x S)')
     ap.add_argument(
         "--warp-arch-detail",
         type=float,
         default=0.0,
-        help="warp (v14): S > 0 = a mean-preserving edge-aware detail pass on the "
+        help="warp: S > 0 = a mean-preserving edge-aware detail pass on the "
         "crown in atlas space (the L high-frequency residual over a sub-tooth radius, soft-clipped and added back) -- restores a blurry "
         "shot's harvested crispness without re-widening the visible span; 0 (default) = off",
     )
@@ -644,34 +641,34 @@ def _parser():
         "--warp-arch-gums",
         type=float,
         default=0.0,
-        help="warp (v15): S > 0 = pink gingiva baked above the upper crowns "
+        help="warp: S > 0 = pink gingiva baked above the upper crowns "
         "and below the lower crowns (the crowns emerge from gum, not from lip colour). The gum colour is harvested from the take's "
         "own widest-smile frames (a warm-pink synthesized from its inner-mouth colour when no frame shows enough gum); the gum line is "
         "scalloped at the interdental papillae; the band height scales with the face's IPD (the anthro unit, --warp-arch-anthro-unit). "
-        "S is the blend opacity. 0 (default) = off, the v14 band bit for bit",
+        "S is the blend opacity. 0 (default) = off, the earlier band bit for bit",
     )
     ap.add_argument(
         "--warp-tongue-cover",
         type=float,
         default=0.0,
-        help="warp (v15, wedge tongue): S > 0 = the tongue rises and rides IN "
+        help="warp (wedge tongue): S > 0 = the tongue rises and rides IN "
         "FRONT of the lower crowns at mid-open vowel-ish poses (covering them, so the lowers no longer read as a permanent grille), "
         "while still dropping / retracting to flash the lower teeth on the wide-open teeth-baring frames. S eases the effect; 0 "
-        "(default) = off, the v8 tongue envelope and compositing bit for bit",
+        "(default) = off, the earlier tongue envelope and compositing bit for bit",
     )
     ap.add_argument(
         "--warp-cavity",
         choices=["off", "fill"],
         default="off",
-        help="warp (v17, layers): fill = paint a shaded "
-        "tongue + a dim lower-incisor row (past ~35%% open) into the opening instead of the dark void; off = v16",
+        help="warp (layers): fill = paint a shaded "
+        "tongue + a dim lower-incisor row (past ~35%% open) into the opening instead of the dark void; off = the dark void",
     )
     ap.add_argument("--warp-cavity-strength", type=float, default=1.0, help="warp: opacity of the --warp-cavity fill (0..1)")
     ap.add_argument(
         "--warp-lower-real",
         type=float,
         default=0.0,
-        help="warp (v16): S > 0 = the lower-teeth realism family -- the lower arch "
+        help="warp: S > 0 = the lower-teeth realism family -- the lower arch "
         "is the dim, half-hidden, soft-bottomed sibling of the uppers, not their mirror. Replaces the force-brightened flat incisal "
         "strip + hard opaque top edge (which read as a grill / braces on wide-open frames) with a softly DARKER, feathered incisal "
         "gradient; attenuates the lower-arch luminance below the uppers scaled by how wide the mouth is open (wider = dimmer) toward "
@@ -679,84 +676,84 @@ def _parser():
         "shadow onto the top of the lowers + an AO ramp so the dark cavity fades softly into them (no hard line); occludes the lower "
         "crowns more behind the tongue on wide-open frames (keeping the smile-frame flash); and desaturates / cool-shifts the shadowed "
         "enamel with per-tooth value variation (cool tooth in a warm interior reads deep). S scales a balanced preset (dim 1.0, feather "
-        "1.0, cast 1.0, ao 1.0, occlude 1.0, cool 1.0, relief 1.0); 0 (default) = off, the v15 lowers bit for bit",
+        "1.0, cast 1.0, ao 1.0, occlude 1.0, cool 1.0, relief 1.0); 0 (default) = off, the earlier lowers bit for bit",
     )
     ap.add_argument(
         "--warp-lower-mix",
         default=None,
-        help='warp (v16): override the --warp-lower-real preset ratio "dim,feather,cast,ao,occlude,cool,relief" (each x S)',
+        help='warp: override the --warp-lower-real preset ratio "dim,feather,cast,ao,occlude,cool,relief" (each x S)',
     )
     ap.add_argument(
         "--warp-lower-ratio",
         default="auto",
-        help="warp (v16): this face's lower-vs-upper tooth-display tendency driving the dim "
+        help="warp: this face's lower-vs-upper tooth-display tendency driving the dim "
         'target -- "auto" (default) measures it from the take\'s own frames (some people show mostly top teeth, some a blend, some '
         "mostly bottom; a top-teeth talker gets dimmer/more-hidden lowers, a bottom-teeth talker gets more), or a float overrides it "
         "(lo_area / up_area, ~0.2 top-teeth .. ~0.8 bottom-teeth)",
     )
-    ap.add_argument("--warp-arch-shade", type=float, default=0.5, help="warp (v7/v8): how dark the arch gets toward the back (0..1)")
+    ap.add_argument("--warp-arch-shade", type=float, default=0.5, help="warp: how dark the arch gets toward the back (0..1)")
     ap.add_argument(
         "--warp-arch-facing",
         type=float,
         default=0.0,
-        help="warp (v8): 0..1; a crown seen edge-on (the arch curving away) is darkened by this share",
+        help="warp: 0..1; a crown seen edge-on (the arch curving away) is darkened by this share",
     )
     ap.add_argument(
         "--warp-tongue-fill",
         type=float,
         default=0.45,
-        help="warp (v17, --warp-cavity fill): the tongue's share of the filled opening; 1 = v17c, 0.45 (default) = v17d",
+        help="warp (--warp-cavity fill): the tongue's share of the filled opening; 1 = full, 0.45 = the default",
     )
     ap.add_argument(
-        "--warp-tongue-lit", type=float, default=1.0, help="warp (v8, wedge tongue): the tongue's light vs the take's own tongue pixels"
+        "--warp-tongue-lit", type=float, default=1.0, help="warp (wedge tongue): the tongue's light vs the take's own tongue pixels"
     )
-    ap.add_argument("--warp-arch-desat", type=float, default=0.0, help="warp (v8): how much colour the arch loses toward the back (0..1)")
+    ap.add_argument("--warp-arch-desat", type=float, default=0.0, help="warp: how much colour the arch loses toward the back (0..1)")
     ap.add_argument(
         "--warp-arch-tex-out",
-        help="warp (v8): write this shot's completed arch textures (npz, IOD units) for other shots of the same character",
+        help="warp: write this shot's completed arch textures (npz, IOD units) for other shots of the same character",
     )
     ap.add_argument(
         "--warp-arch-tex-from",
-        help="warp (v8): fallback arch textures (npz from --warp-arch-tex-out) used when this shot's own "
+        help="warp: fallback arch textures (npz from --warp-arch-tex-out) used when this shot's own "
         "harvest is shorter than --warp-arch-tex-min-h",
     )
     ap.add_argument(
         "--warp-arch-tex-min-h",
         type=float,
         default=0.05,
-        help="warp (v8): IOD; own harvested tooth height below which the fallback is used",
+        help="warp: IOD; own harvested tooth height below which the fallback is used",
     )
     ap.add_argument(
         "--warp-arch-tex-share",
         action="store_true",
-        help="warp (v14): the --warp-arch-tex-from atlas is the SHARED SHARP atlas for a "
+        help="warp: the --warp-arch-tex-from atlas is the SHARED SHARP atlas for a "
         "face -- used whenever it is sharper (taller exposed teeth) than this shot's own harvest, not only when the own harvest is a few "
         "px tall. The sharpest close-up of a face (its detail) then drives every shot of that face, the blurry mid-shots included",
     )
-    ap.add_argument("--warp-lip-rim", default="0.22,0.012", help='warp (v7/v8): the lips\' darker inner rim "strength,width" (width x IOD)')
+    ap.add_argument("--warp-lip-rim", default="0.22,0.012", help='warp: the lips\' darker inner rim "strength,width" (width x IOD)')
     ap.add_argument(
         "--warp-lip-wet",
         type=float,
         default=0.0,
-        help="warp (v8): a soft 1-2 px wet edge where the lips occlude the teeth (0 = hard cut, v7)",
+        help="warp: a soft 1-2 px wet edge where the lips occlude the teeth (0 = hard cut)",
     )
     ap.add_argument(
         "--warp-layers-smooth",
         type=float,
         default=0.0,
-        help="warp (v8): frames; zero-phase ease of the per-frame layer parameters (opening share, tongue pose)",
+        help="warp: frames; zero-phase ease of the per-frame layer parameters (opening share, tongue pose)",
     )
     ap.add_argument(
         "--warp-layers-debug",
-        help="warp (v7, layers): directory for layers.mp4 / layers.jpg (each layer head-stabilised, one panel per layer + the composite)",
+        help="warp (layers): directory for layers.mp4 / layers.jpg (each layer head-stabilised, one panel per layer + the composite)",
     )
-    ap.add_argument("--warp-layers-debug-frames", default="", help='warp (v7): frames for layers.jpg, "f1,f2,..."')
-    # --- v10c (opt-in; core/coart.py = the planner, audits/naturalness.py = its ruler): coarticulated targets ---
+    ap.add_argument("--warp-layers-debug-frames", default="", help='warp: frames for layers.jpg, "f1,f2,..."')
+    # (opt-in; core/coart.py = the planner, audits/naturalness.py = its ruler): coarticulated targets ---
     ap.add_argument(
         "--warp-target",
         choices=["v9", "coart", "own"],
         default="v9",
-        help="warp (v10c): own = the take's own opening and width (the null build of `lsdub mouth-ruler`: nothing moves, the stack and the codec are all that differ); v9 = per-frame step targets (each frame "
+        help="warp: own = the take's own opening and width (the null build of `lsdub mouth-ruler`: nothing moves, the stack and the codec are all that differ); --warp-target v9 = per-frame step targets (each frame "
         "aimed at its own viseme band); coart = one planned trajectory: phone targets blended by dominance (closures / "
         "sibilants strong and narrow, vowels broad, DD/kk/nn/TH weak), short segments undershoot, the plan fitted to "
         "the take's own motion statistics and kept inside the shapes the face makes; closures hard",
@@ -765,7 +762,7 @@ def _parser():
         "--coart-dom-width",
         type=float,
         default=80.0,
-        help="warp (v10c, coart): ms; how long a segment's dominance takes "
+        help="warp (coart): ms; how long a segment's dominance takes "
         "to rise from 10 %% to its plateau before it (and to fall after it), x a per-class factor (closures 0.6, sibilants 0.7, "
         "weak consonants 0.8, vowels 1.3); two equal neighbours hand over in about twice this",
     )
@@ -773,7 +770,7 @@ def _parser():
         "--coart-undershoot",
         type=float,
         default=0.6,
-        help="warp (v10c, coart): 0..1; a segment shorter than its class's "
+        help="warp (coart): 0..1; a segment shorter than its class's "
         "reach time (from the take's own transition speed) keeps 1 - U (1 - dur / reach) of its dominance",
     )
     ap.add_argument(
@@ -794,26 +791,26 @@ def _parser():
         "--coart-prior",
         type=float,
         default=0.3,
-        help="warp (v10c, coart): 0..1; how far the plan's velocity / "
+        help="warp (coart): 0..1; how far the plan's velocity / "
         "acceleration p95 are pulled toward the take's own (0 = no dynamics prior, 1 = the take's statistics)",
     )
     ap.add_argument(
         "--coart-anticipate",
         type=float,
         default=100.0,
-        help="warp (v10c, coart): ms; lip rounding (ou / oh / RR / CH) starts up to this far before its segment",
+        help="warp (coart): ms; lip rounding (ou / oh / RR / CH) starts up to this far before its segment",
     )
     ap.add_argument(
         "--coart-jaw-share",
         default="auto",
-        help="warp (v10c, coart): auto | 0..1; the share of an opening carried by "
-        "the jaw (lower lip + chin; the rest by the upper lip). 1 = v9; auto = the take's own share, biased toward the jaw",
+        help="warp (coart): auto | 0..1; the share of an opening carried by "
+        "the jaw (lower lip + chin; the rest by the upper lip). 1 = the default; auto = the take's own share, biased toward the jaw",
     )
     ap.add_argument(
         "--coart-range",
         type=float,
         default=1.0,
-        help="warp (v10c, coart): 0..1; how far the planned gap / width "
+        help="warp (coart): 0..1; how far the planned gap / width "
         "DISTRIBUTION is matched to the take's own (percentile map of the plan's active frames onto the take's): "
         "its full range of openings and its share of shut frames, not a compressed middle",
     )
@@ -821,32 +818,32 @@ def _parser():
         "--coart-rest-ms",
         type=float,
         default=120.0,
-        help="warp (v10c, coart): ms; an aligner silence at least this long "
+        help="warp (coart): ms; an aligner silence at least this long "
         "is a pause: the mouth eases to the face's own rest shape (the take's closed mode, at most the library's resting "
         "opening) at the take's own closing / opening speed (0 = off)",
     )
     ap.add_argument(
         "--coart-dyn",
-        help="warp (v10c, coart): an external mouth-dynamics CSV on the song timeline (e.g. Audio2Face-3D, "
-        "v10b a2f_cut_25fps.csv: time_s + geo_gap_cm / geo_width_cm), mapped onto the take's range by percentile",
+        help="warp (coart): an external mouth-dynamics CSV on the song timeline (e.g. Audio2Face-3D, "
+        "a2f_cut_25fps.csv: time_s + geo_gap_cm / geo_width_cm), mapped onto the take's range by percentile",
     )
     ap.add_argument(
         "--coart-dyn-mix",
         type=float,
         default=0.0,
-        help="warp (v10c, coart): 0..1; weight of --coart-dyn in the target "
+        help="warp (coart): 0..1; weight of --coart-dyn in the target "
         "(0 = off); the aligner's closures stay hard and the pauses keep the rest shape",
     )
-    # --- v9 (opt-in; audits/frame_gate.py = the checker, core/frame_gate.py = the maker): the per-frame gate ---
+    # (opt-in; audits/frame_gate.py = the checker, core/frame_gate.py = the maker): the per-frame gate ---
     ap.add_argument(
         "--warp-gate",
         choices=["off", "report", "repair"],
         default="off",
-        help="warp (v9): per-frame maker / checker / "
+        help="warp: per-frame maker / checker / "
         "confirmation. report = every frame checked against its neighbours and the source take (continuity, drift, fold, "
         "teeth, ghost, seam, colour, outside-mask change, fit to the audio, windowed slosh) and logged; repair = a failing "
         "frame is re-made from alternatives (parameters, never pixels) and a candidate is kept only when it passes and its "
-        "neighbours still pass; off = v8",
+        "neighbours still pass; off = no repair of those",
     )
     ap.add_argument(
         "--occluder-mask",
@@ -854,32 +851,30 @@ def _parser():
         "the take's own pixels are kept under it, after the gate",
     )
     ap.add_argument("--occluder-grow", type=int, default=3, help="warp: px the occluder mask is grown before the feathered blend")
-    ap.add_argument("--warp-gate-rounds", type=int, default=3, help="warp (v9): repair rounds (fixing frame t changes t+1's continuity)")
+    ap.add_argument("--warp-gate-rounds", type=int, default=3, help="warp: repair rounds (fixing frame t changes t+1's continuity)")
     ap.add_argument(
         "--warp-gate-cands",
         default="a,b,c,d,e,f,g",
-        help="warp (v9): candidates: a lm_hold, b warp_soft, c donor_hold, "
-        "d teeth_plan, e layers_hold, f param_interp (last resort), g slosh_fit (windows); v11: h layers_off (the plain "
+        help="warp: candidates: a lm_hold, b warp_soft, c donor_hold, "
+        "d teeth_plan, e layers_hold, f param_interp (last resort), g slosh_fit (windows); h layers_off (the plain "
         "own-pixel warp without the layer stack; tried after a..e, before f)",
     )
-    ap.add_argument(
-        "--warp-gate-z", type=float, default=3.0, help="warp (v9): robust z (median / MAD of the shot) above which a metric flags"
-    )
-    ap.add_argument("--warp-gate-soft", action="store_true", help="warp (v9): also repair SOFT frames (default: FAIL only)")
-    ap.add_argument("--warp-gate-slosh-w", type=int, default=4, help="warp (v9): half-window (frames each side) of the slosh ruler")
-    ap.add_argument("--warp-gate-report", help="warp (v9): write the gate report (gate.json + gate.csv) here (a path ending in .json)")
+    ap.add_argument("--warp-gate-z", type=float, default=3.0, help="warp: robust z (median / MAD of the shot) above which a metric flags")
+    ap.add_argument("--warp-gate-soft", action="store_true", help="warp: also repair SOFT frames (default: FAIL only)")
+    ap.add_argument("--warp-gate-slosh-w", type=int, default=4, help="warp: half-window (frames each side) of the slosh ruler")
+    ap.add_argument("--warp-gate-report", help="warp: write the gate report (gate.json + gate.csv) here (a path ending in .json)")
     ap.add_argument(
         "--warp-gate-unresolved",
         choices=["best", "none"],
         default="best",
-        help="warp (v9): a frame no candidate fixes: "
+        help="warp: a frame no candidate fixes: "
         "best = keep the best-scoring candidate when it beats the original (logged UNRESOLVED), none = leave it as round 0",
     )
-    # --- v11 (opt-in): the interior seen only through the warped lips; layer debug stabilisation; the registration ruler ---
+    # (opt-in): the interior seen only through the warped lips; layer debug stabilisation; the registration ruler ---
     ap.add_argument(
         "--warp-interior-clip",
         action="store_true",
-        help="warp (v11, layers): the cavity / teeth / tongue are only "
+        help="warp (layers): the cavity / teeth / tongue are only "
         "seen THROUGH the warped lips: the planned opening is kept where the warped frame has lip pixels above and "
         "below it (enclosed), feathered <= 1 px; elsewhere the warped face shows",
     )
@@ -887,16 +882,16 @@ def _parser():
         "--warp-cover-corners",
         type=float,
         default=0.0,
-        help="warp (v11, layers): the cover grows at the two mouth "
+        help="warp (layers): the cover grows at the two mouth "
         "corners with the plan (how far it moves each corner past the take's, half the opening increase, 0.15 IOD x "
         "|sin yaw|) x this; the L6 fill there also takes old-mouth material the warp moved onto the take's skin "
-        "(0 = off = v9)",
+        "(0 = off)",
     )
     ap.add_argument(
         "--warp-yaw-clamp",
         type=float,
         default=0.0,
-        help="warp (v12): M > 0 = the PLAN keeps the mouth inside the "
+        help="warp: M > 0 = the PLAN keeps the mouth inside the "
         "take's face under yaw: where the far half's planned outer lip comes closer than 0.02 + M IOD to the face's edge "
         "(the face mesh outline + the take's own skin pixels), that half is clamped toward the take's own outline, eased "
         "over the clip (mouth_warp.YawClamp); a frame inside the face is untouched (0 = off)",
@@ -904,7 +899,7 @@ def _parser():
     ap.add_argument(
         "--warp-gate-h-guard",
         action="store_true",
-        help="warp (v12): gate candidate h (layers_off) only on near-"
+        help="warp: gate candidate h (layers_off) only on near-"
         "closed frames (planned opening <= the take's p5 + --warp-erase-thr) or between frames that show the take's own "
         "interior too; and a candidate that switches the interior's look against both neighbours ranks a FAIL lower",
     )
@@ -912,36 +907,36 @@ def _parser():
         "--warp-layers-debug-stab",
         choices=["pin", "skull"],
         default="pin",
-        help="warp (v11): the layer debug "
-        "view stabilised on the skull pose + the upper lip-root pin (pin, v8) or on the skull pose only (skull: "
+        help="warp: the layer debug "
+        "view stabilised on the skull pose + the upper lip-root pin (pin) or on the skull pose only (skull: "
         "the pin's own motion shows)",
     )
     ap.add_argument(
         "--warp-gate-reg",
         action="store_true",
-        help="warp (v11): the gate also runs the inter-layer registration "
+        help="warp: the gate also runs the inter-layer registration "
         "ruler (lsdub/audits/layer_reg.py: the windowed slosh of the teeth / cavity / tongue offsets vs the lips) "
         "and reports its windows in gate.json (reported, not repaired)",
     )
     ap.add_argument(
         "--warp-gate-leak-scene",
         action="store_true",
-        help="warp (v11): the gate's leak ruler ignores the scene "
+        help="warp: the gate's leak ruler ignores the scene "
         "(pixels as dark / tooth-like in the take at the same place, outside its own mouth: hair, nostrils)",
     )
     ap.add_argument(
         "--warp-gate-reg-floor",
         type=float,
         default=None,
-        help="warp (v11): the registration ruler's window energy floor (IOD / frame); default layer_reg.FLOOR",
+        help="warp: the registration ruler's window energy floor (IOD / frame); default layer_reg.FLOOR",
     )
-    # --- v12 reg (opt-in; mouth_layers.LayerCompositor.plan_single): one reference for the mouth's sub-elements ---
+    # reg (opt-in; mouth_layers.LayerCompositor.plan_single): one reference for the mouth's sub-elements ---
     ap.add_argument(
         "--warp-reg",
         choices=["v11", "single"],
         default="v11",
-        help="warp (v12, layers): how the interior layers are "
-        "placed. v11 (default) = each with its own per-frame correction (upper teeth: the lip-root skin pin; lower "
+        help="warp (layers): how the interior layers are "
+        "placed. (default) = each with its own per-frame correction (upper teeth: the lip-root skin pin; lower "
         "teeth: the chin pin on the hinge arc + the exposure kick; tongue: its vowel pose); single = ONE reference: "
         "the upper arch on the skull pose only, the lower arch + tongue on the skull pose + one jaw angle about the "
         "hinge (the planned opening, low-passed), the tongue a slow function of that angle, the cavity the planned "
@@ -951,28 +946,27 @@ def _parser():
         "--warp-reg-jaw-sigma",
         type=float,
         default=1.0,
-        help="warp (v12, single): frames; zero-phase low-pass of the jaw angle on top of the jaw plan (the jaw is heavy)",
+        help="warp (single): frames; zero-phase low-pass of the jaw angle on top of the jaw plan (the jaw is heavy)",
     )
     ap.add_argument(
         "--warp-reg-tongue-sigma",
         type=float,
         default=2.0,
-        help="warp (v12, single): frames; the tongue's own "
-        "low-pass of the jaw angle (its drop / retraction and the cavity's throat follow it)",
+        help="warp (single): frames; the tongue's own low-pass of the jaw angle (its drop / retraction and the cavity's throat follow it)",
     )
     ap.add_argument(
         "--warp-reg-lo-limit",
         type=float,
         default=0.09,
-        help="warp (v12, single): IOD; the lower lip never sits more "
+        help="warp (single): IOD; the lower lip never sits more "
         "than this below the lower incisal edge (the lower arch's limit: a hard floor on the jaw angle)",
     )
     ap.add_argument(
         "--warp-arch-build",
         choices=["v11", "v12"],
         default="v11",
-        help="warp (v12, layers): how the arch plates are "
-        "built. v11 (default) = as v8..v11; v12 = the upper plate harvested from the frame with the most EXPOSED upper tooth "
+        help="warp (layers): how the arch plates are "
+        "built. (default) = as earlier builds; --warp-arch-build v12 = the upper plate harvested from the frame with the most EXPOSED upper tooth "
         "height whose arches are apart (a dark gap below the incisal edge; a smile over clenched teeth put the lower row "
         "on the upper plate: two stacked rows of incisors), the lower from an open bite too, and each column continued "
         "beyond its visible tooth as a smooth crown body (no repeated edge or interdental structure), then the gum",
@@ -980,16 +974,16 @@ def _parser():
     ap.add_argument(
         "--warp-arch-band-log",
         action="store_true",
-        help="warp (v12, layers): log the lip-band ruler (frames[i].reg.lipband: "
-        "the plate band right under the planned lips vs their inner rim, Lab dE) without the v12 build (on by itself with "
+        help="warp (layers): log the lip-band ruler (frames[i].reg.lipband: "
+        "the plate band right under the planned lips vs their inner rim, Lab dE) without the build (on by itself with "
         "--warp-arch-build v12); the pixels are unchanged",
     )
-    # --- v13 (opt-in; mouth_layers ANTHRO / synth_slots / corridor_*): the teeth's scale vs the head ---
+    # (opt-in; mouth_layers ANTHRO / synth_slots / corridor_*): the teeth's scale vs the head ---
     ap.add_argument(
         "--warp-arch-layout",
         choices=["harvest", "anthro"],
         default="harvest",
-        help="warp (v13, layers): harvest "
+        help="warp (layers): harvest "
         "(default) = the plate's tooth widths are the harvest's own (beyond it: 0.95 / 0.85 / 1.15 x its period); "
         "anthro = the crowns along the arc take the anthropometric widths (upper central 0.1375, lateral 0.105, canine "
         "0.12, premolars 0.11, molar 0.16; lower 0.087 / 0.095 / 0.11 / 0.11; x the 63 mm IOD = the face's inter-pupil "
@@ -1001,7 +995,7 @@ def _parser():
         "--warp-arch-anthro-unit",
         choices=["ipd", "iod"],
         default="ipd",
-        help="warp (v13, anthro): the table's IOD "
+        help="warp (anthro): the table's IOD "
         "(63 mm) is the face's inter-pupil distance (ipd: the iris centres of the median canonical face; the default) "
         "or lsdub's own IOD (iod: the outer eye corners, ~1.45 x the IPD: the table read literally)",
     )
@@ -1009,7 +1003,7 @@ def _parser():
         "--warp-arch-corridor",
         type=float,
         default=0.0,
-        help="warp (v13, layers): K > 0 = the buccal corridor: per "
+        help="warp (layers): K > 0 = the buccal corridor: per "
         "frame, the plates beyond +-(0.5 - K) x the planned opening's width from its centre fade into the cavity's "
         "dark (smootherstep) to a faint crown at the corners; untouched inside, the lips / face unchanged (0 = off; "
         "recommended 0.12)",
@@ -1018,51 +1012,49 @@ def _parser():
         "--warp-arch-corridor-floor",
         type=float,
         default=0.25,
-        help="warp (v13, corridor): the share of the crown's "
+        help="warp (corridor): the share of the crown's "
         "contrast over the cavity that stays at the corners (the back teeth are dark, not black)",
     )
     ap.add_argument(
         "--warp-reg-pin",
         choices=["none", "global", "nose"],
         default="none",
-        help="warp (v12, single): none = the "
-        "interior on the skull pose alone; global = the upper lip-root skin pin (v6, needs --warp-teeth-anchor skin) "
+        help="warp (single): none = the "
+        "interior on the skull pose alone; global = the upper lip-root skin pin (needs --warp-teeth-anchor skin) "
         "moves the WHOLE interior (both arches + tongue) as one residual; nose = the same with the NOSE's own flow in "
         "the take (the head motion the skull pose misses, no lip in it): still one reference, following the real face",
     )
-    # --- v10a (lsdub/core/vocalisations.py): non-lexical vocalisations / ad-libs (uh uh uh, ah, da da, mm, hey, ...) ---
+    # (lsdub/core/vocalisations.py): non-lexical vocalisations / ad-libs (uh uh uh, ah, da da, mm, hey, ...) ---
     ap.add_argument(
         "--vocalisations",
         choices=["auto", "skip", "rest", "mouth"],
         default="skip",
-        help="warp (v10a; default "
-        "skip since v11: the platform skips ad-libs): what the mouth does on a vocalisation span (uh uh, ah, da da, mm, "
+        help="warp (default "
+        "skip since the platform skips ad-libs): what the mouth does on a vocalisation span (uh uh, ah, da da, mm, "
         "hey: the track's skip fields from `lsdub track skip`, else the same detection now). skip (default) = the "
         "take's own frame (no warp, no layers, no erase), the strength eased zero-phase over --vocal-ease frames at "
-        "each edge; rest = driven to the library's rest mouth; mouth = mouthed like words (v9: a v9 command plus "
-        "--vocalisations mouth renders v9 bit for bit); auto = v10a's default (skip on a track marked by `lsdub track "
+        "each edge; rest = driven to the library's rest mouth; mouth = mouthed like words (a command plus "
+        "--vocalisations mouth renders the same bit for bit); auto = the earlier default (skip on a track marked by `lsdub track "
         "skip`, mouth with a hint on an unmarked one). A track without vocalisations renders the same in every mode",
     )
-    ap.add_argument("--skip-words", help="warp (v10a): extra tokens to treat as vocalisations, one per line")
-    ap.add_argument("--skip-lyrics", help="warp (v10a): the lyric sheet; words in ( ... ) or after a [skip] tag are skipped")
-    ap.add_argument(
-        "--vocal-ease", type=int, default=3, help="warp (v10a, skip): frames; zero-phase ease of the warp strength at a span edge"
-    )
+    ap.add_argument("--skip-words", help="warp: extra tokens to treat as vocalisations, one per line")
+    ap.add_argument("--skip-lyrics", help="warp: the lyric sheet; words in ( ... ) or after a [skip] tag are skipped")
+    ap.add_argument("--vocal-ease", type=int, default=3, help="warp (skip): frames; zero-phase ease of the warp strength at a span edge")
     ap.add_argument(
         "--vocal-merge-gap",
         type=float,
         default=0.75,
-        help="warp (v10a): s; vocalisation spans are merged across a silence this short that holds no lexical word",
+        help="warp: s; vocalisation spans are merged across a silence this short that holds no lexical word",
     )
     ap.add_argument(
         "--vocal-align",
-        help='warp (v10a): the word/phone alignment JSON (default: the track\'s "align" path, from '
+        help='warp: the word/phone alignment JSON (default: the track\'s "align" path, from '
         "the working directory or the track's directory)",
     )
     ap.add_argument(
         "--lip-erase",
         action="store_true",
-        help="morph (v4): the clean plate's reference frame has its lips "
+        help="morph: the clean plate's reference frame has its lips "
         "erased to its own skin first, so the plate under the paint is bald and a smaller painted mouth never "
         "shows the take's lips around it",
     )
@@ -1070,20 +1062,20 @@ def _parser():
         "--mouth-scale",
         choices=["none", "take"],
         default="none",
-        help="morph (v4): take = scale the library mouth "
+        help="morph: take = scale the library mouth "
         "about its centre to the take's own rest width (x) and lip thickness (y), measured on its track",
     )
     ap.add_argument(
         "--mouth-open-cap",
         type=float,
         default=0.0,
-        help="morph (v4): cap the painted opening at the take's own p95 opening x this (inter-ocular units); 0 = off",
+        help="morph: cap the painted opening at the take's own p95 opening x this (inter-ocular units); 0 = off",
     )
     ap.add_argument("--mouth", help='cutout mode: fixed mouth region "x,y,w,h" (pixels) or per-frame JSON list of [x,y,w,h]')
     # --- morph-mode options (each one is a A/B-able improvement) ---
     ap.add_argument("--smooth", choices=["none", "sg", "euro"], default="sg", help="temporal filter on the warped mouth landmarks")
     ap.add_argument("--weight-sigma", type=float, default=1.0, help="frames; gaussian ease of the viseme weights (0 = off)")
-    ap.add_argument("--mask", choices=["hull", "face"], default="face", help="hull = v4 lip/chin hull; face = face-mesh lower face")
+    ap.add_argument("--mask", choices=["hull", "face"], default="face", help="hull = lip/chin hull; face = face-mesh lower face")
     ap.add_argument(
         "--blend",
         choices=["alpha", "laplacian", "feather", "poisson", "mixed"],
@@ -1104,7 +1096,7 @@ def _parser():
         "--skin",
         choices=["lib", "take"],
         default="take",
-        help="skin around the lips: lib = library low-freq + take texture (v4); take = the take itself mesh-warped to the mouth shape",
+        help="skin around the lips: lib = library low-freq + take texture; take = the take itself mesh-warped to the mouth shape",
     )
     ap.add_argument(
         "--tame",
@@ -1135,7 +1127,7 @@ def _parser():
         "--transition",
         choices=["crossfade", "lipclose"],
         default="crossfade",
-        help="morph mode: how mouth pixels change between shapes. crossfade = weighted dissolve (v7/v8); lipclose = "
+        help="morph mode: how mouth pixels change between shapes. crossfade = weighted dissolve; lipclose = "
         "no dissolve: the more-open mouth owns the middle, the more-closed mouth's lips sweep in from the top and "
         "bottom edges toward the mouth line by its weight share",
     )
@@ -1163,7 +1155,7 @@ def _parser():
         "--anchors",
         choices=["anch", "strict", "strict+iris"],
         default="anch",
-        help="morph mode: what places the mouth. anch = TPS on 43 upper-face/nose/cheek/oval points (default, v1/v2); "
+        help="morph mode: what places the mouth. anch = TPS on 43 upper-face/nose/cheek/oval points (default); "
         "strict = one rigid 3D skull pose per frame from nose bridge/tip + eye corners only, pose parameters "
         "smoothed zero-phase, plate + mask edge placed by the same pose (the take's own smile/singing never moves it)",
     )
@@ -1203,11 +1195,11 @@ def _parser():
         "(<= 0 = pure rigid projection, the default; large = near-affine correction)",
     )
     ap.add_argument("--mask-out", help="save the per-frame paint masks (npz, half res) for lsdub jerk")
-    # --- v12 (opt-in; core/mouth_card.py): the mouth card as a toggle, next to the clean output (which is only read) ---
+    # (opt-in; core/mouth_card.py): the mouth card as a toggle, next to the clean output (which is only read) ---
     ap.add_argument(
         "--annotate",
         action="store_true",
-        help="v12: after the render also write <out>_annotated.mp4 (the clean "
+        help="after the render also write <out>_annotated.mp4 (the clean "
         "frames + the lsdub annotate card: word, viseme glyph, openness, 1 s of visemes, weak-alignment marks, heard: "
         "diffs) and <out>_lyric_check.json / .md + <out>_lyrics_suggested.txt; the clean output is the same either way",
     )
@@ -1227,14 +1219,14 @@ def _parser():
         "--annotate-corner",
         choices=["auto", "lower-right", "lower-left", "band"],
         default="auto",
-        help="v12: the card's place: auto = lower-right, else lower-left, else a band below the picture (never over a face)",
+        help="the card's place: auto = lower-right, else lower-left, else a band below the picture (never over a face)",
     )
     ap.add_argument(
         "--warn-verbose",
         action="store_true",
         help="print each flag warning in full, those on flags a recipe or the sing SNAP set by itself too (or LSDUB_WARN_VERBOSE=1)",
     )
-    ap.add_argument("--annotate-faces", help="v12: extra keep-out boxes for the card (JSON: see audits/viseme_overlay.py)")
+    ap.add_argument("--annotate-faces", help="extra keep-out boxes for the card (JSON: see audits/viseme_overlay.py)")
     return ap
 
 
@@ -1302,7 +1294,7 @@ def lip_stats_warnings(g):
 
 def paint_warnings(argv):
     """validate_paint_args over a host's flags, before the render: argv without --video, --track, --out."""
-    return validate_paint_args(_parser().parse_args(["--video", "-", "--track", "-", "--out", "-", *map(str, argv)]))
+    return validate_paint_args(_parser().parse_args(["--video", "-", "--track", "-", "--out", "-", *paint_api.expand(argv)]))
 
 
 def warn_paint(lines, verbose=False):
@@ -1317,7 +1309,7 @@ def warn_paint(lines, verbose=False):
 
 def main(argv=None):
     ap = _parser()
-    a = ap.parse_args(argv)
+    a = ap.parse_args(paint_api.expand(sys.argv[1:] if argv is None else argv))
     verbose = a.warn_verbose or os.environ.get("LSDUB_WARN_VERBOSE", "") not in ("", "0")
     warn_paint(validate_paint_args(a, bundled=verbose), verbose)
     ret = _render(a, ap)
@@ -1333,7 +1325,7 @@ def main(argv=None):
 
 
 def _render(a, ap):
-    """the render (v12: split from main so that --annotate runs after it)."""
+    """the render (split from main so that --annotate runs after it)."""
     if a.mode == "warp":
         from . import mouth_warp
 
@@ -1453,7 +1445,7 @@ def _render(a, ap):
 def paint(
     video, track, out, mode="warp", show_mouth_card=False, card_corner="auto", watermark=True, lib=None, frames=0, args=(), card_faces=None
 ):
-    """v12: the one call a ComfyUI node wraps (docs/node-contract.md): `lsdub paint` exactly as the CLI runs it (the render,
+    """the one call a ComfyUI node wraps (docs/node-contract.md): `lsdub paint` exactly as the CLI runs it (the render,
     then the invisible watermark unless watermark=False), and with show_mouth_card the mouth card next to it.
     args: further `lsdub paint` flags (a list, e.g. the warp settings). Returns {clean, annotated, lyric_check,
     lyric_check_md, lyrics_suggested, ret}; the card paths are None when show_mouth_card is off."""

@@ -9,7 +9,7 @@ from the vocal stem's RMS flags "mouth open during silence" and "mouth closed wh
 
   lsdub check --video take.mp4 --t0 8.04 \
       [--curves a2f_blendshapes.csv ...] [--audio vocal.wav] [--json out.json] [--plot out.png]
---t0 = song (stem) time of video frame 0. For a v8 cut segment: cut.start - 12.0 (OPEN).
+--t0 = song (stem) time of video frame 0. For a cut segment: cut.start - 12.0 (OPEN).
 --robust: retry missed frames (tracked box + upscale + low confidence + CLAHE); same metric.
 --visemes vis.json: viseme agreement (lsdub visemes) — does the mouth SHAPE match the expected viseme + per-word M/B/P closures and OO rounding.
 --crop x,y,w,h: only look in this pixel box (helps when several faces are in frame; default = largest face).

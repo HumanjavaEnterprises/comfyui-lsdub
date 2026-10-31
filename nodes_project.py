@@ -47,8 +47,8 @@ class LSDubProjectNode(io.ComfyNode):
                                        'account (needs a paid Comfy Cloud plan; uses your credits). The dub and QA always run locally.'),
                 io.Combo.Input('mouth_stack', options=sorted(recipes.MOUTH_STACKS, key='plain layers'.split().index), default='plain',
                                optional=True,
-                               tooltip='The mouth recipe for this project. Not wired to the render yet: layers renders '
-                                       'the same pixels as plain today and only keeps its shots in their own cache folders.'),
+                               tooltip='The mouth recipe: plain = the simple warp; layers = the full layer stack (teeth, '
+                                       'tongue, cavity) on any kit. It changes the render; shots keep their own cache folders.'),
             ],
             outputs=[T.LSDubProject.Output(display_name='project', tooltip='The project: pass it to every LSDub node.')],
         )

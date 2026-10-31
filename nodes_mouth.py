@@ -9,6 +9,7 @@ done.json, so an interrupted dub resumes and a re-run only redoes changed, faile
 assembled into the cut with the source's audio, and the cut is watermarked."""
 import json
 import os
+import shlex
 import shutil
 import sys
 import time
@@ -18,7 +19,7 @@ from comfy_api.v0_0_2 import io
 from . import lsdub_types as T
 from . import media
 from .media import kit_folder
-from .lsdub_engine.core import presets, recipes
+from .lsdub_engine.core import paint_api, presets, recipes
 from .lsdub_engine.core.steps import call
 from .project import file_hash, shots_todo, stage_key, text_hash
 
@@ -37,13 +38,20 @@ def _paint_warnings(argv):
     return out
 
 
-def _kit_flags(project, identity):
-    """the preset's warp flags for this face (opt-in per face), minus the lip-lock geometry, which is per take."""
-    f = list(presets.get(project.preset).paint_flags.get(identity, ()))
-    if '--warp-lip-lock' in f:
-        i = f.index('--warp-lip-lock')
-        del f[i:i + 2]
-    return f
+def _stack(project, identity):
+    """(recipe, per-face argv) of this face. mouth_stack picks the recipe; on `plain`, a face the preset lists keeps the preset's
+    recipe. Lip-lock geometry belongs to one take, so it stays out of the argv."""
+    p = presets.get(project.preset)
+    listed = identity in p.face_overrides
+    recipe = p.recipe if project.mouth_stack == 'plain' and listed else recipes.MOUTH_STACKS[project.mouth_stack]
+    return recipe, recipes.without(p.face_overrides.get(identity, ()), {'--warp-lip-lock'})
+
+
+def _paint_flags(project, kit, tw, vocalisations):
+    """the shot's flags for sing. --vocalisations is a user-level flag: settings can change it."""
+    recipe, face = _stack(project, kit.identity)
+    return paint_api.flags(recipe, lib=kit.dir, mode_mods=SING_EXTRA, face_overrides=face,
+                           user_overrides=['--vocalisations', vocalisations, *shlex.split(tw.settings)])
 
 
 class LSDubBuildLipKit(io.ComfyNode):
@@ -158,7 +166,8 @@ class LSDubTweaks(io.ComfyNode):
                 io.Boolean.Input('continuity', default=True,
                                  tooltip='After the dub, repair single-frame pops against the source.'),
                 io.String.Input('settings', default='', multiline=True,
-                                tooltip='Advanced: extra mouth-warp flags, passed through as is (e.g. --warp-sigma 0.8).'),
+                                tooltip='Advanced: extra mouth-warp flags, shell-quoted, on top of the mouth recipe (e.g. --warp-erase closures). '
+                                        'With snap on, its three flags (--warp-sigma, --warp-temporal, --warp-close-depth) stay fixed.'),
                 io.String.Input('jaw_csv', default='', optional=True,
                                 tooltip='Optional: a jaw-curve CSV for the whole song (Audio2Face-3D blendshape export, '
                                         'columns frame,time_s,...,jawOpen; song time). Drives the jaw in the silences more '
@@ -333,9 +342,18 @@ class LSDubDub(io.ComfyNode):
 
     @classmethod
     def _plan(cls, project, shots, kits, only):
+        return [s for s in cls._wanted(shots, only) if cls._kit_for(s, kits)]
+
+    @staticmethod
+    def _wanted(shots, only):
         only = set(only)
-        return [s for s in shots.shots if s.get('verdict') in DUB_VERDICTS and (not only or s['shot'] in only)
-                and cls._kit_for(s, kits)]
+        return [s for s in shots.shots if s.get('verdict') in DUB_VERDICTS and (not only or s['shot'] in only)]
+
+    @classmethod
+    def _dropped(cls, shots, kits, only):
+        """the shots to dub that no kit serves, each with its warning."""
+        return {s['shot']: (s, f"shot {s['shot']}: target {s.get('target')!r} matches no kit (kits: {', '.join(kits)}); connect LSDub Cast "
+                               'or use one kit') for s in cls._wanted(shots, only) if not cls._kit_for(s, kits)}
 
     @staticmethod
     def _kit_for(s, kits):
@@ -396,8 +414,7 @@ class LSDubDub(io.ComfyNode):
         occ, note = cls._mask_for(masks, s, tw, s['f1'] - s['f0'] + 1)
         if occ: shutil.copyfile(occ, os.path.join(work, 'occ.npz'))
         f = tw.flags
-        pa = ['--lib', kit.dir, *_kit_flags(project, kit.identity), *SING_EXTRA, *tw.settings.split(),
-              '--vocalisations', vocalisations]
+        pa = _paint_flags(project, kit, tw, vocalisations)
         warned = _paint_warnings(pa)
         info = SING.run(take, align.align, song.lead or song.vocal or song.mix, s['start'] - project.song_offset,
                         st.path('sung.mp4'), work, pa, char=s['target'] if cast else None, db=cast.db if cast else None,
@@ -459,6 +476,11 @@ class LSDubDub(io.ComfyNode):
                              'result': file_hash(r) if r else 'none',
                              'used': 'render' if r and (ok or on_fail == 'render') else 'source'}
             if pbar: pbar.update(1)
+        from .project import parse_force_shots
+        for sid, (s, msg) in cls._dropped(shots, kits, parse_force_shots(only_shots)).items():
+            _log(msg)
+            res[str(sid)] = {'f0': s['f0'], 'f1': s['f1'], 'render': '', 'pass': False, 'corr': None, 'reason': 'no kit for target',
+                             'gate': '', 'key': '', 'result': 'none', 'used': 'source'}
         rec, failed = cut_render(project, source, res, quality, audio, song)
         if failed: _log(f'{len(failed)} shot(s) failed: {failed} (see LSDub Fix It)')
         return io.NodeOutput(rec, cls._video(rec.cut))

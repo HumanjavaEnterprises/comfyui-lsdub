@@ -16,11 +16,11 @@ teeth together / pursed and flared), RR / ou = pucker, oh = round, aa = wide ope
 its class name (and the runner-up class when the track mixes it in); the track's openness as a small bar; the next ~1 s
 of viseme classes as coloured ticks (height = openness). A skipped vocalisation (`lsdub track skip`, or the same
 lexicon applied here to an unmarked track) shows its word dimmed and struck through with 'skip' (the default, as lsdub
-paint's since v11; 'rest' with --vocalisations rest; with mouth / an unmarked track under auto -- v9, mouthed -- the
+paint's; 'rest' with --vocalisations rest; with mouth / an unmarked track under auto -- mouthed -- the
 word is kept and tagged 'ad-lib'). --scale 1 is designed for 1280x720 (default: picture height / 720); 1.0 stays legible on a 2x mouth zoom.
-v12 (the card as a toggle, lsdub paint --annotate): what the aligner knew about the word (lsdub/core/lyric_check.py; the
+(the card as a toggle, lsdub paint --annotate): what the aligner knew about the word (lsdub/core/lyric_check.py; the
 track's `words` block from `lsdub visemes`, else its alignment, --align; the card grows 16 px for a second word line when a
-track has such facts, else it is v10a's card): a WEAK word (confidence < 0.6: whisper-timed,
+track has such facts, else it is the earlier card): a WEAK word (confidence < 0.6: whisper-timed,
 phrase fell back, phones squeezed / stretched, low Whisper probability) gets a dotted underline and a small '?' badge, its
 reason on the second line; a word whose HEARD token differs from its lyric word gets 'heard: x' on the second line under
 the written word (+ 'lyric: y' when the card's word is the sung one); the 1 s timeline marks such frames above their
@@ -85,7 +85,7 @@ NAME = {
 }
 BG, INK, DIM, CAV, TEETH, TONGUE = (22, 22, 30), (246, 246, 246), (128, 128, 138), (52, 20, 34), (236, 234, 224), (214, 104, 118)
 TAG = {"skip": (244, 170, 40), "rest": (130, 180, 255), "ad-lib": (150, 150, 160)}
-WEAK, HEARD = (255, 214, 80), (255, 122, 170)  # v12: a weakly aligned word / a heard token that is not the lyric word
+WEAK, HEARD = (255, 214, 80), (255, 122, 170)  # a weakly aligned word / a heard token that is not the lyric word
 FONTS = {
     False: ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf", "/Library/Fonts/Arial.ttf"),
     True: (
@@ -97,8 +97,8 @@ FONTS = {
 _FC = {}
 SS_ = 3  # supersampling of the card (drawn at 3x, area-downscaled: anti-aliased)
 CARD = (340, 128)  # card size at --scale 1 (1280x720): clears a close-up's padded face box
-LINE2 = 16  # v12: +16 px for the second word line (heard: / a weak word's reason) when the
-# annotated tracks carry word facts; without facts the card is v10a's, pixel for pixel
+LINE2 = 16  # +16 px for the second word line (heard: / a weak word's reason) when the
+# annotated tracks carry word facts; without facts the card is the plain one, pixel for pixel
 MARGIN = 14
 
 
@@ -275,7 +275,7 @@ class TrackView:
         self.mode = ("skip" if marked else "mouth") if mode == "auto" else mode
         # the spans exactly as the render finds them (vocalisations.for_warp: the same alignment lookup and merge gap)
         found = vz.from_track(T) if marked else vz.find_spans(T, align, skip_words or (), lyrics, merge_gap, track_path=path)
-        wm = (T.get("words_meta") or {}).get("align")  # v12: the word facts may also use the
+        wm = (T.get("words_meta") or {}).get("align")  # the word facts may also use the
         align = align or (wm if wm and os.path.exists(wm) else None)  # alignment the track names absolutely
         self.vocal = vz.skip_mask(found, self.n)
         self.found = found
@@ -296,8 +296,8 @@ class TrackView:
         self.info = self.word_facts(T, align, path)
 
     def word_facts(self, T, align=None, path=None):
-        """v12: per frame the aligner's facts about its word (lyric_check.word_state: conf, weak, reasons, diff, heard,
-        lyric) or None: from the track's words block + per-frame wi (lsdub visemes since v12), else from its alignment
+        """per frame the aligner's facts about its word (lyric_check.word_state: conf, weak, reasons, diff, heard,
+        lyric) or None: from the track's words block + per-frame wi (lsdub visemes), else from its alignment
         (the track's 'align' path / --align) mapped onto the frames as viseme_track.build assigns words."""
         from ..core import lyric_check as lc
 
@@ -351,8 +351,8 @@ class TrackView:
 # ------------------------------------------------------------------------------------------------- the card --
 class Card:
     def __init__(self, scale=1.0, line2=False, cards=None):
-        self.l2 = LINE2 if line2 else 0  # v12: the second word line (word facts)
-        # v13: the FACE's own detailed mouth shapes (lsdub_engine.core.mouth_cards) instead of the generic glyph
+        self.l2 = LINE2 if line2 else 0  # the second word line (word facts)
+        # the FACE's own detailed mouth shapes (lsdub_engine.core.mouth_cards) instead of the generic glyph
         self.cards_dir = cards if (cards and os.path.isdir(cards)) else None
         self.card_tiles = {}
         self.s = float(scale)
@@ -397,7 +397,7 @@ class Card:
         v2 = f.get("vis2", vis)
         mix = float(f.get("mix", 0.0) or 0.0)
         op = float(f.get("open", 0.0) or 0.0)
-        # glyph (left; v12: centred on the taller card)
+        # glyph (left; centred on the taller card)
         gx, gy, gw, gh = int(9 * s), int((9 + self.l2 / 2) * s), int(94 * s), int(66 * s)
         tile = self._face_tile("sil" if st == "rest" else vis)
         if tile is not None:  # the FACE's own shape (square), fit the slot
@@ -457,7 +457,7 @@ class Card:
             d.line([xc - 2 * s, ym, xc + wcur + 2 * s, ym], fill=TAG[st], width=max(2, int(3 * s)))
         if nx:
             d.text((xc + wcur + 10 * s, yb), nx, font=self.f_side, fill=DIM, anchor="ls")
-        fx = tv.facts(k) if cur and self.l2 else None  # v12: weak mark + heard: line (never on a skip)
+        fx = tv.facts(k) if cur and self.l2 else None  # weak mark + heard: line (never on a skip)
         if fx and fx["weak"]:
             yu = yb + int(4 * s)
             dot = max(2, int(2.2 * s))
@@ -540,7 +540,7 @@ class Card:
                     outline=INK,
                     width=max(1, int(1.2 * s)),
                 )
-            fq_ = tv.facts(q) if self.l2 else None  # v12: weak / heard frames marked above their ticks
+            fq_ = tv.facts(q) if self.l2 else None  # weak / heard frames marked above their ticks
             if fq_ and (fq_["diff"] or fq_["weak"]):
                 d.rectangle([xa, ty - int(5 * s), xb, ty - int(3 * s)], fill=HEARD if fq_["diff"] else WEAK)
         d.text((xr, ty + th // 2), "1 s", font=self.f_small, fill=DIM, anchor="rm")
@@ -691,8 +691,8 @@ def main(argv=None):
         "--vocalisations",
         choices=["auto", "skip", "rest", "mouth"],
         default="skip",
-        help="what the render did with the vocalisations (as lsdub paint, whose default is skip since v11): "
-        "mouth = v9 (mouthed, tagged ad-lib); auto = skip on a marked track, mouth on an unmarked one",
+        help="what the render did with the vocalisations (as lsdub paint, whose default is skip): "
+        "mouth = (mouthed, tagged ad-lib); auto = skip on a marked track, mouth on an unmarked one",
     )
     ap.add_argument("--faces", help="extra keep-out boxes JSON (a face tracker's gating boxes)")
     ap.add_argument("--faces-strict", action="store_true", help="with --faces: every box, also the weak / person-matte ones")
@@ -708,26 +708,26 @@ def main(argv=None):
     ap.add_argument("--crf", type=int, default=16)
     ap.add_argument(
         "--align",
-        help='v12: the word/phone alignment JSON of tracks without a words block whose "align" path is '
+        help='the word/phone alignment JSON of tracks without a words block whose "align" path is '
         "relative to another directory (their weak marks / heard: diffs come from it)",
     )
     ap.add_argument(
         "--lyric-check",
-        help="v12: write the lyric check here (JSON; the .md next to it): every heard / lyric "
+        help="write the lyric check here (JSON; the .md next to it): every heard / lyric "
         "mismatch, weak word and vocalisation span of the annotated frames",
     )
     ap.add_argument(
-        "--lyrics-suggested", help="v12: write the lyric sheet with each mismatched word replaced by [heard: x] here (suggestions only)"
+        "--lyrics-suggested", help="write the lyric sheet with each mismatched word replaced by [heard: x] here (suggestions only)"
     )
     ap.add_argument(
         "--lyric-sheet",
-        help="v12: the lyric sheet for --lyrics-suggested (default: --lyrics, else the track's words_meta / its alignment's lyrics path)",
+        help="the lyric sheet for --lyrics-suggested (default: --lyrics, else the track's words_meta / its alignment's lyrics path)",
     )
     ap.add_argument(
         "--vocal-merge-gap",
         type=float,
         default=vz.MERGE_GAP,
-        help="v12: as lsdub paint --vocal-merge-gap (s): vocalisation spans merge across a silence this short with no lexical word",
+        help="as lsdub paint --vocal-merge-gap (s): vocalisation spans merge across a silence this short with no lexical word",
     )
     a = ap.parse_args(argv)
     if a.corner == "auto":
@@ -738,7 +738,7 @@ def main(argv=None):
     if not n or shp is None:
         ap.error(f"no frames in {a.video}")
     segs = segments_of(a, n)
-    facts = any(x is not None for _, tvs, _ in segs for tv in tvs for x in tv.info)  # v12: the second line only with word facts
+    facts = any(x is not None for _, tvs, _ in segs for tv in tvs for x in tv.info)  # the second line only with word facts
     H, W = shp
     card = Card(a.scale if a.scale else H / 720.0, facts, cards=getattr(a, "cards", None))
     cw, ch = card.W, card.H
@@ -908,7 +908,7 @@ def main(argv=None):
 
 
 def lyric_outputs(a, segs, n):
-    """v12: the lyric check of the annotated frames (--lyric-check JSON + .md) and the suggested lyric sheet."""
+    """the lyric check of the annotated frames (--lyric-check JSON + .md) and the suggested lyric sheet."""
     from ..core import lyric_check as lc
 
     S, f0, meta = [], 0, {}
@@ -933,7 +933,7 @@ def lyric_outputs(a, segs, n):
     C = lc.build_check(
         S,
         dict(
-            what="lsdub lyric check (v12): what the aligner heard vs the lyric sheet, per word on screen",
+            what="lsdub lyric check: what the aligner heard vs the lyric sheet, per word on screen",
             video=os.path.abspath(a.video),
             annotated=os.path.abspath(a.out),
             align=meta.get("align"),

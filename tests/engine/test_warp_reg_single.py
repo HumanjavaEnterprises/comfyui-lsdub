@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v12 --warp-reg single (mouth_layers.LayerCompositor.plan_single): ONE reference for the mouth's interior -- the upper arch on
+"""--warp-reg single (mouth_layers.LayerCompositor.plan_single): ONE reference for the mouth's interior -- the upper arch on
 the skull pose only, the lower arch + tongue on the skull pose + one low-passed hinge angle, the tongue a slow function of
-it, no pins, no per-frame exposure kick, gum guards; the default (v11) placement untouched. Synthetic, CPU only."""
+it, no pins, no per-frame exposure kick, gum guards; the default placement untouched. Synthetic, CPU only."""
 
 import os, sys
 import numpy as np
@@ -30,7 +30,7 @@ def test_upper_arch_rides_the_skull_only():
     n = 12
     comp, layer, frames, S = _comp(gaps=tuple([20.0] * n))
     rng = np.random.default_rng(0)
-    layer.pin[:] = rng.normal(0, 3.0, (n, 2))  # a v11 lip-root pin would move the arches every frame
+    layer.pin[:] = rng.normal(0, 3.0, (n, 2))  # a lip-root pin would move the arches every frame
     P = _seq(n, rng, base=np.linspace(12, 30, n))
     comp.plan_single(P)
     assert comp.pin_mode == "single" and np.all(comp.dth == 0) and np.all(comp.pin_lo == 0)
@@ -172,7 +172,7 @@ def test_one_global_residual_moves_the_whole_interior_together(capsys):
     assert "--warp-reg-pin" in capsys.readouterr().out
 
 
-# ------------------------------------------------- v12 --warp-arch-build v12: the plate build ("teeth inside teeth") --
+# --warp-arch-build the plate build ("teeth inside teeth") --
 def _stacked(rows2=True, Th=60, Tw=80, edge=50, band=14):
     """a synthetic upper plate (BGRA): gum above, a tooth band ending at the incisal edge row; rows2 = a SECOND tooth band
     under a dark bite line above the edge (what a clenched-teeth harvest put on the plate)."""

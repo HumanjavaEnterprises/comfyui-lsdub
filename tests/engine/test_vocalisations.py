@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""v10a vocalisations (lsdub/core/vocalisations.py): the lexicon (real words never match), the lyrics markup, the span
+"""vocalisations (lsdub/core/vocalisations.py): the lexicon (real words never match), the lyrics markup, the span
 list of a track (merged across a short silence, never across a word), `lsdub track skip`, the zero-phase ease, and the
-warp consumer on a synthetic clip, CPU only: --vocalisations skip (the default since v11, on any track) leaves the span
+warp consumer on a synthetic clip, CPU only: --vocalisations skip (the default, on any track) leaves the span
 as the take's own frames (no warp, no layers, no erase) with an eased edge; mouth -- and auto on an unmarked track -- is
-the v9 render; auto on a marked track skips; rest drives the span to the rest band; the gate does not score the fit to the audio on a skipped
+the earlier render; auto on a marked track skips; rest drives the span to the rest band; the gate does not score the fit to the audio on a skipped
 frame and never re-makes a frame that is the take."""
 
 import json, os, sys
@@ -368,10 +368,10 @@ def test_mouth_and_auto_on_an_unmarked_track_are_v9(vclip, capsys):
     mo, _ = run_clip(a_m)
     a_auto = paint_args(tmp, vid, n, tmp / "vis_w.json", ["--vocalisations", "auto"])
     au, vx = run_clip(a_auto)
-    assert vx is None  # auto (v10a's default) on an UNMARKED track: v9 ...
+    assert vx is None  # auto (the earlier default) on an UNMARKED track: mouthed
     assert "f10-19" in capsys.readouterr().out  # ... with a hint naming the mouthed span
     sk, vx = run_clip(paint_args(tmp, vid, n, tmp / "vis_nw.json"))
-    assert vx is None  # the default, nothing to skip: v9
+    assert vx is None  # the default, nothing to skip: mouthed
     for i in range(n):
         assert (
             np.array_equal(mo.outs[i], base.outs[i])
@@ -382,8 +382,8 @@ def test_mouth_and_auto_on_an_unmarked_track_are_v9(vclip, capsys):
 
 
 def test_the_default_skips_the_vocalisations_on_any_track(vclip):
-    # v11: the platform skips ad-libs by default -- on an unmarked track (detected at paint time) and on a marked one alike;
-    # --vocalisations mouth is the way back to v9
+    # the platform skips ad-libs by default -- on an unmarked track (detected at paint time) and on a marked one alike;
+    # --vocalisations mouth mouths everything
     tmp, vid, frames = vclip
     n = len(frames)
     a = paint_args(tmp, vid, n, tmp / "vis_w.json")
@@ -412,7 +412,7 @@ def test_auto_skips_a_marked_track_and_mouth_ignores_the_marks(vclip):
     )  # marked track, auto: skip, from the track's fields
     assert vx is not None and vx.mode == "skip" and "skips" in vx.T
     s_, _ = run_clip(paint_args(tmp, vid, n, tmp / "vis_w.json", ["--vocalisations", "skip"]))  # detected at paint: the same
-    m_, _ = run_clip(paint_args(tmp, vid, n, tmp / "vis_k.json", ["--vocalisations", "mouth"]))  # the marks change nothing in v9
+    m_, _ = run_clip(paint_args(tmp, vid, n, tmp / "vis_k.json", ["--vocalisations", "mouth"]))  # the marks change nothing when mouthed
     base, _ = run_clip(paint_args(tmp, vid, n, tmp / "vis_w.json", ["--vocalisations", "mouth"]))
     for i in range(n):
         assert np.array_equal(k.outs[i], s_.outs[i]) and np.array_equal(m_.outs[i], base.outs[i]), i
