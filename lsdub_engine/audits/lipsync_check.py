@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""lipsync_check.py — automatic lip-sync checker: measured mouth opening in a video vs Audio2Face-3D jawOpen.
+"""lipsync_check.py — automatic lip-sync checker: measured mouth opening in a video vs a jawOpen curve.
 
 Per video frame: MediaPipe FaceLandmarker -> inner-lip gap (lm 13-14) / face height (lm 10-152).
 Compared against A2F curves (60 fps, song time) resampled at the video frame times, with a lag search. Vocal activity
@@ -360,7 +360,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--video", required=True)
     ap.add_argument("--t0", type=float, required=True)
-    ap.add_argument("--curves", nargs="+", default=[], help="optional ARKit blendshape CSVs (e.g. Audio2Face) to correlate against")
+    ap.add_argument("--curves", nargs="+", default=[], help="optional ARKit blendshape CSVs to correlate against")
     ap.add_argument("--audio", required=True, help="the (dry) vocal, song time")
     ap.add_argument("--crop")
     ap.add_argument("--robust", action="store_true", help="re-detect missed frames (tracked box, upscale, low conf, CLAHE)")

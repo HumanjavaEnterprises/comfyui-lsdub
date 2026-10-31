@@ -63,7 +63,7 @@ def test_align_execute_prompts_with_the_lyrics_and_caches(pack, tmp_path, align_
     rec, md = A.execute(p, song, lyr).args
     argv = align_stubs['argv'][-1]
     assert argv[argv.index('--prompt') + 1] == 'hello world.' and argv[argv.index('--audio') + 1] == lead
-    assert os.path.exists(rec.align) and rec.visemes.endswith('visemes_skip.json') and 'lyric match 0.9' in md
+    assert os.path.exists(rec.align) and 'lyric match 0.9' in md
     n = len(align_stubs['argv'])
     A.execute(p, song, lyr)
     assert len(align_stubs['argv']) == n                                            # cached

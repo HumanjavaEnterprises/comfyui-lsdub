@@ -21,7 +21,7 @@
    "properties": {},
    "title": "Start here",
    "widgets_values": [
-    "## LSDub 1: Prompt Everything\n**Does:** edits a still (Qwen-Image-Edit), animates it (LTX-2.5), generates a song (ACE-Step 1.5), builds a lip kit from the clip, dubs, grades and saves.\n\n**Needs:** a big GPU (LTX-2.5 needs ~70 GB, or set *LSDub Project* backend = comfy_cloud on a paid plan) and the generator models (README, Models).\n\n**Time:** about 10 min on a 96 GB card.\n\n**Change:** *Load Image* (your character), the *LSDub Still* and *LSDub Video* prompts, *LSDub Song* tags, *LSDub Lyrics*."
+    "## LSDub 1: Prompt Everything\n**Does:** edits a still (Qwen-Image-Edit), animates it (LTX-2.5), generates a song (ACE-Step 1.5), builds a lip kit from the clip, dubs, grades and saves.\n\n**Needs:** a big GPU (LTX-2.5 needs ~70 GB, or set *LSDub Project* backend = comfy_cloud on a paid plan) and the generator models (README, Models).\n\n**Runs on:** a 96 GB card, or Comfy Cloud on a paid plan.\n\n**Change:** *Load Image* (your character), the *LSDub Still* and *LSDub Video* prompts, *LSDub Song* tags, *LSDub Lyrics*."
    ],
    "color": "#432",
    "bgcolor": "#653"
@@ -35,7 +35,7 @@
    ],
    "size": [
     340,
-    346
+    320
    ],
    "flags": {},
    "order": 1,
@@ -75,8 +75,7 @@
     0,
     "fixed",
     "",
-    "local",
-    "plain"
+    "local"
    ],
    "color": "#335",
    "title": "LSDub Project"
@@ -915,7 +914,7 @@
    ],
    "size": [
     340,
-    268
+    216
    ],
    "flags": {},
    "order": 17,
@@ -945,16 +944,6 @@
      "name": "render",
      "type": "LSDUB_RENDER",
      "link": 37
-    },
-    {
-     "name": "scorecard",
-     "type": "LSDUB_REPORT",
-     "link": null
-    },
-    {
-     "name": "ruler",
-     "type": "LSDUB_REPORT",
-     "link": null
     }
    ],
    "outputs": [
@@ -1453,7 +1442,7 @@
     500,
     1380,
     1840,
-    348
+    296
    ],
    "color": "#88A",
    "font_size": 28,

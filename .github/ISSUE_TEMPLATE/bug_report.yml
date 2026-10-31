@@ -28,13 +28,13 @@ body:
     id: node
     attributes:
       label: Node that failed (if any)
-      options: [Project, Video/Still/Song/Lyrics slot, Shot Split, Cast, Triage, Vocal Split, Lead Vocal, Align, Build Lip Kit, Occluders, Tweaks, Dub, Continuity, Verify, Scorecard, Sync QA, Fix-It, Save Cut, Performance, Not sure]
+      options: [Project, Lyrics, Still, Video, Performance, Shot Split, Cast, Triage, Vocal Split, Lead Vocal, Song, Align, Lip Kit, Mouth Tweaks, Occluders, Dub, Continuity, Verify, Scorecard, Sync QA, Mouth Ruler, Fix It, Save Cut, Not sure]
   - type: input
     id: versions
     attributes:
       label: Versions
       description: LSDub version, ComfyUI version, ComfyUI Desktop or portable or git install.
-      placeholder: "LSDub 0.1.1, ComfyUI 0.3.x, Desktop on Windows"
+      placeholder: "LSDub 0.1.3, ComfyUI 0.3.x, Desktop on Windows"
     validations:
       required: true
   - type: input

@@ -824,7 +824,7 @@ def _parser():
     )
     ap.add_argument(
         "--coart-dyn",
-        help="warp (coart): an external mouth-dynamics CSV on the song timeline (e.g. Audio2Face-3D, "
+        help="warp (coart): an external mouth-dynamics CSV on the song timeline (e.g. a blendshape export, "
         "a2f_cut_25fps.csv: time_s + geo_gap_cm / geo_width_cm), mapped onto the take's range by percentile",
     )
     ap.add_argument(

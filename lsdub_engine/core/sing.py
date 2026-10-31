@@ -124,7 +124,7 @@ def run(
             if wt == "own"
             else "the viseme track's audio opening"
         )
-        print(f"sing: no --a2f-csv: {by} drives the jaw; an Audio2Face jawOpen csv gives better silences", file=sys.stderr)
+        print(f"sing: no --a2f-csv: {by} drives the jaw; a jawOpen csv gives better silences", file=sys.stderr)
     lead = (SNAP["lead"] if snap else 0.1) if lead is None else lead
     word_close = (SNAP["word_close"] if snap else 0.0) if word_close is None else word_close
     threads = thread_report()
@@ -356,7 +356,7 @@ def main(argv=None):
     ap.add_argument("--face-target", type=float, default=512.0)
     ap.add_argument("--fps-mult", type=int, default=2)
     ap.add_argument("--no-snap", dest="snap", action="store_false")
-    ap.add_argument("--a2f-csv", help="Audio2Face csv (jawOpen): part of the standard recipe")
+    ap.add_argument("--a2f-csv", help="jaw-curve csv (jawOpen): part of the standard recipe")
     ap.add_argument("--json")
     ap.add_argument(
         "--lead",

@@ -28,7 +28,7 @@ class LSDubVocalSplit(io.ComfyNode):
     def define_schema(cls):
         return io.Schema(
             node_id='LSDubVocalSplit', display_name='LSDub Vocal Split (RoFormer)', category='LSDub/audio',
-            description='Split a song into vocals and instrumental with Mel-Band RoFormer (MIT vocal weights in '
+            description='Split a song into vocals and instrumental with Mel-Band RoFormer (vocal weights in '
                         'models/audio_separation).',
             inputs=[
                 io.Audio.Input('audio', tooltip='The song mix (any sample rate; mono is doubled to stereo).'),

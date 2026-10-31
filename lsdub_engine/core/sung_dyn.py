@@ -11,7 +11,7 @@ pitch). This writes that as an external dynamics source for `lsdub paint --coart
   shape   the lyrics' visemes (viseme_track.build at --rate, min-hold 1): nominal opening OPEN[v] and a width WID[v]
           (spread E / ih wide, rounded oh / ou / RR / CH narrow), blended with the runner-up by the track's mix
   drive   the dry vocal's loudness envelope (RMS -> dB, top at p98, --floor-db), attack --attack-ms / release
-          --release-ms, blended with Audio2Face's jawOpen (--a2f-csv, --a2f-mix) when given
+          --release-ms, blended with a jawOpen curve (--a2f-csv, --a2f-mix) when given
   gap     shape opening x (base + (1 - base) x drive); 0 on P / B / M (the planner keeps closures hard anyway)
   width   shape width + a little loudness spread; rounding from A2F funnel / pucker when given
   both    zero-phase low-passed at --lowpass-hz (the mouth does not move faster than ~8-10 Hz)

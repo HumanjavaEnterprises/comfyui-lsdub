@@ -168,7 +168,7 @@ class LSDubTweaks(io.ComfyNode):
                                 tooltip='Advanced: extra mouth-warp flags on top of the mouth recipe (e.g. --warp-erase closures). Put a value '
                                         'holding a space or an apostrophe in double quotes; backslashes are kept as typed. With snap on, its three flags (--warp-sigma, --warp-temporal, --warp-close-depth) stay fixed.'),
                 io.String.Input('jaw_csv', default='', optional=True,
-                                tooltip='Optional: a jaw-curve CSV for the whole song (Audio2Face-3D blendshape export, '
+                                tooltip='Optional: a jaw-curve CSV for the whole song (one row per frame, '
                                         'columns frame,time_s,...,jawOpen; song time). Drives the jaw in the silences more '
                                         'cleanly. Empty = the vocal envelope only.'),
             ],
@@ -309,7 +309,7 @@ def cut_render(project, source, shots, quality, audio, song, scope='LSDubDub/cut
                         (song.mix if song else None), project.song_offset)
         cst.mark_done(True, shots=sorted(used), warnings=warn)
     failed = sorted(int(k) for k, v in shots.items() if not v.get('pass'))
-    return T.Render(shots=shots, cut=cut, hash=ckey), failed
+    return T.Render(shots=shots, cut=cut, hash=ckey, audio=audio, song=song.to_json() if song and audio == 'song' else {}), failed
 
 
 class LSDubDub(io.ComfyNode):
@@ -428,7 +428,7 @@ class LSDubDub(io.ComfyNode):
         f = tw.flags
         pa = _paint_flags(project, kit, tw, vocalisations)
         warned = _paint_warnings(pa)
-        info = SING.run(take, align.align, song.lead or song.vocal or song.mix, s['start'] - project.song_offset,
+        info = SING.run(take, align.align, song.lead or song.mix, s['start'] - project.song_offset,
                         st.path('sung.mp4'), work, pa, char=s['target'] if cast else None, db=cast.db if cast else None,
                         box=None if cast else s.get('box'), face_target=float(f.get('face_target', 512.0)),
                         snap=bool(f.get('snap', True)), report=st.path('gate.json'), lead=f.get('lead'),
@@ -494,6 +494,7 @@ class LSDubDub(io.ComfyNode):
             res[str(sid)] = {'f0': s['f0'], 'f1': s['f1'], 'render': '', 'pass': False, 'corr': None, 'reason': 'no kit for target',
                              'gate': '', 'key': '', 'result': 'none', 'used': 'source'}
         rec, failed = cut_render(project, source, res, quality, audio, song)
+        rec.on_fail = on_fail
         if failed: _log(f'{len(failed)} shot(s) failed: {failed} (see LSDub Fix It)')
         return io.NodeOutput(rec, cls._video(rec.cut))
 
@@ -501,9 +502,9 @@ class LSDubDub(io.ComfyNode):
     def _video(path):
         try:
             from comfy_api.latest import InputImpl
-            return InputImpl.VideoFromFile(path)
-        except Exception:
-            return path
+        except ImportError:
+            raise RuntimeError('LSDub needs ComfyUI 0.3.48 or newer: comfy_api.latest is missing') from None
+        return InputImpl.VideoFromFile(path)
 
 
 class LSDubOccluders(io.ComfyNode):
@@ -612,7 +613,9 @@ class LSDubContinuity(io.ComfyNode):
                     st.mark_done(True)
                 v.update(render=out, result=file_hash(out))
             shots[sid] = v
-        rec, _ = cut_render(project, source, shots, quality, 'source', None)
+        song = T.Song.from_json(render.song) if render.audio == 'song' and render.song else None
+        rec, _ = cut_render(project, source, shots, quality, render.audio if song else 'source', song)
+        rec.on_fail = render.on_fail
         return io.NodeOutput(rec, LSDubDub._video(rec.cut))
 
 

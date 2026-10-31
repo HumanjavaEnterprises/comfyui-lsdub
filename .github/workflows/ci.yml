@@ -30,5 +30,7 @@ jobs:
         run: ruff check --select S102,S307,E702,F --target-version py310 .
       - name: Tests (ComfyUI stubbed, CPU)
         run: pytest -q tests
+      - name: Docs match the schemas and the models table
+        run: python scripts/make_readme_nodes.py --check && python scripts/check_models_md.py
       - name: comfy node validate
         run: comfy --skip-prompt --no-enable-telemetry node validate

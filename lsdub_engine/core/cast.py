@@ -175,7 +175,9 @@ class Embedder:
                 f"cast: no embedder at {model}; run `lsdub cast export-onnx --out {model}` "
                 "(needs torch + transformers + onnx once) or pass --model"
             )
-        self.net = cv2.dnn.readNetFromONNX(model)
+        from .._models import check_export
+
+        self.net = cv2.dnn.readNetFromONNX(check_export(model))
 
     def __call__(self, crops):
         if not crops:
@@ -887,7 +889,9 @@ def export_onnx(hf, out):
     import torch
     from transformers import AutoModel
 
-    m = AutoModel.from_pretrained(hf).eval()
+    from .._models import KNOWN
+
+    m = AutoModel.from_pretrained(hf, revision=KNOWN.get(hf, {}).get("revision")).eval()
 
     class W(torch.nn.Module):
         def __init__(s, m):
@@ -909,6 +913,9 @@ def export_onnx(hf, out):
         opset_version=17,
         dynamo=False,
     )
+    from .._models import stamp_export
+
+    stamp_export(out)
     print("->", out)
     return 0
 

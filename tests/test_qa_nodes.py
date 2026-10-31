@@ -34,7 +34,7 @@ def test_verify_node(pack, tmp_path, monkeypatch):
     V = pack.nodes_qa.LSDubVerify
     rep, md = V.execute(p, src, rnd, shots, song, al).args
     assert calls == [(rnd.cut, 'lead.wav', src.path, 'align.json', 12.0)]
-    assert rep.verdicts == {'3': 'REVIEW'} and rep.fix == [3] and md == '# verify\n'
+    assert rep.verdicts == {'3': 'REVIEW'} and md == '# verify\n'
     V.execute(p, src, rnd, shots, song, al)
     assert len(calls) == 1                                                            # cached
     fmd, force = pack.nodes_qa.LSDubFixIt.execute(p, shots, rep, None, 0.5).args
@@ -90,7 +90,7 @@ def test_verify_passes_the_left_shot_and_fixit_is_informational(pack, tmp_path, 
     rnd = _rnd(pack, {'3': {'used': 'source', 'reason': 'sync gate failed: measured corr 0.1'}})
     rep, _ = pack.nodes_qa.LSDubVerify.execute(p, src, rnd, shots, song, al).args
     assert seen['shots'][0]['used'] == 'source' and 'sync gate' in seen['shots'][0]['left_reason']
-    assert rep.fix == [] and rep.verdicts == {'3': 'N/A'}
+    assert rep.verdicts == {'3': 'N/A'}
     md, force = pack.nodes_qa.LSDubFixIt.execute(p, shots, rep, None, 0.5).args
     assert force == '' and 'verify N/A' in md
 

@@ -25,7 +25,7 @@ def schemas(pack):
 
 
 PENDING = {'LSDubProject': ('mouth_stack',), 'LSDubScorecard': ('sharpness_mode',)}  # appended trailing optionals
-PENDING_SOCKETS = {'LSDubFixIt': ('scorecard',)}                                    # saved before these; regenerated with the rest
+PENDING_SOCKETS = {'LSDubFixIt': ('scorecard', 'ruler')}                                    # saved before these; regenerated with the rest
 
 
 def has_control(p):

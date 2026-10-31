@@ -104,7 +104,7 @@ OPEN = {
     "oh": 0.75,
     "ou": 0.3,
 }
-# ARKit pose per viseme (Audio2Face / ARKit 52 names) — for the guide head (approach b)
+# ARKit pose per viseme (ARKit 52 names) — for the guide head (approach b)
 ARKIT = {
     "sil": {"mouthClose": 0.05},
     "PP": {

@@ -43,8 +43,11 @@ def ground(F, phrases, dev="cuda", seeds=3, model_dir=None):
     from PIL import Image
     from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
-    proc = AutoProcessor.from_pretrained(FLORENCE, cache_dir=model_dir)
-    fl = Florence2ForConditionalGeneration.from_pretrained(FLORENCE, torch_dtype=torch.float16, cache_dir=model_dir).to(dev)
+    from .._models import KNOWN
+
+    rev = KNOWN[FLORENCE]["revision"]
+    proc = AutoProcessor.from_pretrained(FLORENCE, revision=rev, cache_dir=model_dir)
+    fl = Florence2ForConditionalGeneration.from_pretrained(FLORENCE, revision=rev, torch_dtype=torch.float16, cache_dir=model_dir).to(dev)
     H, W = F[0].shape[:2]
     task = "<CAPTION_TO_PHRASE_GROUNDING>"
     out = {}
@@ -73,7 +76,10 @@ def sam2_checkpoint(ckpt=None, model_dir=None):
         return ckpt
     from huggingface_hub import hf_hub_download
 
-    return hf_hub_download(SAM2_ID, SAM2_FILE, cache_dir=model_dir)
+    from .._models import KNOWN, check_file
+
+    k = KNOWN[SAM2_ID]
+    return check_file(hf_hub_download(SAM2_ID, SAM2_FILE, revision=k["revision"], cache_dir=model_dir), k["files"][SAM2_FILE])
 
 
 def follow(F, seeds, dev="cuda", ckpt=None, model_dir=None):

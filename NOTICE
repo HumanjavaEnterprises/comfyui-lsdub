@@ -5,9 +5,8 @@ https://lsdub.vidbnch.app
 
 This product includes software developed by Humanjava Enterprises.
 
-Under the Apache License 2.0 (Section 4), if you redistribute this code or a work derived from it, you must
-keep this NOTICE file (or its attribution text) with your distribution, keep the copyright and license
-notices in the source files, and state which files you changed. Credit LSDub and link the repository above.
+If you redistribute this code or a work derived from it, please keep this NOTICE file with your distribution
+and credit LSDub with a link to the repository above.
 
 Third-party (nothing below is vendored; models are downloaded by the user or on first use):
 - Mel-Band RoFormer architecture (Wang et al., 2023), re-implemented here from the paper. The vocal

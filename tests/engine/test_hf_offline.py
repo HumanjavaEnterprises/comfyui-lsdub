@@ -15,7 +15,7 @@ from lsdub_engine._models import hf_snapshot
 from lsdub_engine.core.lyric_align import whisper_source
 
 DINO, WHISPER = "facebook/dinov2-base", "Systran/faster-whisper-large-v3"
-REV = "f9e44c814b77203eaa57a6bdbbd535f21ede1415"
+REV = "aaaa444c814b77203eaa57a6bdbbd535f21ede14"  # an unpinned snapshot: the fake files here are not the pinned bytes
 
 
 def _files(d, names):

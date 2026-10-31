@@ -42,10 +42,7 @@ class Song(_Record):
     """LSDUB_SONG: the mix and what the AUDIO lane derives from it."""
     mix: str
     hash: str = ''
-    vocal: str = ''
-    inst: str = ''
     lead: str = ''
-    lead_activity: str = ''
     offset: float = 0.0
     hashes: dict = field(default_factory=dict)
 
@@ -59,10 +56,9 @@ class Lyrics(_Record):
 
 @dataclass
 class Align(_Record):
-    """LSDUB_ALIGN: word / phone timings and the viseme track."""
+    """LSDUB_ALIGN: word / phone timings."""
     align: str
     hash: str = ''
-    visemes: str = ''
 
 
 @dataclass
@@ -76,10 +72,9 @@ class Shots(_Record):
 
 @dataclass
 class Cast(_Record):
-    """LSDUB_CAST: who is in each shot (cast db, per-shot identity) and the dub plan."""
+    """LSDUB_CAST: who is in each shot (cast db, per-shot identity)."""
     db: str = ''
     scan: str = ''
-    plan: str = ''
     hash: str = ''
 
 
@@ -114,15 +109,17 @@ class Render(_Record):
     shots: dict = field(default_factory=dict)
     cut: str = ''
     hash: str = ''
+    audio: str = 'source'                              # the cut's sound; a re-cut keeps it
+    on_fail: str = 'source'
+    song: dict = field(default_factory=dict)           # the Song record, when audio is 'song'
 
 
 @dataclass
 class Report(_Record):
-    """LSDUB_REPORT: verify / scorecard / sync-QA results, PASS / REVIEW / FAIL per shot, the shots to fix."""
+    """LSDUB_REPORT: verify / scorecard / sync-QA results, PASS / REVIEW / FAIL per shot."""
     json: str = ''
     md: str = ''
     verdicts: dict = field(default_factory=dict)
-    fix: list = field(default_factory=list)
     hash: str = ''
 
 

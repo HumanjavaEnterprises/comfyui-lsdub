@@ -14,7 +14,7 @@ from .project import file_hash, parse_force_shots, stage_key
 
 
 def _vocal(song):
-    return song.lead or song.vocal or song.mix
+    return song.lead or song.mix
 
 
 def _cuts(shots, only=()):
@@ -85,8 +85,7 @@ class LSDubVerify(io.ComfyNode):
             st.mark_done(True)
         J = json.load(open(out + '.json'))
         verdicts = {str(r['shot']): r['band'] for r in J['shots']}
-        fix = sorted(int(k) for k, v in verdicts.items() if v in ('FAIL', 'REVIEW'))
-        return io.NodeOutput(T.Report(json=out + '.json', md=out + '.md', verdicts=verdicts, fix=fix, hash=file_hash(out + '.json')),
+        return io.NodeOutput(T.Report(json=out + '.json', md=out + '.md', verdicts=verdicts, hash=file_hash(out + '.json')),
                              open(out + '.md').read(), ui=media.ui_outputs(files=(out + '.md', out + '.json')))
 
 

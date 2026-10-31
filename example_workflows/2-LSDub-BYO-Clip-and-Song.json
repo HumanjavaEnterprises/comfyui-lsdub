@@ -21,7 +21,7 @@
    "properties": {},
    "title": "Start here",
    "widgets_values": [
-    "## LSDub 2: BYO Clip and Song\n**Does:** dubs the singer's mouth in your clip to your song, shot by shot, then grades it (Verify, Fix It) and saves the cut.\n\n**Needs:** the demo pack (`scripts/fetch_demo.py`): clip, song, lead vocal, lyrics and a lip kit. CPU is fine.\n\n**Time:** about 10-15 min on CPU for the 7.5 s demo (about 7-8 min per dubbed shot); re-runs are cache hits.\n\n**Change for your video:** *Load Video*, *Load Audio* x2, *LSDub Lyrics*, and *LSDub Lip Kit* kit_dir (or build a kit with workflow 1/4)."
+    "## LSDub 2: BYO Clip and Song\n**Does:** dubs the singer's mouth in your clip to your song, shot by shot, then grades it (Verify, Fix It) and saves the cut.\n\n**Needs:** the demo pack (`scripts/fetch_demo.py`): clip, song, lead vocal, lyrics and a lip kit. CPU is fine.\n\n**Runs on:** the CPU; re-runs are cache hits.\n\n**Change for your video:** *Load Video*, *Load Audio* x2, *LSDub Lyrics*, and *LSDub Lip Kit* kit_dir (or build a kit with workflow 1/4)."
    ],
    "color": "#432",
    "bgcolor": "#653"
@@ -35,7 +35,7 @@
    ],
    "size": [
     340,
-    346
+    320
    ],
    "flags": {},
    "order": 1,
@@ -74,8 +74,7 @@
     0,
     "fixed",
     "",
-    "local",
-    "plain"
+    "local"
    ],
    "color": "#335",
    "title": "LSDub Project"
@@ -923,7 +922,7 @@
    ],
    "size": [
     340,
-    268
+    216
    ],
    "flags": {},
    "order": 18,
@@ -953,16 +952,6 @@
      "name": "render",
      "type": "LSDUB_RENDER",
      "link": 36
-    },
-    {
-     "name": "scorecard",
-     "type": "LSDUB_REPORT",
-     "link": null
-    },
-    {
-     "name": "ruler",
-     "type": "LSDUB_REPORT",
-     "link": null
     }
    ],
    "outputs": [
@@ -1437,7 +1426,7 @@
     500,
     1380,
     1840,
-    348
+    296
    ],
    "color": "#88A",
    "font_size": 28,

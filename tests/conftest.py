@@ -80,7 +80,10 @@ def install_stubs(tmp_root):
         async def get_node_list(self): return []
     v.ComfyExtension = ComfyExtension
     api.v0_0_2 = v
-    sys.modules.update({'folder_paths': fp, 'comfy': comfy, 'comfy.model_management': mm, 'comfy.utils': cu,
+    latest = types.ModuleType('comfy_api.latest')
+    latest.InputImpl = types.SimpleNamespace(VideoFromFile=lambda path: path)
+    api.latest = latest
+    sys.modules.update({'comfy_api.latest': latest, 'folder_paths': fp, 'comfy': comfy, 'comfy.model_management': mm, 'comfy.utils': cu,
                         'comfy_api': api, 'comfy_api.v0_0_2': v, 'comfy_api.v0_0_2.io': v.io})
     return fp
 

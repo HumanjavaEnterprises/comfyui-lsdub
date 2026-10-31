@@ -161,7 +161,7 @@ class LSDubAlign(io.ComfyNode):
 
     @classmethod
     def _vocal(cls, song, vocal):
-        return (song.lead or song.vocal or song.mix) if vocal is None else None
+        return (song.lead or song.mix) if vocal is None else None
 
     @classmethod
     def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json):
@@ -170,7 +170,7 @@ class LSDubAlign(io.ComfyNode):
         tj = file_hash(transcript_json) if transcript_json else ''
         return stage_key('LSDubAlign', {'vocal': vh, 'lyrics': lyrics.hash if lyrics else 'transcript', 'pron': text_hash(pronunciations.strip()),
                                         'stt': stt_model, 'transcript': tj, 'v': 3, 'which': 'given' if vocal is not None else
-                                        ('lead' if song.lead else 'vocal' if song.vocal else 'mix')}, [project.cache_key()])
+                                        ('lead' if song.lead else 'mix')}, [project.cache_key()])
 
     @classmethod
     def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json=''):
@@ -224,7 +224,7 @@ class LSDubAlign(io.ComfyNode):
                  name='vocalisations')
             with open(md, 'w') as f: f.write(lyric_check_md(align, vis_skip, warn))
             st.mark_done(True, vocal=voc, seconds=round(dur, 3))
-        return io.NodeOutput(T.Align(align=align, hash=file_hash(align), visemes=vis_skip), open(md).read())
+        return io.NodeOutput(T.Align(align=align, hash=file_hash(align)), open(md).read())
 
 
 NODES = [LSDubSongSlot, LSDubAlign]

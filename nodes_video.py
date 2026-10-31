@@ -425,7 +425,7 @@ class LSDubTriage(io.ComfyNode):
             db = C.load_db(cast.db) if cast else None
             sing = presets.get(project.preset).singers
             targets = tuple(sing) if (sing and db is not None) else ()
-            vocal = (song.lead or song.vocal or song.mix) if song else None
+            vocal = (song.lead or song.mix) if song else None
             from . import devices
             emb = devices.embedder() if db is not None else None
             try:

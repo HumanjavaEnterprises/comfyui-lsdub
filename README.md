@@ -31,7 +31,7 @@ LTX-2.5 (video), Qwen-Image-Edit-2511 (stills and mouth shapes), ACE-Step 1.5 XL
 
 ## Start here
 
-1. **Workflow 2** first. It runs on the CPU, about 10 to 15 minutes with the demo pack.
+1. **Workflow 2** first. It runs on the CPU with the demo pack.
 2. **Then workflow 3 on your own video.** It tells you what will dub before you spend anything.
 3. **Workflows 1 and 4** need a big GPU (or a paid Comfy Cloud plan) and the generator models.
 
@@ -52,7 +52,7 @@ Use the Python that runs ComfyUI (its venv, or `python_embeded/python.exe` in th
 **You need:**
 - ComfyUI 0.3.48 or newer (the first release with the V3 node API `comfy_api.v0_0_2`). Tested on 0.34.
 - Python 3.10 or newer.
-- `ffmpeg` on PATH.
+- `ffmpeg` on PATH, or the `imageio-ffmpeg` package (a requirement of the pack), whose binary LSDub falls back to.
 - The packages in `requirements.txt`: numpy, OpenCV, SciPy, MediaPipe, Pillow, faster-whisper, SoundSwallower, g2p
   and transformers.
 
@@ -65,7 +65,7 @@ checksum, and installs into `ComfyUI/input/`. You get a 7.5 s clip, its song and
 transcript, a start still, a lip kit, and 15 s of "About That Time" (an ACE-Step song of ours) with its lyrics for
 workflow 4. All original synthetic characters and original songs.
 
-**Models:** every model, its size, licence, folder and which workflow needs it is in [MODELS.md](MODELS.md).
+**Models:** every model, its size, folder and which workflow needs it is in [MODELS.md](MODELS.md).
 Short version: nothing downloads when ComfyUI starts. You place the generators; Whisper, DINOv2 and the face models
 download on first use.
 
@@ -78,12 +78,14 @@ They live in `example_workflows/` and show up in ComfyUI's template browser. Wor
    from the generated clip, then dub, QA and save. Needs a GPU and the generator models.
 2. **BYO Clip and Song.** The demo clip, song, lead vocal, lyrics and lip kit, then triage, align, dub, verify, fix-it
    and save. It uses the bundled lip kit, so it runs on the CPU only (no GPU, no generator models). On the 7.5 s demo
-   clip it dubs the one close-up in about 8 minutes; triage and align add a few minutes on the first run.
+   clip it dubs the one close-up.
 3. **Test and Learn.** Triage, alignment, sync QA with its review card, and the fix-it notes. No dub. Run this first
    on any new video.
 4. **Make Your Character Sing** (experimental). A song and a character image (lyrics optional): vocal split, lead
    vocal, alignment, an LTX-2.5 performance video as long as the song, a lip kit built from it, the dub, verify, and
-   the saved video with the song. Needs a GPU, the generator models, and `MelBandRoformer_kim_vocals.ckpt`. Works
+   the saved video with the song. Needs a GPU, the generator models, and `MelBandRoformer_kim_vocals.ckpt`
+   (the download is named `MelBandRoformer.ckpt`: rename it, because Vocal Split lists `models/audio_separation` and
+   Queue stays blocked until the workflow's name is there). Works
    best with worded lyrics: the Dub here sets `vocalisations` to `mouth`, so scat (da da, ooh) is sung like words.
    With `skip`, those passages keep LTX-2.5's own mouth motion and Verify leaves their frames out of the sync score.
 
@@ -94,11 +96,18 @@ and `LSDub/qa`.
 
 **Project**
 - **LSDub Project:** the project folder for one cut.
-  - `mode`: `run` or `test_learn`.
-  - `fps` and `song_offset`: video time = song time + offset.
-  - `preset`: `landing` is the demo cast; `none` lets any named character sing.
-  - `seed` and `force_shots` (e.g. `21,23` redoes those shots once).
-  - `backend`: `local` or `comfy_cloud`.
+<!-- project-inputs:begin -->
+  - `name`: Project name: a folder under root. One per cut.
+  - `root`: Where projects live. Empty = ComfyUI output/lsdub.
+  - `mode`: run = the full dub. test_learn = analyse the source and song, run sync QA and suggest fixes, without dubbing.
+  - `fps`: Frame rate of the delivered cut.
+  - `song_offset`: Video time of the song's 0 s, in seconds (video = song + offset).
+  - `preset`: Cast preset: who sings, the hook lines and per-face kit settings. none = any named character can sing.
+  - `seed`: Seed for the generator slots (video, still, song).
+  - `force_shots`: Shots to redo even if they passed, e.g. "21,23". Acts once per value: change it to redo again. Their earlier renders are kept.
+  - `backend`: Where the generator slots (song, still, video, lip kit) run: local = this ComfyUI's GPU and models; comfy_cloud = Comfy Cloud, signed in with your comfy.org account (needs a paid Comfy Cloud plan; uses your credits). The dub and QA always run locally.
+  - `mouth_stack`: The mouth recipe: plain = the simple warp; layers = the full layer stack (teeth, tongue, cavity) on any kit. It changes the render; shots keep their own cache folders.
+<!-- project-inputs:end -->
 
 **VIDEO lane**
 - **LSDub Video:** a finished clip or a still, or a still plus a prompt, animated with LTX-2.5.
@@ -169,21 +178,8 @@ Python SDK (`pip install comfy-sdk`).
 - **Plan:** API-key runs need a **paid Comfy Cloud plan**. Free-tier accounts are refused, and LSDub says so in plain
   words.
 - **Models:** Comfy Cloud has the same generator models. LSDub renames the one file whose name differs there (the
-  Qwen-Image-Edit Lightning LoRA). Tested 2026-10-29: a Still edit in 54 s and a 2 s LTX-2.5 clip in 16 s.
+  Qwen-Image-Edit Lightning LoRA).
 - **Cost:** cloud runs use your Comfy credits.
-
-## Runtimes
-
-Measured on a 100 s internal test film (not the demo pack):
-- Shot split: about 20 s.
-- Triage: about 8 min on the CPU, about 3 min with a GPU (identity on the GPU).
-- Align: about 1 min.
-- The dub: **about 7 to 8 min per dubbed shot on the CPU**, with auto.
-- Building a lip kit: about 8 min on a 24 GB card.
-- LTX-2.5: about 35 s for a 2 s clip on a 96 GB card.
-- ACE-Step: about 12 s for 15 s of song.
-
-Re-runs are cache hits.
 
 ## Troubleshooting
 

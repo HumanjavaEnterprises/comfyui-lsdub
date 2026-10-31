@@ -22,7 +22,7 @@ feature space (inner-lip gap and mouth width, in units of the take's own range):
      opening times (the naturalness ruler's fall / rise), its plateau inside the pause. DURATION-DEPENDENT UNDERSHOOT: a
      segment shorter than its class's reach time (its excursion / the take's own transition speed) keeps
      1 - U (1 - dur / reach) of its dominance (U = --coart-undershoot).
-  4. (optional) an EXTERNAL DYNAMICS source (--coart-dyn csv, e.g. the earlier Audio2Face-3D run on the song timeline):
+  4. (optional) an EXTERNAL DYNAMICS source (--coart-dyn csv, e.g. a blendshape export on the song timeline):
      percentile-mapped onto the take's range and mixed into the target by --coart-dyn-mix outside pauses / skip spans.
   5. THE TAKE'S OWN RANGE (--coart-range): the plan's p5 / p95 mapped onto the take's own, the neutral level fixed (shut
      stays shut, round stays round), class targets far outside the face's range clipped first; before and after the fit.
@@ -635,7 +635,7 @@ def take_times(uo, fps):
 
 # --------------------------------------------------------------------------------- an external dynamics source --
 def load_dyn(path, t0, n, fps, gap="geo_gap_cm", width="geo_width_cm"):
-    """a model's mouth trajectory on the song timeline (e.g. Audio2Face-3D's 52 ARKit weights + its mesh's lip gap /
+    """a model's mouth trajectory on the song timeline (e.g. a model's 52 ARKit weights + its mesh's lip gap /
     width, an `a2f_cut_25fps.csv`: one row per `time_s` = the start of a 1/fps exposure interval, each row the mean over
     it) -> per frame of this clip (frame k = song t0 + k / fps, its exposure centre t0 + (k + 0.5) / fps): (gap, width)
     in the model's units, or None."""
@@ -719,7 +719,7 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     for s in segs:
         if s["v"] == "rest":
             pause[s["frames"]] = True
-    # the external dynamics (e.g. Audio2Face-3D): its trajectory mapped onto the take's own range (percentile map, the
+    # the external dynamics (e.g. a blendshape export): its trajectory mapped onto the take's own range (percentile map, the
     # take's active frames), mixed into the target outside the pauses (the silence rule) and the skipped spans
     Dm = None
     if mix > 0:

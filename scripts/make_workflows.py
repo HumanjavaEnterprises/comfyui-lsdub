@@ -5,7 +5,7 @@
 
   python scripts/make_workflows.py            (no ComfyUI needed: the schemas are read with the test stubs)
 
-Every workflow uses preset=landing, backend=local and the demo assets from scripts/fetch_demo.py."""
+Workflows 1 to 3 use preset=landing, workflow 4 preset=none; all use backend=local and the demo assets from scripts/fetch_demo.py."""
 import json
 import os
 import sys
@@ -15,6 +15,11 @@ sys.path.insert(0, os.path.join(ROOT, 'tests'))
 import conftest  # noqa: E402  (installs the ComfyUI stubs, loads the pack)
 
 PACK = conftest.load_pack()
+# what each workflow runs on, for its Start-here note. No durations: they age and differ per machine.
+RUNTIMES = {1: 'a 96 GB card, or Comfy Cloud on a paid plan.',
+            2: 'the CPU; re-runs are cache hits.',
+            3: 'the CPU (the first run also downloads ~3 GB of speech-to-text weights).',
+            4: 'a 96 GB card, or Comfy Cloud on a paid plan. The demo song is "About That Time", an ACE-Step song of ours.'}
 WIDGET = {'STRING', 'INT', 'FLOAT', 'BOOLEAN', 'COMBO'}
 LANE_TITLE = {'video': 'VIDEO', 'audio': 'AUDIO', 'mouth': 'MOUTH', 'qa': 'QA'}
 GROUP_COLOUR = {'video': '#3f789e', 'audio': '#8A8', 'mouth': '#b06634', 'qa': '#88A'}
@@ -207,7 +212,7 @@ def dub_and_qa(wf, kit_kw, audio='source', vocalisations='skip'):
 
 def test_and_learn():
     wf = WF('LSDub 3: Test and Learn')
-    wf.note('## LSDub 3: Test and Learn\n**Does:** analyses a music video with no dub: shots, which can be dubbed (Triage), word timing (Align), measured lip sync (Sync QA) and a fix-it list.\n\n**Needs:** the demo pack (`python custom_nodes/comfyui-lsdub/scripts/fetch_demo.py`), or your own clip + song. CPU is fine.\n\n**Time:** about 1-3 min on the demo (first run also downloads ~3 GB of speech-to-text weights).\n\n**Change for your video:** *Load Video* (your clip), *Load Audio* x2 (the song, and its dry lead vocal if you have it), *LSDub Lyrics*. Keep *LSDub Project* mode = test_learn.')
+    wf.note('## LSDub 3: Test and Learn\n**Does:** analyses a music video with no dub: shots, which can be dubbed (Triage), word timing (Align), measured lip sync (Sync QA) and a fix-it list.\n\n**Needs:** the demo pack (`python custom_nodes/comfyui-lsdub/scripts/fetch_demo.py`), or your own clip + song. CPU is fine.\n\n**Runs on:** ' + RUNTIMES[3] + '\n\n**Change for your video:** *Load Video* (your clip), *Load Audio* x2 (the song, and its dry lead vocal if you have it), *LSDub Lyrics*. Keep *LSDub Project* mode = test_learn.')
     project(wf, 'test_learn')
     byo_inputs(wf)
     analysis(wf, demo_transcript=True)
@@ -225,7 +230,7 @@ def test_and_learn():
 
 def byo():
     wf = WF('LSDub 2: BYO Clip and Song')
-    wf.note("## LSDub 2: BYO Clip and Song\n**Does:** dubs the singer's mouth in your clip to your song, shot by shot, then grades it (Verify, Fix It) and saves the cut.\n\n**Needs:** the demo pack (`scripts/fetch_demo.py`): clip, song, lead vocal, lyrics and a lip kit. CPU is fine.\n\n**Time:** about 10-15 min on CPU for the 7.5 s demo (about 7-8 min per dubbed shot); re-runs are cache hits.\n\n**Change for your video:** *Load Video*, *Load Audio* x2, *LSDub Lyrics*, and *LSDub Lip Kit* kit_dir (or build a kit with workflow 1/4).")
+    wf.note("## LSDub 2: BYO Clip and Song\n**Does:** dubs the singer's mouth in your clip to your song, shot by shot, then grades it (Verify, Fix It) and saves the cut.\n\n**Needs:** the demo pack (`scripts/fetch_demo.py`): clip, song, lead vocal, lyrics and a lip kit. CPU is fine.\n\n**Runs on:** " + RUNTIMES[2] + "\n\n**Change for your video:** *Load Video*, *Load Audio* x2, *LSDub Lyrics*, and *LSDub Lip Kit* kit_dir (or build a kit with workflow 1/4).")
     project(wf, 'run')
     byo_inputs(wf)
     analysis(wf, demo_transcript=True)
@@ -235,7 +240,7 @@ def byo():
 
 def prompt_everything():
     wf = WF('LSDub 1: Prompt Everything')
-    wf.note('## LSDub 1: Prompt Everything\n**Does:** edits a still (Qwen-Image-Edit), animates it (LTX-2.5), generates a song (ACE-Step 1.5), builds a lip kit from the clip, dubs, grades and saves.\n\n**Needs:** a big GPU (LTX-2.5 needs ~70 GB, or set *LSDub Project* backend = comfy_cloud on a paid plan) and the generator models (README, Models).\n\n**Time:** about 10 min on a 96 GB card.\n\n**Change:** *Load Image* (your character), the *LSDub Still* and *LSDub Video* prompts, *LSDub Song* tags, *LSDub Lyrics*.')
+    wf.note('## LSDub 1: Prompt Everything\n**Does:** edits a still (Qwen-Image-Edit), animates it (LTX-2.5), generates a song (ACE-Step 1.5), builds a lip kit from the clip, dubs, grades and saves.\n\n**Needs:** a big GPU (LTX-2.5 needs ~70 GB, or set *LSDub Project* backend = comfy_cloud on a paid plan) and the generator models (README, Models).\n\n**Runs on:** ' + RUNTIMES[1] + '\n\n**Change:** *Load Image* (your character), the *LSDub Still* and *LSDub Video* prompts, *LSDub Song* tags, *LSDub Lyrics*.')
     project(wf, 'run')
     wf.add('load_still', 'LoadImage', (0, 250), image=DEMO + 'landing_still.png')
     wf.add('still', 'LSDubStillSlot', (400, -300), edit_prompt='a close-up of the same singer, head and shoulders filling the frame, '
@@ -261,7 +266,7 @@ LYRICS_ALR = ("aged like rocks, still in the box\ntimeless on the shelf, winding
 
 def make_character_sing():
     wf = WF('LSDub 4: Make Your Character Sing')
-    wf.note('## LSDub 4: Make Your Character Sing\n**Does:** a song + a character image -> a video of the character singing it: vocal split, lead vocal, alignment, an LTX-2.5 performance as long as the song, a lip kit from it, the dub, Verify (the sync score) and the saved video with the song.\n\n**Needs:** a big GPU (or backend = comfy_cloud), the generator models and the Mel-Band RoFormer vocal checkpoint in models/audio_separation (README).\n\n**Time:** about 30-40 min on a 96 GB card for the 15 s demo song (\"About That Time\", an ACE-Step song of ours).\n\n**Change:** *Load Audio* (your song), *Load Image* (your character), *LSDub Performance* prompt, *LSDub Lyrics*.')
+    wf.note('## LSDub 4: Make Your Character Sing\n**Does:** a song + a character image -> a video of the character singing it: vocal split, lead vocal, alignment, an LTX-2.5 performance as long as the song, a lip kit from it, the dub, Verify (the sync score) and the saved video with the song.\n\n**Needs:** a big GPU (or backend = comfy_cloud), the generator models and the Mel-Band RoFormer vocal checkpoint in models/audio_separation (README).\n\n**Runs on:** ' + RUNTIMES[4] + '\n\n**Change:** *Load Audio* (your song), *Load Image* (your character), *LSDub Performance* prompt, *LSDub Lyrics*.')
     wf.add('project', 'LSDubProject', (0, 0), name='lsdub-character-sing', mode='run', preset='none', song_offset=0.0,
            backend='local')
     wf.add('load_song', 'LoadAudio', (0, 500), audio=DEMO + 'alr_song_15s.wav')
