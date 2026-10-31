@@ -12,7 +12,7 @@ from scipy.ndimage import gaussian_filter1d
 from . import lip_layers as ll
 
 LIP_IN, LIP_OUT = ll.LIP_IN, ll.LIP_OUT
-PINK_ROOM = 0.85  # the fill's core pink stops at this share of the take's core share at that aperture
+PINK_ROOM = 0.94  # the fill's core pink stops at this share of the take's core share at that aperture
 CORE = 7  # the take's pink share is read this many px inside its contour (kernel side): the rim is lip, not interior
 RELEASE = 0.8  # the pink sink's share kept per frame after the last frame that needed it
 SANK_MIN = 0.005  # a sink below this is off
