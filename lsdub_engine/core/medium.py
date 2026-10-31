@@ -39,12 +39,12 @@ def read(video, n=0):
     return F, cap.get(cv2.CAP_PROP_FPS) or 25.0
 
 
-def write(frames, path, fps=25.0, audio=None, crf=12):
+def write(frames, path, fps=25.0, audio=None, crf=12, lossless=False):
     h, w = frames[0].shape[:2]
     cmd = ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", str(fps), "-i", "-"]
     if audio:
         cmd += ["-i", audio, "-map", "0:v", "-map", "1:a?", "-c:a", "aac", "-shortest"]
-    cmd += ["-c:v", "libx264", "-crf", str(crf), "-pix_fmt", "yuv420p", path]
+    cmd += [*(("-c:v", "libx264rgb", "-qp", "0") if lossless else ("-c:v", "libx264", "-crf", str(crf), "-pix_fmt", "yuv420p")), path]
     p = ff.popen(cmd, stdin=ff.PIPE)
     for f in frames:
         p.stdin.write(np.ascontiguousarray(f).tobytes())
@@ -272,10 +272,12 @@ def run(
     fps_mult=1,
     pick=None,
     zoom_note=True,
+    lossless=False,
 ):
     """fps_mult > 1: the crop is painted at fps_mult x the frame rate (each frame repeated; `track` must be built at that
     rate) and `pick(warp_json_path, n, fps_mult) -> [internal frame per output frame]` chooses the frames back
-    (default: frame k * fps_mult). The rest is the tier-2 composite."""
+    (default: frame k * fps_mult). The rest is the tier-2 composite. lossless: the crop and the painted crop are written lossless;
+    the delivered `out` keeps its crf."""
     from .cast import Faces
 
     t_ = [time.perf_counter()]  # stage marks: numbers only, nothing below reads them
@@ -292,10 +294,11 @@ def run(
     crops = [crop_frame(f, T["cx"][i], T["cy"][i], S, z, O) for i, f in enumerate(F)]
     cpath, ppath = os.path.join(work, "crop.mp4"), os.path.join(work, "crop_painted.mp4")
     m_ = max(1, int(fps_mult))
-    write([c for c in crops for _ in range(m_)], cpath, fps * m_, crf=10)
+    write([c for c in crops for _ in range(m_)], cpath, fps * m_, crf=10, lossless=lossless)
     t_.append(time.perf_counter())
     wj = os.path.join(work, "crop_painted_warp.json")
     cmd = paint_api.argv(cpath, track, n * m_, user_overrides=paint_args, out=ppath, warp_json=wj)
+    cmd = [*cmd, "--warp-lossless"] if lossless else cmd
     print("paint " + " ".join(cmd), file=sys.stderr)
     paint_api.call(cmd)
     t_.append(time.perf_counter())
@@ -417,6 +420,7 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--grain-cap", type=float, default=3.0, help="max re-added grain sigma (8-bit)")
     ap.add_argument("--max-gap", type=int, default=3, help="a track / landmark gap longer than this (frames) is not pasted")
+    ap.add_argument("--lossless-intermediates", action="store_true", help="crop and painted crop lossless; changes the output's pixels")
     a = ap.parse_args(argv)
     run(
         a.video,
@@ -436,6 +440,7 @@ def main(argv=None):
         a.json,
         a.grain_cap,
         a.max_gap,
+        lossless=a.lossless_intermediates,
     )
     return 0
 

@@ -113,6 +113,7 @@ def run(
     word_close=None,
     auto=False,
     preset=None,
+    lossless=False,
 ):
     os.makedirs(work, exist_ok=True)
     if not a2f:
@@ -181,7 +182,18 @@ def run(
     target = dyn_target(dyn, n, t0, fps)
     pick = (lambda wj, n_, m_: pick_extremes([f["egap"] for f in json.load(open(wj))["frames"]], target, m_)) if m > 1 else None
     R = MED.run(
-        take, trk, out, pa, box, face_target, work=work, fps_mult=m, pick=pick, zoom_note=False, report=os.path.join(work, "medium.json")
+        take,
+        trk,
+        out,
+        pa,
+        box,
+        face_target,
+        work=work,
+        fps_mult=m,
+        pick=pick,
+        zoom_note=False,
+        report=os.path.join(work, "medium.json"),
+        **({"lossless": True} if lossless else {}),
     )
     tm.update(R.get("timings", {}))
     crop0 = MED.read(os.path.join(work, "crop.mp4"), 1)[0][0]
@@ -358,6 +370,7 @@ def main(argv=None):
     ap.add_argument("--no-snap", dest="snap", action="store_false")
     ap.add_argument("--a2f-csv", help="jaw-curve csv (jawOpen): part of the standard recipe")
     ap.add_argument("--json")
+    ap.add_argument("--lossless-intermediates", action="store_true", help="crop and painted crop lossless; changes the output's pixels")
     ap.add_argument(
         "--lead",
         type=float,
@@ -391,6 +404,7 @@ def main(argv=None):
         word_close=a.word_close,
         auto=a.auto,
         preset=a.preset,
+        lossless=a.lossless_intermediates,
     )
     return 0 if info["pass"] else 1
 

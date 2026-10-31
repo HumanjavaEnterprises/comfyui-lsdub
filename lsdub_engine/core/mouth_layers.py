@@ -1172,6 +1172,9 @@ class LayerCompositor:
     desat, tex_from / tex_out, tongue 'on' | 'off' | 'wedge', rim (strength, width IOD), wet, cover 'on' | 'off' |
     'fill', smooth (frames)."""
 
+    fill_l3 = "hide"  # --warp-fill-l3: the arch lowers under the fill
+    take_interior = None  # --warp-interior-source take (interior_take.TakeInterior)
+
     def __init__(
         self,
         teeth,
@@ -1966,6 +1969,14 @@ class LayerCompositor:
         self.open_s, self.tg, self.prepared = op, tg, True
         return self
 
+    def slow_tongue(self, vis, sigma):
+        """--warp-tongue-pose lowpass (after plan_single): the vowel pose comes back under `single`, low-passed by sigma frames, so
+        the tongue changes shape with the vowels without following each one (no slosh)."""
+        n = self.n
+        tg = np.array([TONGUE_VOWEL.get(vis[min(i, len(vis) - 1)], (0.0, 0.0, 0.0)) for i in range(n)], float).reshape(n, 3)
+        self.tg = gaussian_filter1d(tg, max(0.5, sigma), axis=0, mode="nearest")
+        return self
+
     def plan_single(self, P_out, sigma=1.0, tongue_sigma=2.0, lo_limit=0.09, pin="none"):
         """--warp-reg single: ONE reference for the whole interior (the sub-elements' registrations
         slosh across frames, and the placement rule, not the pins, drives it). Physically the upper teeth
@@ -2581,6 +2592,7 @@ class LayerCompositor:
         else:
             rgb3, a3 = lo_rgb, lo_a
         L["L3"] = (rgb3, a3 * clip)
+        lo_l3 = (lo_rgb, lo_a * clip) if self.fill_l3 == "restore" else None  # the arch lowers alone, no tongue
         if band_log:
             up_rgb, up_a, up_h = self.up.render(self.proj(i, False), box, rot_up, facing=self.facing, hmap=True)
         else:
@@ -2599,7 +2611,19 @@ class LayerCompositor:
             cf_rgb, cf_a = self.fill_cavity(i, Q, h, w, io, L["L4"][0], L["L4"][1])
             L["L2"] = (L["L2"][0] * (1 - cf_a[..., None]) + cf_rgb * cf_a[..., None], L["L2"][1])
             om = tl.poly_mask(Q, (h, w), 0.0, 0.03 * io).astype(np.float32)
-            L["L3"] = (L["L3"][0], L["L3"][1] * (1 - np.maximum(cf_a, om)))  # the arch lowers yield to the fill (corners too: no grey line)
+            if self.fill_l3 == "restore":  # D3 evidence: the real lower row over the fill's tongue, in place of the fill's drawn row
+                L["L3"] = lo_l3
+            elif self.fill_l3 == "off":  # D3 evidence: no L3 at all, for a byte compare with today
+                L["L3"] = (L["L3"][0], np.zeros_like(L["L3"][1]))
+            else:
+                L["L3"] = (
+                    L["L3"][0],
+                    L["L3"][1] * (1 - np.maximum(cf_a, om)),
+                )  # the arch lowers yield to the fill (corners too: no grey line)
+        if self.take_interior is not None:  # the take's own tongue and cavity pixels in the opening
+            it_rgb, it_a = self.take_interior.paint(i, Q, box, self.interior_ap(Po), L["L4"][1])
+            L["L2"] = (L["L2"][0] * (1 - it_a[..., None]) + it_rgb * it_a[..., None], L["L2"][1])
+            L["L3"] = (L["L3"][0], L["L3"][1] * (1 - it_a))
         if band_log:
             self._band = dict(i=i, up_h=up_h, lo_h=lo_h, rims=rims)
         self._full = dict(L3=a3, L4=up_a)  # unclipped arches (the debug view shows the whole band)
@@ -2828,6 +2852,7 @@ class LayerCompositor:
             float(smootherstep((op - (0.55 - 0.30 * talk)) / 0.35))
             * (0.10 + 1.10 * talk)
             * (1.0 - 0.45 * float(smootherstep((hmax / max(1.0, io) - 0.20) / 0.10)))
+            * (self.fill_l3 != "restore")
         )  # very wide: tongue over them
         if lw > 0:
             m = up_a > 0.6
@@ -2861,6 +2886,10 @@ class LayerCompositor:
             a = an
         a = cv2.GaussianBlur(a.astype(np.float32), (0, 0), 0.6) * opening * k
         return np.clip(rgb, 0, 255).astype(np.float32), a.astype(np.float32)
+
+    @staticmethod
+    def interior_ap(Po):
+        return float(np.linalg.norm(Po[13] - Po[14]) / max(1e-6, np.linalg.norm(Po[61] - Po[291])))
 
     def corner_growth(self, i, Pt, Po, io, yaw_k=0.15):
         """per mouth corner (left, right), px, x cover_corners: how far the plan moves the outer corner (61 / 291)

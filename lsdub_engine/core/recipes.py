@@ -134,6 +134,8 @@ LAYER_ONLY = (
     "--warp-arch-",
     "--warp-reg",
     "--warp-cavity",
+    "--warp-fill-l3",
+    "--warp-interior-source",
     "--warp-tongue",
     "--warp-cover",
     "--warp-lower-",
@@ -157,9 +159,15 @@ RULES = (
         ("--warp-tongue",),
         "--warp-reg single zeroes the vowel part of the tongue's pose (rise, tip, retraction: plan_single, tg = 0); the tongue is still "
         "drawn and still moves with the planned opening, smoothed by --warp-reg-tongue-sigma",
-        lambda a: _single(a) and a.warp_tongue == "wedge",
+        lambda a: _single(a) and a.warp_tongue == "wedge" and a.warp_tongue_pose == "zero",
         inert=False,
     ),
+    Rule(
+        ("--warp-tongue-pose", "--warp-tongue-pose-sigma"),
+        "read only under --warp-reg single",
+        lambda a: not _single(a),
+    ),
+    Rule(("--warp-fill-l3",), "read only under --warp-cavity fill", lambda a: not fill_active(a)),
     Rule(
         L3_FLAGS,
         "--warp-cavity fill mostly hides L3 (lower teeth + tongue) inside the opening: its alpha is 0 there, grown by 0.03 IOD. These "

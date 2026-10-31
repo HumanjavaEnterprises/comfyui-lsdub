@@ -1451,6 +1451,7 @@ class WarpClip:
                 from . import mouth_paint
 
                 mouth_paint.warn_paint(mouth_paint.lip_stats_warnings(g))
+        opt = vars(self.a).get  # opt-in flags outside the golden recipes' read list
         if comp is not None and g("warp_arch_band_log", False):
             comp.band_log = True  # the lip-band ruler, logging only
         if comp is not None and getattr(self, "yc", None) is not None:
@@ -1486,6 +1487,14 @@ class WarpClip:
             comp.prepare(Fe[:, 0], [fr_t[min(i, len(fr_t) - 1)]["vis"] for i in range(n)])  # eased per-frame layer parameters
         if single:
             comp.plan_single(P_out, g("warp_reg_jaw_sigma", 1.0), g("warp_reg_tongue_sigma", 2.0), g("warp_reg_lo_limit", 0.09), gpin)
+            if opt("warp_tongue_pose", "zero") == "lowpass":
+                comp.slow_tongue([fr_t[min(i, len(fr_t) - 1)]["vis"] for i in range(n)], opt("warp_tongue_pose_sigma", 0.24) * self.fps)
+        if comp is not None:
+            comp.fill_l3 = opt("warp_fill_l3", "hide")
+            if opt("warp_interior_source", "model") == "take":
+                from .interior_take import TakeInterior
+
+                comp.take_interior = TakeInterior(self.bank, frames, S, Fe, self.scale, g("warp_pose_w", 2.0))
         self.teeth, self.comp, self.md, self.fit_t = teeth, comp, md, fit_t
 
     def _patch(self, i, ov):
@@ -1755,6 +1764,8 @@ class WarpClip:
         info = self.teeth.info()
         if self.comp is not None:
             info["layers"] = self.comp.info()
+            if self.comp.take_interior is not None:
+                info["layers"]["interior_take"] = self.comp.take_interior.log
             info["layers"]["bite_overlap"] = self.comp.bite_overlap(self.P_out, self.Fe[:, 0])
             if "corridor" in info["layers"]:  # the corridor's summary from the delivered frames' own entries
                 info["layers"]["corridor"] = self.comp.corridor_info([((l or {}).get("reg") or {}).get("corridor") for l in self.log])
@@ -1781,12 +1792,11 @@ class WarpClip:
                 str(self.fps),
                 "-i",
                 "-",
-                "-c:v",
-                "libx264",
-                "-crf",
-                "14",
-                "-pix_fmt",
-                "yuv420p",
+                *(
+                    ("-c:v", "libx264rgb", "-qp", "0")
+                    if vars(a).get("warp_lossless")
+                    else ("-c:v", "libx264", "-crf", "14", "-pix_fmt", "yuv420p")
+                ),
                 a.out,
             ],
             stdin=ff.PIPE,

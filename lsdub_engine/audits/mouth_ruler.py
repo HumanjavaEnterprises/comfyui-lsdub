@@ -33,6 +33,7 @@ not the take's lips. In every "A -> B" the left side is the take.
   lsdub mouth-ruler stats --take T.mp4 [--render R.mp4] [--take-t s] [--render-t s] [--frames n] [--mask full.npz] [--json o.json]
   lsdub mouth-ruler stages a=one.mp4 b=two.mp4[@start_frame[+frames]] ... [--json o.json]
   lsdub mouth-ruler null --reference T.mp4 --null N.mp4 [--frames n] [--json o.json]
+  lsdub mouth-ruler source --take T.mp4 [--render R.mp4] [--take-t s] [--render-t s] [--frames n] [--json o.json]
   lsdub mouth-ruler run --manifest m.json --out dir [--labels a,b] [--jobs 4] [--reference audit.json]
 """
 
@@ -526,6 +527,106 @@ def spectrum(A, TA, B, TB, M=None):
     )
 
 
+STABLE = [33, 133, 263, 362, 1, 168, 6]
+
+
+def canon(F, T, ref=None):
+    """per frame a similarity onto the stable points (eyes, nose bridge) of ref, by default the first found frame: the skull,
+    not the mouth."""
+    ok = [i for i in range(len(T)) if np.isfinite(T[i]).all()]
+    ref = T[ok[0]][STABLE] if ref is None else ref
+    return {i: cv2.estimateAffinePartial2D(T[i][STABLE].astype(np.float32), ref.astype(np.float32), method=cv2.LMEDS)[0] for i in ok}
+
+
+def tf(M, p):
+    return p @ M[:, :2].T + M[:, 2]
+
+
+def interior_residual(F, T, pairs=120):
+    """the take's interior against itself: frame pairs at the same aperture (within 0.03 mouth width, at least 4 frames apart),
+    the second carried onto the first by an affine of the inner contour plus a phase-correlation shift. Mean |L*| difference,
+    all / teeth / tongue and cavity; `floor` = the same on neighbouring frames, the tracking and codec share."""
+    ok = [i for i in range(len(T)) if np.isfinite(T[i]).all()]
+    ap = {i: float(np.linalg.norm(T[i][13] - T[i][14]) / np.linalg.norm(T[i][61] - T[i][291])) for i in ok}
+    op = [i for i in ok if ap[i] > OPEN]
+    near = [(a, b) for k, a in enumerate(op) for b in op[k + 1 :] if b - a >= 4 and abs(ap[a] - ap[b]) < 0.03]
+    near = [near[k] for k in np.linspace(0, len(near) - 1, min(pairs, len(near))).astype(int)] if near else []
+    adj = [(a, a + 1) for a in op if a + 1 in ap and ap[a + 1] > OPEN][:pairs]
+
+    def one(a, b):
+        fa, fb = F[a], F[b]
+        M = np.linalg.lstsq(np.c_[T[b][LIPI], np.ones(len(LIPI))], T[a][LIPI], rcond=None)[0].T
+        w = cv2.warpAffine(fb, M.astype(np.float64), fa.shape[1::-1], flags=cv2.INTER_LINEAR)
+        m = poly(fa.shape[:2], T[a][LIPI])
+        m = erode(m, 2) if erode(m, 2).sum() >= 30 else m
+        ys, xs = np.nonzero(m)
+        if len(ys) < 30:
+            return None
+        y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+        ga, gb = [cv2.cvtColor(v[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY).astype(np.float32) for v in (fa, w)]
+        if min(ga.shape) >= 8:
+            (dx, dy), _ = cv2.phaseCorrelate(gb, ga)
+            if max(abs(dx), abs(dy)) < 0.15 * max(ga.shape):
+                w = cv2.warpAffine(w, np.array([[1, 0, dx], [0, 1, dy]], np.float64), fa.shape[1::-1], flags=cv2.INTER_LINEAR)
+        la, lb = lab(fa), lab(w)
+        tooth = (la[..., 0] > 55) & (np.hypot(la[..., 1], la[..., 2]) < 22)
+        d = np.abs(la[..., 0] - lb[..., 0])
+        return float(d[m].mean()), float(d[m & tooth].mean()) if (m & tooth).sum() > 25 else np.nan, float(d[m & ~tooth].mean())
+
+    def med(ps):
+        r = [x for x in (one(a, b) for a, b in ps) if x is not None]
+        return [round(float(np.nanmedian(c)), 2) if len(c) and np.isfinite(c).any() else None for c in zip(*r)] if r else [None] * 3
+
+    r, fl = med(near), med(adj)
+    return dict(
+        open_frames=len(op), pairs=len(near), res_all=r[0], res_teeth=r[1], res_interior=r[2], floor_all=fl[0], floor_interior=fl[2]
+    )
+
+
+def reveal(TA, CA, TB, CB, shape):
+    """does the dub open past what the take showed? Inner contours in skull space: the union over the take is what was seen,
+    `unseen` = the share of a render frame's opening outside it. Apertures in mouth widths."""
+    S = 2
+    H, W = shape[0] * S, shape[1] * S
+    seen = np.zeros((H, W), bool)
+    for i, M in CA.items():
+        seen |= poly((H, W), tf(M, TA[i][LIPI]) * S)
+    ap = lambda t: float(np.linalg.norm(t[13] - t[14]) / np.linalg.norm(t[61] - t[291]))
+    a_t = [ap(TA[i]) for i in CA]
+    u, a_r = [], []
+    for i, M in CB.items():
+        a_r.append(ap(TB[i]))
+        m = poly((H, W), tf(M, TB[i][LIPI]) * S)
+        if a_r[-1] > OPEN and m.sum() > 0:
+            u.append(float((m & ~seen).sum() / m.sum()))
+    u_ = np.array(u) if u else np.zeros(1)
+    top = max(a_t)
+    return dict(
+        ap_take_max=round(top, 3),
+        ap_render_max=round(max(a_r), 3),
+        frames_past_take=int((np.array(a_r) > top).sum()),
+        open_frames=len(u),
+        unseen_mean=round(float(u_.mean()), 4),
+        unseen_p95=round(float(np.percentile(u_, 95)), 4),
+        unseen_max=round(float(u_.max()), 4),
+        frames_over_5pct=int((u_ > 0.05).sum()),
+    )
+
+
+def source_test(take, render, take_t=None, render_t=None, frames=None):
+    """the real interior's source test on one shot: the take's self-residual and, given a render, reveal against seen."""
+    A = read_clip(take, t=take_t, n=frames)
+    TA = track(A)
+    out = dict(residual=interior_residual(A, TA))
+    if render:
+        B = read_clip(render, t=render_t, n=frames)
+        TB = track(B)
+        CA = canon(A, TA)
+        ok = next(iter(CA))
+        out["reveal"] = reveal(TA, CA, TB, canon(B, TB, TA[ok][STABLE]), A[0].shape)
+    return out
+
+
 def load_mask(path, size):
     if not path or not os.path.exists(os.path.expanduser(path)):
         return None
@@ -836,6 +937,13 @@ def main(argv=None):
     d_.add_argument("--jobs", type=int, default=4)
     d_.add_argument("--reference")
     d_.add_argument("--publish", help="directory for baseline.json + baseline.md (default: --out)")
+    f_ = sp.add_parser("source")
+    f_.add_argument("--take", required=True)
+    f_.add_argument("--render")
+    f_.add_argument("--take-t", type=float)
+    f_.add_argument("--render-t", type=float)
+    f_.add_argument("--frames", type=int)
+    f_.add_argument("--json")
     e_ = sp.add_parser("shot")
     e_.add_argument("--manifest", required=True)
     e_.add_argument("--label", required=True)
@@ -877,6 +985,8 @@ def main(argv=None):
         R = read_clip(a.reference, 0, a.frames)
         X = read_clip(a.null, 0, a.frames)
         emit(null_test(R, X, cached_track(R, a.reference + ":null", a.work), a.fps), a.json)
+    elif a.cmd == "source":
+        emit(source_test(a.take, a.render, a.take_t, a.render_t, a.frames), a.json)
     elif a.cmd == "shot":
         s = next(x for x in json.load(open(a.manifest))["shots"] if x["label"] == a.label)
         json.dump(run_shot(s, a.work), open(a.json, "w"), indent=1)

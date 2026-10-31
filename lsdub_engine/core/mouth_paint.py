@@ -705,6 +705,28 @@ def _parser():
         help="warp (--warp-cavity fill): the tongue's share of the filled opening; 1 = full, 0.45 = the default",
     )
     ap.add_argument(
+        "--warp-tongue-pose",
+        choices=["zero", "lowpass"],
+        default="zero",
+        help="warp (--warp-reg single): zero = no vowel pose, lowpass = a slow vowel pose, see --warp-tongue-pose-sigma",
+    )
+    ap.add_argument("--warp-tongue-pose-sigma", type=float, default=0.24, help="warp: the slow vowel pose's gaussian, seconds")
+    ap.add_argument(
+        "--warp-fill-l3",
+        choices=["hide", "restore", "off"],
+        default="hide",
+        help="warp (--warp-cavity fill): the arch lower row inside the opening. hide = alpha 0 in the opening, restore = the real "
+        "row over the fill's tongue, in place of the fill's drawn row, off = no L3 at all",
+    )
+    ap.add_argument(
+        "--warp-interior-source",
+        choices=["model", "take"],
+        default="model",
+        help="warp (layers): the opening's tongue and cavity. model = the drawn layers, take = the take's own closest frame by shape "
+        "and pose, Lab-matched per frame, its pink share held to the take's at that aperture",
+    )
+    ap.add_argument("--warp-lossless", action="store_true", help="warp: write --out lossless (an intermediate of a later step)")
+    ap.add_argument(
         "--warp-tongue-lit", type=float, default=1.0, help="warp (wedge tongue): the tongue's light vs the take's own tongue pixels"
     )
     ap.add_argument("--warp-arch-desat", type=float, default=0.0, help="warp: how much colour the arch loses toward the back (0..1)")
