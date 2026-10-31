@@ -1826,7 +1826,7 @@ class WarpClip:
 
 def run(a):
     # --- --vocalisations skip | rest (lsdub/core/vocalisations.py). vx is None with --vocalisations mouth or a
-    # track without vocalisations: then this is exactly the run.
+    # track without vocalisations: then this is exactly the unchanged run.
     from . import vocalisations
 
     vx = vocalisations.for_warp(a)

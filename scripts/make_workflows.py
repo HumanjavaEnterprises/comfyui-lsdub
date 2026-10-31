@@ -184,6 +184,9 @@ def byo_inputs(wf):
     wf.link('load_lead', 0, 'song', 'vocal')
 
 
+WF4_VOCALISATIONS = 'mouth'                                                          # the recorded choice for workflow 4
+
+
 def dub_and_qa(wf, kit_kw, audio='source', vocalisations='skip'):
     wf.add('kit', 'LSDubBuildLipKit', (1200, 1000), **kit_kw).link('project', 'project', 'kit', 'project')
     wf.add('dub', 'LSDubDub', (1600, 700), audio=audio, vocalisations=vocalisations)
@@ -278,7 +281,7 @@ def make_character_sing():
     wf.add('triage', 'LSDubTriage', (1200, 0))
     for s_, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('shots', 'shots', 'shots'), ('song', 'song', 'song')):
         wf.link(s_, o, 'triage', i)
-    dub_and_qa(wf, {'identity': 'singer', 'kit_dir': '', 'shot_id': 0}, audio='song', vocalisations='mouth')
+    dub_and_qa(wf, {'identity': 'singer', 'kit_dir': '', 'shot_id': 0}, audio='song', vocalisations=WF4_VOCALISATIONS)
     wf.link('video', 'source', 'kit', 'source').link('shots', 'shots', 'kit', 'shots')
     return wf
 

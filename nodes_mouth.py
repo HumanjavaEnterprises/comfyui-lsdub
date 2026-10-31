@@ -9,7 +9,6 @@ done.json, so an interrupted dub resumes and a re-run only redoes changed, faile
 assembled into the cut with the source's audio, and the cut is watermarked."""
 import json
 import os
-import shlex
 import shutil
 import sys
 import time
@@ -31,7 +30,7 @@ def _paint_warnings(argv):
     """what these flags will not do on this run; observation only, argv goes to the paint unchanged."""
     from .lsdub_engine.core import mouth_paint
     try:
-        out = mouth_paint.paint_warnings(argv)
+        out = mouth_paint.paint_warnings(['--mode', 'warp', *argv])                   # sing paints with warp
     except SystemExit:                                                   # a flag paint rejects: the render reports it
         return []
     for w in out: _log(f'paint: {w}')
@@ -51,7 +50,7 @@ def _paint_flags(project, kit, tw, vocalisations):
     """the shot's flags for sing. --vocalisations is a user-level flag: settings can change it."""
     recipe, face = _stack(project, kit.identity)
     return paint_api.flags(recipe, lib=kit.dir, mode_mods=SING_EXTRA, face_overrides=face,
-                           user_overrides=['--vocalisations', vocalisations, *shlex.split(tw.settings)])
+                           user_overrides=['--vocalisations', vocalisations, *paint_api.split_settings(tw.settings)])
 
 
 class LSDubBuildLipKit(io.ComfyNode):
@@ -166,8 +165,8 @@ class LSDubTweaks(io.ComfyNode):
                 io.Boolean.Input('continuity', default=True,
                                  tooltip='After the dub, repair single-frame pops against the source.'),
                 io.String.Input('settings', default='', multiline=True,
-                                tooltip='Advanced: extra mouth-warp flags, shell-quoted, on top of the mouth recipe (e.g. --warp-erase closures). '
-                                        'With snap on, its three flags (--warp-sigma, --warp-temporal, --warp-close-depth) stay fixed.'),
+                                tooltip='Advanced: extra mouth-warp flags on top of the mouth recipe (e.g. --warp-erase closures). Put a value '
+                                        'holding a space or an apostrophe in double quotes; backslashes are kept as typed. With snap on, its three flags (--warp-sigma, --warp-temporal, --warp-close-depth) stay fixed.'),
                 io.String.Input('jaw_csv', default='', optional=True,
                                 tooltip='Optional: a jaw-curve CSV for the whole song (Audio2Face-3D blendshape export, '
                                         'columns frame,time_s,...,jawOpen; song time). Drives the jaw in the silences more '
@@ -178,6 +177,10 @@ class LSDubTweaks(io.ComfyNode):
 
     @classmethod
     def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv=''):
+        try:
+            paint_api.split_settings(settings)
+        except ValueError as e:
+            raise ValueError(f'LSDub Mouth Tweaks: settings: {e}') from None
         jaw_csv = (jaw_csv or '').strip()
         if jaw_csv and not os.path.exists(jaw_csv): raise FileNotFoundError(f'LSDub Mouth Tweaks: no jaw CSV {jaw_csv}')
         flags = dict(lead=lead, word_close=word_close, face_target=face_target, snap=snap, auto=auto, continuity=continuity,
@@ -189,6 +192,13 @@ DEFAULT_TWEAKS = T.Tweaks(flags=dict(lead=0.06, word_close=0.06, face_target=512
 ON_FAIL = ('source', 'render')
 AUDIO = ('source', 'song')
 VOCALISATIONS = ('skip', 'rest', 'mouth')
+
+
+def _vocal_note(info):
+    """a failed gate on a shot this much vocalisation says so: the sync levers are not the answer there."""
+    from .lsdub_engine.audits.qa import VOCAL_NOTE
+    f = info.get('vocal_frac') or 0
+    return f'vocalisation spans cover {f:.0%} of the shot; ' if f >= VOCAL_NOTE else ''
 
 
 def _log(msg):
@@ -333,7 +343,8 @@ class LSDubDub(io.ComfyNode):
                 io.Combo.Input('vocalisations', options=list(VOCALISATIONS), default='skip', optional=True,
                                tooltip='Sung sounds that are not words (ooh, da da, scat): skip = keep the video\'s own mouth '
                                        'there; rest = close the mouth; mouth = sing them like words (best for a scat chorus '
-                                       'or a generated performance).'),
+                                       'or a generated performance). The Dub finds these spans again from the word timings; '
+                                       'the skip marks LSDub Align writes are not read here.'),
             ],
             outputs=[T.LSDubRender.Output(display_name='render', tooltip='Per-shot results (pass / fail and why), gates and '
                                                                          'the assembled cut.'),
@@ -350,10 +361,11 @@ class LSDubDub(io.ComfyNode):
         return [s for s in shots.shots if s.get('verdict') in DUB_VERDICTS and (not only or s['shot'] in only)]
 
     @classmethod
-    def _dropped(cls, shots, kits, only):
+    def _dropped(cls, shots, kits, only, cast=None):
         """the shots to dub that no kit serves, each with its warning."""
-        return {s['shot']: (s, f"shot {s['shot']}: target {s.get('target')!r} matches no kit (kits: {', '.join(kits)}); connect LSDub Cast "
-                               'or use one kit') for s in cls._wanted(shots, only) if not cls._kit_for(s, kits)}
+        hint = "give a kit this singer's cast name" if cast else 'connect LSDub Cast or use one kit'
+        return {s['shot']: (s, f"shot {s['shot']}: target {s.get('target')!r} matches no kit (kits: {', '.join(kits)}); {hint}")
+                for s in cls._wanted(shots, only) if not cls._kit_for(s, kits)}
 
     @staticmethod
     def _kit_for(s, kits):
@@ -457,7 +469,7 @@ class LSDubDub(io.ComfyNode):
                     if os.path.exists(st.path('gate.json')): os.remove(st.path('gate.json'))   # never a stale gate
                     render, info = cls.run_shot(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast, st,
                                                 vocalisations)
-                    reason = '' if info.get('pass') else (f"sync gate failed: measured corr {info.get('corr')} "
+                    reason = '' if info.get('pass') else (f"{_vocal_note(info)}sync gate failed: measured corr {info.get('corr')} "
                                                            f"(open in silence {info.get('open_in_silence')})")
                     st.mark_done(bool(info.get('pass')), time.perf_counter() - t0, time.process_time() - c0,
                                  corr=info.get('corr'), auto=(info.get('auto') or {}).get('winner'),
@@ -477,7 +489,7 @@ class LSDubDub(io.ComfyNode):
                              'used': 'render' if r and (ok or on_fail == 'render') else 'source'}
             if pbar: pbar.update(1)
         from .project import parse_force_shots
-        for sid, (s, msg) in cls._dropped(shots, kits, parse_force_shots(only_shots)).items():
+        for sid, (s, msg) in cls._dropped(shots, kits, parse_force_shots(only_shots), cast).items():
             _log(msg)
             res[str(sid)] = {'f0': s['f0'], 'f1': s['f1'], 'render': '', 'pass': False, 'corr': None, 'reason': 'no kit for target',
                              'gate': '', 'key': '', 'result': 'none', 'used': 'source'}

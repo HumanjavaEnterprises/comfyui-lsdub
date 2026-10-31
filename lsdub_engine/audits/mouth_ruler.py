@@ -579,6 +579,65 @@ def run_shot(s, work):
     return r
 
 
+NOTES = (  # take -> render changes worth a look; reported, they move no band
+    ("cavity void", lambda t, r: _past(r, "cav_black_frac", t, 0.2)),
+    ("dim teeth", lambda t, r: _past(t, "teeth_L", r, 10.0)),
+    ("boil", lambda t, r: _past(r, "boil_loose", t, 0.0, 1.5)),
+    ("over-sharp", lambda t, r: _past(r, "edge_inner", t, 0.0, 1.5)),
+)
+GRAIN_LOST = 0.7
+
+
+def _past(a, k, b, add=0.0, mul=1.0):
+    """a[k] above b[k] * mul + add, both measured. A boil dict reads its cavity value."""
+    x, y = a.get(k), b.get(k)
+    if isinstance(x, dict):
+        x, y = x.get("cav"), (y or {}).get("cav")
+    return x is not None and y is not None and x > y * mul + add
+
+
+def shot_row(take, render, stage_items=(), work=None, frames=None):
+    """one dubbed shot -> the node's row: [take, render] of each ruler, grain_gap, per-stage sharpness, notes."""
+    A, B = read_clip(take, 0, frames), read_clip(render, 0, frames)
+    if not A or not B:
+        return dict(note="no frames")
+    m = min(len(A), len(B))
+    A, B = A[:m], B[:m]
+    TA, TB = cached_track(A, f"{take}:{m}", work), cached_track(B, f"{render}:{m}", work)
+    s = stats(A, TA, B, TB)
+    t, r = s["take"], s["render"]
+    row = {k: [t.get(k), r.get(k)] for k in ("pink_frac", "cav_L50", "teeth_L", "edge_inner")}
+    row["boil_loose"] = [t["boil_loose"].get("cav"), r["boil_loose"].get("cav")]
+    row["grain_gap"] = spectrum(A, TA, B, TB).get("grain_gap")
+    row["stages"] = stages(stage_items, work)
+    gap = row["grain_gap"]
+    row["notes"] = [k for k, f in NOTES if f(t, r)] + (["grain lost"] if gap is not None and gap < GRAIN_LOST else [])
+    return row
+
+
+def rows_md(rows):
+    """the node's table: one row per shot, take -> render."""
+    L = [
+        "# LSDub mouth ruler",
+        "",
+        "Take -> render, per dubbed shot. Reported only: nothing here moves a band.",
+        "",
+        "| shot | pink | cavity L* | teeth L* | inner edge | boil loose | grain gap | sharpness by stage | notes |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    ar = lambda v: f"{f2(v[0])} → {f2(v[1])}"
+    for r in rows:
+        if "pink_frac" not in r:
+            L.append(f"| {r['shot']} | {r.get('note', '-')} |" + " |" * 7)
+            continue
+        st = "; ".join(f"{x['stage']} {f2(x.get('lap_ref'), 0)}" for x in r["stages"] if "missing" not in x)
+        L.append(
+            f"| {r['shot']} | {ar(r['pink_frac'])} | {ar(r['cav_L50'])} | {ar(r['teeth_L'])} | {ar(r['edge_inner'])} | {ar(r['boil_loose'])} | "
+            f"{f2(r['grain_gap'])} | {st} | {', '.join(r['notes'])} |"
+        )
+    return "\n".join(L) + "\n"
+
+
 def f2(v, k=2):
     return "-" if v is None else f"{v:.{k}f}"
 

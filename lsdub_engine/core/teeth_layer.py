@@ -622,7 +622,7 @@ class TeethLayer:
             self.e_lo = 0.0
 
     def _upper_plate(self, h, mirror=None):
-        """the upper plate of harvest frame h: (image, alpha). (mirror; --warp-teeth-mirror): columns the harvest frame does not show (the far side of a turned head, a lip corner) are filled from
+        """the upper plate of harvest frame h: (image, alpha). With --warp-teeth-mirror, columns the harvest frame does not show (the far side of a turned head, a lip corner) are filled from
         the arch's mirror image about the face midline on the canonical plane (teeth are symmetric), and the arch's
         lateral ends recede into shadow and feather out (no rectangular cut where the plate ends)."""
         img_u, _, upper, ramp, _, io = self._region(h)

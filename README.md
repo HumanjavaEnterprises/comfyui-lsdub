@@ -85,7 +85,7 @@ They live in `example_workflows/` and show up in ComfyUI's template browser. Wor
    vocal, alignment, an LTX-2.5 performance video as long as the song, a lip kit built from it, the dub, verify, and
    the saved video with the song. Needs a GPU, the generator models, and `MelBandRoformer_kim_vocals.ckpt`. Works
    best with worded lyrics: the Dub here sets `vocalisations` to `mouth`, so scat (da da, ooh) is sung like words.
-   With `skip`, those passages keep LTX-2.5's own mouth motion and may fail Verify.
+   With `skip`, those passages keep LTX-2.5's own mouth motion and Verify leaves their frames out of the sync score.
 
 ## The nodes
 
@@ -143,6 +143,7 @@ and `LSDub/qa`.
 - **LSDub Scorecard:** every shot of the cut scored 0 to 100, worst first.
 - **LSDub Sync QA:** the measured mouth against the vocal (correlation and lag), with a review card that scrolls the
   vocal waveform past a playhead.
+- **LSDub Mouth Ruler:** the mouth itself, take against render, per dubbed shot (inner mouth, teeth, lip edge, boil, grain, sharpness by stage). Reported only.
 - **LSDub Fix It:** each problem, what to try, and the `force_shots` string to paste into the project.
 - **LSDub Save Cut:** saves to `final/` with LSDub's invisible watermark.
 
@@ -195,7 +196,7 @@ Re-runs are cache hits.
 - **A shot failed to dub.** It is reported, and by default the cut keeps its original frames. Run workflow 3 on the
   video, read Fix It, and paste its `force_shots` string into the project to redo just those shots.
 - **A mic or hand gets painted over.** Run LSDub Occluders on that shot, connect its masks to the Dub, and dub again.
-- **Scat passages fail Verify in workflow 4.** Set the Dub's `vocalisations` to `mouth`, or use worded lyrics.
+- **A scat-heavy shot fails Verify.** Verify scores the frames outside the scat and reports the share it left out as `vocal_frac`. Set the Dub's `vocalisations` to `mouth` to sing those passages, or use worded lyrics.
 - **Out of GPU memory.** ComfyUI offloads to system RAM on smaller cards (slower), or switch `backend` to
   `comfy_cloud`. Sizes are in [MODELS.md](MODELS.md).
 - **Comfy Cloud refuses the run.** API-key runs need a paid plan; free-tier accounts are refused.

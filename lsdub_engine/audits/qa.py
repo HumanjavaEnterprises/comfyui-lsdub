@@ -24,7 +24,10 @@ detector; YuNet + MediaPipe faces; DINOv2 identity, all already in LSDub). Two m
           open-in-silence, snap, mouth travel, mouth visible, the tier; classes PERF / COVERAGE / INSERT, the travel cap
           and the reason priority of `lsdub scorecard`; a 0-100 LIKELY-SUCCESS score and a band PASS (>= 75) /
           REVIEW (>= 55) / FAIL; identity kept (DINOv2 cosine of the target's head, dubbed vs --before, < 0.85 =
-          identity drift -> REVIEW); with --before, the same score of the original and the delta.
+          identity drift -> REVIEW); with --before, the same score of the original and the delta. A shot the dub left as
+          source (`used: source` in the json) is measured with the rest and banded N/A. A shot carrying `warp_json` leaves its
+          vocalisation frames out of the corr and reports vocal_frac. mouth_identity_cos is the same cosine on the lower
+          face: reported, it moves no band.
 
   lsdub qa triage --video film.mp4 [--vocal stem.wav --offset 0] [--cast-db db.npz | --refs dir | --face name=ref.png ...]
                   [--target name ...] --out dir/name
@@ -35,11 +38,13 @@ from ..io import ff
 import argparse, csv, glob, json, os, sys, tempfile
 import cv2, numpy as np
 from ..core import steps
+from ..core.vocalisations import scored_frames
 
 DUB_PX, MED_PX, DUB_YAW, PROFILE_YAW = 300.0, 120.0, 16.0, 35.0
 MIN_SHOT, MIN_PRESENT, MIN_VISIBLE = 12, 0.5, 0.5
 VAD_REL, VAD_FLOOR, VOICED_FRAC = 0.12, 0.01, 0.3
 PASS_BAND, REVIEW_BAND, ID_DRIFT = 75.0, 55.0, 0.85
+VOCAL_NOTE = 0.25  # a shot this much vocalisation says so when it does not pass
 VERDICTS = ("DUB", "DUB-MEDIUM", "NO")
 
 
@@ -355,6 +360,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
             b = measure_shot(before, s, fps, offset, vocal, act, align, words, faces, os.path.join(work, "before"), Q, SN)
             r["before"] = {k: b.get(k) for k in ("corr", "mouth_range", "open_in_silence", "mouth_visible")}
             r["identity_cos"] = identity_cos(video, before, s, emb)
+            r["mouth_identity_cos"] = identity_cos(video, before, s, emb, lower_face)
         rows.append(r)
     sh = [r["sharpness"] for r in rows if r.get("sharpness")]
     smed = float(np.median(sh)) if sh else None
@@ -366,6 +372,10 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
             score_row(b, smed, SC)
             r["before"]["score"] = b["score"]
             r["delta"] = None if r["score"] is None or b["score"] is None else round(r["score"] - b["score"], 1)
+    for r in rows:
+        s = next(x for x in J["shots"] if x.get("shot") == r["shot"])
+        if s.get("used") == "source":  # after the scoring: a shot left as source still counts in the film's medians
+            r.update(band="N/A", score=None, delta=None, reason=f"left as source: {s.get('left_reason') or 'no render used'}")
     return {"video": video, "shots_json": shots_json, "before": before, "bands": {"PASS": PASS_BAND, "REVIEW": REVIEW_BAND}}, rows
 
 
@@ -407,8 +417,12 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
                 )
             else:
                 tg = env[: len(op)]
-            c0, cb, lag = Q.tracking(op, tg, fps)
-            c1 = max(c0, Q.tracking(op, tg, fps, max_lag=1)[1])
+            keep, vocal_frac = scored_frames(s.get("warp_json"), len(op))
+            c0, cb, lag = Q.tracking(op, tg, fps, keep=keep)
+            c1 = max(c0, Q.tracking(op, tg, fps, max_lag=1, keep=keep)[1])
+            out["vocal_frac"] = vocal_frac
+            if keep is not None:
+                out["corr_all"] = round(Q.tracking(op, tg, fps)[0], 3)
             out.update(
                 corr=round(c0, 3),
                 corr_pm1=round(c1, 3),
@@ -445,8 +459,15 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
     return out
 
 
-def identity_cos(video, before, s, emb):
-    """DINOv2 cosine of the target's head crop, dubbed vs original, median over the triage sample frames."""
+def lower_face(box):
+    """the mouth end of a face box: its lower 45 %."""
+    x0, y0, x1, y1 = box
+    return [x0, y0 + 0.55 * (y1 - y0), x1, y1]
+
+
+def identity_cos(video, before, s, emb, region=None):
+    """DINOv2 cosine of the target's head crop, dubbed vs original, median over the triage sample frames. region: box -> the
+    box to embed instead of the whole one."""
     boxes = {int(k): v for k, v in (s.get("boxes") or {}).items()}
     if not boxes:
         return None
@@ -454,7 +475,8 @@ def identity_cos(video, before, s, emb):
     c = []
     for f, b in boxes.items():
         if f in A and f in B:
-            c.append(float(np.dot(head_embedding(emb, A[f], b), head_embedding(emb, B[f], b))))
+            q = region(b) if region else b
+            c.append(float(np.dot(head_embedding(emb, A[f], q), head_embedding(emb, B[f], q))))
     return round(float(np.median(c)), 4) if c else None
 
 
@@ -476,6 +498,8 @@ def score_row(r, smed, SC):
         r["band"] = "REVIEW"
     else:
         r["band"] = "PASS" if r["score"] >= PASS_BAND else "REVIEW" if r["score"] >= REVIEW_BAND else "FAIL"
+    if (r.get("vocal_frac") or 0) >= VOCAL_NOTE and r["band"] in ("REVIEW", "FAIL"):
+        r["reason"] = f"vocalisation spans cover {r['vocal_frac']:.0%} of the shot; " + r["reason"]
     if r.get("identity_cos") is not None and r["identity_cos"] < ID_DRIFT:
         r["band"] = "FAIL" if r["band"] == "FAIL" else "REVIEW"
         r["reason"] = f"identity drift (cos {r['identity_cos']:.2f}); " + r["reason"]
@@ -540,7 +564,8 @@ def write_triage(meta, shots, out):
 
 def write_verify(meta, rows, out):
     order = sorted(
-        rows, key=lambda r: ({"FAIL": 0, "REVIEW": 1, "PASS": 2, "n/a": 3}[r["band"]], r["score"] if r["score"] is not None else 0)
+        rows,
+        key=lambda r: ({"FAIL": 0, "REVIEW": 1, "PASS": 2, "N/A": 3, "n/a": 3}[r["band"]], r["score"] if r["score"] is not None else 0),
     )
     json.dump(
         {**meta, "shots": order}, open(out + ".json", "w"), indent=1, default=lambda o: o if not isinstance(o, np.generic) else o.item()
@@ -561,6 +586,8 @@ def write_verify(meta, rows, out):
         "mouth_visible",
         "owner_px",
         "identity_cos",
+        "mouth_identity_cos",
+        "vocal_frac",
         "reason",
     ]
     with open(out + ".csv", "w", newline="") as f:
@@ -572,7 +599,7 @@ def write_verify(meta, rows, out):
         f"# LSDub QA verify: {os.path.basename(meta['video'])}",
         "",
         f"Likely-success score 0-100 per dubbed shot: PASS >= {PASS_BAND:.0f}, REVIEW >= {REVIEW_BAND:.0f}, else FAIL. "
-        f"COVERAGE (no readable target) = REVIEW, n/a; no voice = n/a. Identity drift = DINOv2 cosine vs --before < {ID_DRIFT}.",
+        f"COVERAGE (no readable target) = REVIEW, n/a; no voice = n/a; N/A = left as source. Identity drift = DINOv2 cosine vs --before < {ID_DRIFT}.",
         "",
         "| shot | t (s) | band | score | Δ vs before | class | sync corr | travel | silence | mouth | identity | reason |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
@@ -589,7 +616,9 @@ def write_verify(meta, rows, out):
         meta["video"],
         rows,
         out + "_sheet.jpg",
-        lambda r: {"PASS": (60, 200, 60), "REVIEW": (0, 170, 255), "FAIL": (60, 60, 210), "n/a": (150, 150, 150)}[r["band"]],
+        lambda r: {"PASS": (60, 200, 60), "REVIEW": (0, 170, 255), "FAIL": (60, 60, 210), "N/A": (150, 150, 150), "n/a": (150, 150, 150)}[
+            r["band"]
+        ],
         lambda r: f"{r['band']} {'' if r['score'] is None else int(r['score'])}",
     )
 
@@ -681,7 +710,7 @@ def main(argv=None):
     write_verify(meta, rows, a.out)
     print(
         f"qa verify {a.video}: "
-        + ", ".join(f"{k} {sum(r['band'] == k for r in rows)}" for k in ("PASS", "REVIEW", "FAIL", "n/a"))
+        + ", ".join(f"{k} {sum(r['band'] == k for r in rows)}" for k in ("PASS", "REVIEW", "FAIL", "N/A", "n/a"))
         + f" -> {a.out}.md"
     )
     return 0

@@ -162,3 +162,25 @@ def test_two_kits_no_cast_names_each_dropped_shot(pack, capfd):
     msg = D._dropped(shots, kits, [])[4][1]
     assert msg == "shot 4: target 'face' matches no kit (kits: a, b); connect LSDub Cast or use one kit"
     assert D._dropped(shots, {'a': object()}, []) == {}
+    assert 'connect LSDub Cast' not in D._dropped(shots, kits, [], cast=object())[4][1]
+
+
+def test_a_dub_gets_no_false_morph_warning(pack):
+    warned = pack.nodes_mouth._paint_warnings(_flags(pack, 'layers', settings='--warp-erase closures'))
+    assert not [w for w in warned if 'morph' in w]
+
+
+def test_settings_keep_backslashes_and_quotes(pack):
+    a = _flags(pack, settings=r'''--warp-erase C:\Users\me\a.csv --warp-lip-rim "a b" --x "it's"''')
+    assert r'C:\Users\me\a.csv' in a and 'a b' in a and "it's" in a
+
+
+def test_a_lone_apostrophe_stops_at_the_tweaks_node_with_a_clear_message(pack):
+    import pytest
+    with pytest.raises(ValueError, match='LSDub Mouth Tweaks: settings: unmatched quote'):
+        pack.nodes_mouth.LSDubTweaks.execute(0.06, 0.06, 512.0, True, True, True, "--warp-erase it's")
+
+
+def test_a_failed_gate_names_the_vocalisation(pack):
+    note = pack.nodes_mouth._vocal_note
+    assert note({'vocal_frac': 0.4}).startswith('vocalisation spans cover 40%') and note({'vocal_frac': 0.1}) == '' and note({}) == ''

@@ -26,8 +26,8 @@ TRACK FIELDS (lsdub track skip): frames[i].skip = true and frames[i].skip_reason
 'markup:paren', 'markup:tag', 'yeah:bare', 'gap') on the skipped frames; top level skips = [{f0, f1, t0, t1, words,
 reasons}] (an empty list = processed, nothing found) and skip_rules (what was applied).
 THE CONSUMER (lsdub paint --mode warp, mouth_warp.run -> for_warp): the track's own fields when it carries them, else
-the same detection at paint time (so older tracks work). The default is --vocalisations skip (
-the platform skips ad-libs by default, on marked and unmarked tracks alike); --vocalisations mouth is the old behaviour (an old command
+the same detection at paint time (so older tracks work). The default is --vocalisations skip: ad-libs are
+skipped on marked and unmarked tracks alike; --vocalisations mouth is the old behaviour (an old command
 with --vocalisations mouth added renders the same bit for bit); auto is the earlier default (skip on a track marked by `lsdub
 track skip`, mouth on an unmarked one, the log saying how many spans it mouthed). A track without vocalisations
 renders exactly the frames in every mode:
@@ -600,9 +600,29 @@ class Vocal:
         return out
 
 
+MIN_SCORED = 8  # fewer kept frames than this are no sample: the whole shot is scored, as with no spans
+
+
+def scored_frames(warp_json, n):
+    """which of n output frames a sync score reads, from a paint's --warp-json -> (keep or None, vocal_frac). keep None = every
+    frame: no json, no vocalisation frames (always so under `mouth`), or too few frames left. A frame counts as a vocalisation
+    when any internal frame behind it is marked."""
+    if not warp_json or not os.path.exists(warp_json):
+        return None, 0.0
+    J = json.load(open(warp_json))
+    fr = J.get("frames") or []
+    if not J.get("vocal") or not fr or n <= 0:
+        return None, 0.0
+    m = max(1, len(fr) // n)
+    marks = np.array([bool(f.get("vocal_skip")) for f in fr])
+    skip = np.array([marks[k * m : (k + 1) * m].any() for k in range(n)])
+    frac = round(float(skip.mean()), 3)
+    return (None if not skip.any() or (~skip).sum() < MIN_SCORED else ~skip), frac
+
+
 def for_warp(a):
     """mouth_warp.run's hook: a Vocal for --vocalisations skip | rest when the track has vocalisations, else None (then
-    the render is exactly the one)."""
+    the render is exactly the unchanged render)."""
     mode = getattr(a, "vocalisations", "mouth") or "mouth"
     if mode == "mouth":
         return None

@@ -59,3 +59,24 @@ def test_paint_runs_through_steps(monkeypatch):
     monkeypatch.setattr(A.steps, "call", lambda step, argv: seen.append((step, argv)))
     A.paint("v", "t", 4, out="o")
     assert seen[0][0] == "paint" and seen[0][1][:2] == ["--mode", "warp"]
+
+
+def test_target_reads_what_paint_reads():
+    assert A.target(["--warp-targ", "coart"]) == "coart"
+    assert A.coart_dyn(["--warp-targ", "coart"], "d")
+    assert A.target(["--warp-target", "nonsense"]) is None
+
+
+def test_split_settings():
+    assert A.split_settings(r"--a C:\Users\me\a.csv") == ["--a", r"C:\Users\me\a.csv"]
+    assert A.split_settings(r"""--a "C:\My Files\a.csv" --b 'x y' --c "it's" """) == [
+        "--a",
+        r"C:\My Files\a.csv",
+        "--b",
+        "x y",
+        "--c",
+        "it's",
+    ]
+    assert A.split_settings("") == []
+    with pytest.raises(ValueError, match="unmatched quote"):
+        A.split_settings("--a it's")

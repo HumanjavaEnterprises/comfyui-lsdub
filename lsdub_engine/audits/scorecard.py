@@ -33,7 +33,9 @@ CLASSES: PERF (sung, singer medium or closer, mouth visible >= 50%): scored, a m
   COVERAGE (sung, no readable singer): n/a, reason no face -> too small -> mouth hidden; INSERT (unsung): capped at 90.
   motion    clip(median frame diff / 0.8)            (0..255 grey levels at 1/4 size)
   flicker   1 - clip(pops / 3)
-  sharpness clip(face Laplacian variance / the film's median)
+  sharpness clip(face Laplacian variance / the film's median); with --sharpness-mode plate, closeness to the plate instead:
+            1 - clip(|log(face / the plate's median)| / log 2), so over-sharp loses as blur does. The plate is --compare
+  boil      1 - clip(boil_loose / 12): luma second difference of the lips on hold frames (mouth_ruler). Weight 0: reported
 
   lsdub scorecard --video film.mp4 --cuts cut.json --vocal lead_dry.wav --offset 12 --align align.json
                   [--script SCRIPT.md] [--cast cast.json] [--compare old.mp4 --compare-cast old_cast.json]
@@ -43,8 +45,10 @@ CLASSES: PERF (sung, singer medium or closer, mouth visible >= 50%): scored, a m
 import argparse, csv, json, os, sys
 import cv2, numpy as np
 
-W_SUNG = dict(sync=28, silence=8, snap=6, travel=12, tier=10, mouth=8, canon=10, motion=6, flicker=8, sharpness=4)
-W_PLAIN = dict(canon=30, motion=25, flicker=25, sharpness=20)
+W_SUNG = dict(sync=28, silence=8, snap=6, travel=12, tier=10, mouth=8, canon=10, motion=6, flicker=8, sharpness=4, boil=0)
+W_PLAIN = dict(canon=30, motion=25, flicker=25, sharpness=20, boil=0)
+SHARPNESS_MODES = ("floor", "plate")
+BOIL_FULL, BOIL_FRAMES = 12.0, 48
 MIN_OVERLAP, MIN_SUNG_S = 0.08, 0.25  # a word counts in a cut when >= 2 frames of it land there; a cut is sung with >= 0.25 s
 TIER_ORDER = {"none": 0, "wide": 1, "medium": 2, "cu": 3}
 GREEN, AMBER = 75, 55
@@ -175,7 +179,22 @@ def _fin(x):
     return x is not None and np.isfinite(x)
 
 
-def components(row, film_sharp_med):
+def boil_of(video, a, b):
+    """boil_loose of the lip ring on up to BOIL_FRAMES of frames a..b, or None (no face, no hold frames, no model)."""
+    from . import mouth_ruler as R
+
+    try:
+        F = R.read_clip(video, a, min(b - a, BOIL_FRAMES))
+        if len(F) < 3:
+            return None
+        T = R.track(F)
+        S = [R.frame_stats(F[i], T[i]) for i in range(len(F))]
+        return R.boil_stats(F, T, np.array([s["w"] for s in S]), np.array([s["ap"] for s in S]), R.HOLD_LOOSE)["lip"]
+    except (RuntimeError, OSError, ValueError):
+        return None
+
+
+def components(row, film_sharp_med, sharpness_mode="floor"):
     for k in ("corr", "corr_pm1", "open_in_silence", "rise_ms", "closure_hit", "sharpness", "canon_sim", "mouth_range"):
         if k in row and not _fin(row[k]):
             row[k] = None  # NaN (a flat series) = not measurable
@@ -211,7 +230,13 @@ def components(row, film_sharp_med):
     c["motion"] = clip01(row["motion"] / 0.8)
     c["flicker"] = 1 - clip01(row["pops"] / 3)
     if row.get("sharpness") is not None and film_sharp_med:
-        c["sharpness"] = clip01(row["sharpness"] / film_sharp_med)
+        c["sharpness"] = (
+            1 - clip01(abs(np.log(max(row["sharpness"], 1e-6) / film_sharp_med)) / np.log(2))
+            if sharpness_mode == "plate"
+            else clip01(row["sharpness"] / film_sharp_med)
+        )
+    if row.get("boil") is not None:
+        c["boil"] = 1 - clip01(row["boil"] / BOIL_FULL)
     return c
 
 
@@ -268,6 +293,7 @@ REASON = {
     "motion": "static / near-still",
     "flicker": "temporal pops",
     "sharpness": "soft image",
+    "boil": "mouth boils on the hold frames",
 }
 
 
@@ -290,9 +316,9 @@ def reason(row, worst):
     return f"{REASON[worst]}{extra.get(worst, '')} [{v:.2f}]"
 
 
-def finalize(r, smed):
-    """components -> class -> score / reason (COVERAGE n/a, INSERT capped, PERF travel-capped)."""
-    r["components"] = {k: round(v, 3) for k, v in components(r, smed).items()}
+def finalize(r, smed, sharpness_mode="floor"):
+    """components -> class -> score / reason (COVERAGE n/a, INSERT capped, PERF travel-capped). smed: the sharpness reference."""
+    r["components"] = {k: round(v, 3) for k, v in components(r, smed, sharpness_mode).items()}
     r["class"] = shot_class(r)
     s, worst = shot_score(r["components"], r["sung"])
     r["raw_score"] = s
@@ -312,7 +338,8 @@ def finalize(r, smed):
 
 
 # ---------------------------------------------------------------------------------------------------- run
-def score(video, cuts, vocal, offset=12.0, align=None, script=None, cast=None, work=None, preset=None):
+def score(video, cuts, vocal, offset=12.0, align=None, script=None, cast=None, work=None, preset=None, sharpness_mode="floor", plate=None):
+    """plate: the video before the dub, the sharpness reference of sharpness_mode 'plate'."""
     from . import sync_qa as Q
     from ..core import grammar as G
     from ..core.cast import words_in
@@ -361,6 +388,8 @@ def score(video, cuts, vocal, offset=12.0, align=None, script=None, cast=None, w
             "sharpness": round(float(np.median(sharp[ci])), 1) if sharp[ci] else None,
         }
         f = film.get(ci, {})
+        if row["sung"] and f.get("corr") is not None:
+            row["boil"] = boil_of(video, a, b)
         for k in ("corr", "best", "lag_ms", "open_in_silence", "rise_ms", "closure_hit", "closures", "mouth_range"):
             row[k] = f.get(k)
         if f.get("corr") is not None:
@@ -386,8 +415,11 @@ def score(video, cuts, vocal, offset=12.0, align=None, script=None, cast=None, w
         rows.append(row)
     sh = [r["sharpness"] for r in rows if r["sharpness"]]
     smed = float(np.median(sh)) if sh else None
+    if sharpness_mode == "plate" and plate:
+        sp = [s for x in scan_pixels(plate, cuts, fps)[3] for s in x]
+        smed = float(np.median(sp)) if sp else None
     for r in rows:
-        finalize(r, smed)
+        finalize(r, smed, sharpness_mode)
     return rows, thumbs
 
 
@@ -540,12 +572,23 @@ def main(argv=None):
     ap.add_argument("--cast", help="whole-video cast scan of --video (identity, canon, faces, singer box)")
     ap.add_argument("--compare", help="an older cut of the same film")
     ap.add_argument("--compare-cast", help="cast scan of --compare")
+    ap.add_argument("--sharpness-mode", choices=SHARPNESS_MODES, default="floor", help="plate = closeness to --compare's sharpness")
     ap.add_argument("--out", required=True, help="output prefix: <out>.md/.json/.csv/_sheet.jpg")
     a = ap.parse_args(argv)
     cuts = json.load(open(a.cuts))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     rows, thumbs = score(
-        a.video, cuts, a.vocal, a.offset, a.align, a.script, json.load(open(a.cast)) if a.cast else None, a.out + "_work", preset=a.preset
+        a.video,
+        cuts,
+        a.vocal,
+        a.offset,
+        a.align,
+        a.script,
+        json.load(open(a.cast)) if a.cast else None,
+        a.out + "_work",
+        preset=a.preset,
+        sharpness_mode=a.sharpness_mode,
+        plate=a.compare,
     )
     if a.compare:
         old, othumbs = score(

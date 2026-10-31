@@ -33,6 +33,7 @@ import cv2, numpy as np
 from . import medium as MED
 
 GATE_CORR, GATE_SILENCE = 0.5, 0.35
+GATE_KEYS = ("corr", "corr_all", "best", "lag_ms", "corr_pm1", "open_in_silence", "rise_ms", "closure_hit", "pass", "vocal_frac")
 SNAP = dict(
     lead=0.06, word_close=0.06, attack_ms=15.0, paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05"]
 )
@@ -115,12 +116,12 @@ def run(
 ):
     os.makedirs(work, exist_ok=True)
     if not a2f:
-        pa = " ".join(paint_args)
+        wt = paint_api.target(paint_args)
         by = (
             "the coart plan's sung_dyn curve"
-            if "--warp-target coart" in pa
+            if wt == "coart"
             else "the take's own mouth"
-            if "--warp-target own" in pa
+            if wt == "own"
             else "the viseme track's audio opening"
         )
         print(f"sing: no --a2f-csv: {by} drives the jaw; an Audio2Face jawOpen csv gives better silences", file=sys.stderr)
@@ -196,7 +197,8 @@ def run(
         info["gpu_todo"] = os.path.join(work, "gpu_occluders.sh")
     # 5. the measured gate on the delivered pixels
     t_ = time.perf_counter()
-    info.update(gate(out, R, target, vocal, align, t0, fps, work=work))
+    sing_json = os.path.join(work, "crop_painted_warp.json")
+    info.update(gate(out, R, target, vocal, align, t0, fps, work=work, warp_json=sing_json), warp_json=sing_json)
     tm["gate"], t_ = round(time.perf_counter() - t_, 3), time.perf_counter()
     if auto:
         info.update(auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, info))
@@ -256,7 +258,8 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
         warp_json=os.path.join(work, "native_warp.json"),
     )
     shutil.copyfile(out, sng)
-    g_n = gate(nat, R, target, vocal, align, t0, fps, work=os.path.join(work, "native_gate"))
+    nat_json = os.path.join(work, "native_warp.json")
+    g_n = gate(nat, R, target, vocal, align, t0, fps, work=os.path.join(work, "native_gate"), warp_json=nat_json)
 
     def key(g):
         return (
@@ -275,18 +278,23 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
             "native": {k: g_n.get(k) for k in ("corr", "best", "open_in_silence", "rise_ms", "closure_hit", "pass")},
         },
         **(
-            {k: g_n[k] for k in ("corr", "best", "lag_ms", "corr_pm1", "open_in_silence", "rise_ms", "closure_hit", "pass") if k in g_n}
+            {
+                **{k: g_n[k] for k in GATE_KEYS if k in g_n},
+                "warp_json": nat_json,
+            }
             if win == "native"
             else {}
         ),
     }
 
 
-def gate(video, R, target, vocal, align, t0, fps, roi_pad=1.0, work=None):
+def gate(video, R, target, vocal, align, t0, fps, roi_pad=1.0, work=None, warp_json=None):
     work = work or tempfile.mkdtemp(prefix="lsdub_gate_")
     """measured corr (sync-qa's measured_opening on a face box around the composite) + snap; pass = corr >= GATE_CORR
-    (best within +-1 frame, as the round-4 gate) and open-in-silence <= GATE_SILENCE."""
+    (best within +-1 frame, as the round-4 gate) and open-in-silence <= GATE_SILENCE. warp_json: the frames a vocalisation span
+    took out of the audio's hands (--vocalisations skip | rest) are left out of the corr; vocal_frac reports their share."""
     from ..audits import sync_qa as Q, snap as SN
+    from . import vocalisations as VOC
 
     os.makedirs(work, exist_ok=True)
     B, _ = MED.read(video, len(target))
@@ -307,14 +315,19 @@ def gate(video, R, target, vocal, align, t0, fps, roi_pad=1.0, work=None):
             "rise_ms": None,
             "closure_hit": None,
             "pass": False,
+            "vocal_frac": 0.0,
         }  # same keys as a measured gate (run() prints them)
-    c0, cb, lag = Q.tracking(op, target, fps)
-    c1 = max(Q.tracking(op, target, fps, max_lag=1)[1], c0)
+    keep, vocal_frac = VOC.scored_frames(warp_json, len(op))
+    c0, cb, lag = Q.tracking(op, target, fps, keep=keep)
+    c1 = max(Q.tracking(op, target, fps, max_lag=1, keep=keep)[1], c0)
+    extra = {"vocal_frac": vocal_frac} | ({} if keep is None else {"corr_all": round(Q.tracking(op, target, fps)[0], 3)})
     words = json.load(open(align))["words"]
     sn = SN.snap_metrics(op, vocal_clip(vocal, t0, len(target) / fps, work), words, t0, fps)
     np.save(os.path.join(work, "measured_open.npy"), op)
     ok = c1 >= GATE_CORR and (sn["open_in_silence"] is None or sn["open_in_silence"] <= GATE_SILENCE)
-    return dict(corr=round(c0, 3), best=round(cb, 3), lag_ms=lag, corr_pm1=round(c1, 3), cover=round(cover, 3), **sn, **{"pass": bool(ok)})
+    return dict(
+        corr=round(c0, 3), best=round(cb, 3), lag_ms=lag, corr_pm1=round(c1, 3), cover=round(cover, 3), **sn, **extra, **{"pass": bool(ok)}
+    )
 
 
 def vocal_clip(vocal, t0, dur, work):

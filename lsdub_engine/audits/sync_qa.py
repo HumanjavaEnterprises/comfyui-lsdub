@@ -45,16 +45,32 @@ def _norm(x):
     return (x - np.nanmin(x)) / (np.ptp(x) + 1e-9)
 
 
-def tracking(ours, target, fps, max_lag=10):
+def tracking(ours, target, fps, max_lag=10, keep=None):
     """-> (corr at 0 lag, best corr, best lag ms; + = ours LATER than the audio, the mouth trails).
-    NOTE: before this fix the returned sign was inverted (+ meant the mouth LEADS); corr unchanged."""
+    NOTE: before this fix the returned sign was inverted (+ meant the mouth LEADS); corr unchanged.
+    keep: a bool per frame; only pairs of two kept frames count. None = every frame."""
     z = lambda x: (x - x.mean()) / (x.std() + 1e-9)
+    if keep is not None:
+        return _tracking_kept(np.asarray(ours, float), np.asarray(target, float), fps, max_lag, np.asarray(keep, bool), z)
     c = {
         L: float(np.mean(z(ours[L:]) * z(target[: len(target) - L]))) if L >= 0 else float(np.mean(z(ours[:L]) * z(target[-L:])))
         for L in range(-max_lag, max_lag + 1)
     }
     L = max(c, key=c.get)
     return c[0], c[L], L * 1000.0 / fps  # L>0 pairs ours[i+L] with target[i]: ours trails
+
+
+def _tracking_kept(ours, target, fps, max_lag, keep, z):
+    n = min(len(ours), len(target), len(keep))
+    ours, target, keep = ours[:n], target[:n], keep[:n]
+    c = {}
+    for L in range(-max_lag, max_lag + 1):
+        i = np.arange(max(0, L), n + min(0, L))  # ours[i] pairs with target[i - L]
+        i = i[keep[i] & keep[i - L]]
+        if len(i) >= 3:
+            c[L] = float(np.mean(z(ours[i]) * z(target[i - L])))
+    L = max(c, key=c.get)
+    return c.get(0, 0.0), c[L], L * 1000.0 / fps
 
 
 DISAGREE = 0.3

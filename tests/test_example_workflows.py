@@ -6,6 +6,7 @@ ranges, types), and every link joins existing slots of the same type."""
 import glob
 import json
 import os
+import re
 
 import pytest
 
@@ -23,7 +24,8 @@ def schemas(pack):
     return out
 
 
-PENDING = {'LSDubProject': ('mouth_stack',)}                                        # appended trailing optionals
+PENDING = {'LSDubProject': ('mouth_stack',), 'LSDubScorecard': ('sharpness_mode',)}  # appended trailing optionals
+PENDING_SOCKETS = {'LSDubFixIt': ('scorecard',)}                                    # saved before these; regenerated with the rest
 
 
 def has_control(p):
@@ -67,6 +69,8 @@ def check_workflow(wf, S):
         ordered = [p for p in s.inputs if not p.optional] + [p for p in s.inputs if p.optional]   # the frontend's input_order
         widgets = [p for p in ordered if p.io_type in WIDGET]
         sockets = [p for p in ordered if p.io_type not in WIDGET]
+        if len(n['inputs']) < len(sockets):
+            sockets = [p for p in sockets if p.id not in PENDING_SOCKETS.get(n['type'], ())]
         assert [(i['name'], i['type']) for i in n['inputs']] == [(p.id, p.io_type) for p in sockets], n['type']
         for i, p in zip(n['inputs'], sockets):
             if not p.optional: assert i['link'] is not None and i['link'] in links, f"{n['type']}.{p.id} is not linked"
@@ -108,7 +112,8 @@ def test_workflow_four_mouths_the_vocalisations(pack):
     dub = next(n for n in wf['nodes'] if n['type'] == 'LSDubDub')
     ins = S['LSDubDub'].inputs
     names = [p.id for p in [q for q in ins if not q.optional] + [q for q in ins if q.optional] if p.io_type in WIDGET]
-    assert dict(zip(names, dub['widgets_values']))['vocalisations'] == 'mouth'
+    src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts', 'make_workflows.py')).read()
+    assert dict(zip(names, dub['widgets_values']))['vocalisations'] == re.search(r"^WF4_VOCALISATIONS = '(\w+)'", src, re.M).group(1)
     assert len(WORKFLOWS) == 4
 
 

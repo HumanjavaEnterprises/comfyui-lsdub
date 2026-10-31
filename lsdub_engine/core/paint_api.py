@@ -10,6 +10,8 @@ wins from there. Every entry point goes through here: sing (both candidates), me
 
 The snap paint flags sit in `operational` for now: they have always come after the user's flags, so they win over them."""
 
+import shlex
+
 from . import recipes, steps
 
 
@@ -62,14 +64,25 @@ def expand(args):
 
 
 def target(args):
-    """the --warp-target these flags end up with, or None."""
-    a, found = expand(args), None
-    for i, t in enumerate(a):
-        if t == "--warp-target" and i + 1 < len(a):
-            found = a[i + 1]
-        elif t.startswith("--warp-target="):
-            found = t.split("=", 1)[1]
-    return found
+    """the --warp-target paint will read from these flags, through paint's own parser (so `--warp-targ` counts), or None
+    when paint would reject them."""
+    from . import mouth_paint
+
+    try:
+        return mouth_paint._parser().parse_known_args(["--video", "-", "--track", "-", "--out", "-", *expand(args)])[0].warp_target
+    except SystemExit:
+        return None
+
+
+def split_settings(text):
+    """a free-text flag string -> argv. Whitespace separates; single or double quotes group a value and keep it literal;
+    a backslash is an ordinary character, so a Windows path survives. An unmatched quote raises ValueError."""
+    lex = shlex.shlex(text, posix=True)
+    lex.whitespace_split, lex.commenters, lex.escape = True, "", ""
+    try:
+        return list(lex)
+    except ValueError:
+        raise ValueError(f"unmatched quote in {text!r}: put a value holding a space or an apostrophe in double quotes") from None
 
 
 def coart_dyn(args, dyn):
