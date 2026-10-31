@@ -588,6 +588,7 @@ def write_verify(meta, rows, out):
         "delta",
         "corr",
         "env_corr",
+        "env_best",
         "env_lag_ms",
         "mouth_range",
         "open_in_silence",

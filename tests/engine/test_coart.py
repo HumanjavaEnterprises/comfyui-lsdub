@@ -363,3 +363,10 @@ def test_advance_s_reads_the_flag_from_settings():
     assert paint_api.advance_s(()) == 0.0
     assert paint_api.advance_s(["--x", "1", "--coart-advance-ms", "60"]) == 0.06
     assert paint_api.advance_s(["--coart-advance-ms=30", "--coart-advance-ms", "90"]) == 0.09
+
+
+def test_plan_and_track_move_by_the_same_whole_frames():
+    assert coart.whole_frames(0.1, 25) == 0.08 == 2 / 25  # 2.5 frames: the track moves 2, so the plan does
+    assert coart.whole_frames(0.06, 50) == 0.06
+    fr = [dict(vis=str(i)) for i in range(6)]
+    assert coart.advance_frames(fr, 0.1, 25)[0]["vis"] == "2"

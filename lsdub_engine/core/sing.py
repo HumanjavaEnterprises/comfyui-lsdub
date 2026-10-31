@@ -179,7 +179,11 @@ def run(
             *(("--occluder-mask", occ) if os.path.exists(occ) else ()),
         ],
     )
-    target = dyn_target(dyn, n, t0 + paint_api.advance_s(paint_args), fps)  # the plan moved: the gate reads the same curve
+    from .coart import whole_frames
+
+    target = dyn_target(
+        dyn, n, t0 + whole_frames(paint_api.advance_s(paint_args), fps * m), fps
+    )  # the plan moved: the gate reads the same curve
     pick = (lambda wj, n_, m_: pick_extremes([f["egap"] for f in json.load(open(wj))["frames"]], target, m_)) if m > 1 else None
     R = MED.run(
         take,

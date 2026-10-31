@@ -12,9 +12,11 @@ from scipy.ndimage import gaussian_filter1d
 from . import lip_layers as ll
 
 LIP_IN, LIP_OUT = ll.LIP_IN, ll.LIP_OUT
-PINK_ROOM = 0.94  # the fill's pink stops this far under the take's share
+PINK_ROOM = 0.85  # the fill's pink stops this far under the take's core share: the delivered core must stay under the take's
+CORE = 7  # the take's pink share is read this many px inside its contour (kernel side): the rim is lip, not interior
 RELEASE = 0.8  # the pink sink's share kept per frame after the last frame that needed it
 SANK_MIN = 0.005  # a sink below this is off
+SANK_STEPS = 8  # bisection steps on the sink: a blend to 1/256
 OPEN_MIN = 0.06  # a donor below this aperture (x mouth width) shows no interior
 HOLD = 0.50  # keep the running donor while its cost is within this of the best one
 DWELL = 10  # frames a new donor stays, unless it stops being open enough
@@ -41,6 +43,19 @@ def pink(lab):
     """the mouth-ruler's pink test on an OpenCV Lab image (float or uint8)."""
     L = lab[..., 0] * 100.0 / 255.0
     return (L > 25) & (L <= 75) & (lab[..., 1] - 128.0 > 14)
+
+
+def least_sink(lab, pm, base, vis, over, area, tgt):
+    """the smallest blend toward `base` that brings the pink share to tgt, by bisection: the share falls off a cliff against the
+    blend, so stepping up overshoots far under the target. 1.0 when even that does not hold it."""
+    held = lambda v: (float(pink(lab * (1 - pm * v) + base * pm * v)[vis].sum()) + over) / area <= tgt
+    if not held(1.0):
+        return 1.0
+    lo, hi = 0.0, 1.0
+    for _ in range(SANK_STEPS):
+        mid = 0.5 * (lo + hi)
+        lo, hi = (lo, mid) if held(mid) else (mid, hi)
+    return hi
 
 
 def teeth(lab):
@@ -95,6 +110,18 @@ class TakeInterior:
         self.ring = gaussian_filter1d(ring, 2.0, axis=0, mode="nearest")
         self.log, self.gain, self.sank = {}, {}, {}
 
+    def state(self, i):
+        """what paint(i) left behind: a gate candidate's copy, to keep it only if the candidate is kept."""
+        return self.log.get(int(i)), self.gain.get(i), self.sank.get(i)
+
+    def put(self, i, st):
+        """state(i) back; None = frame i has none (a candidate that paints no interior)."""
+        for d, k, v in zip((self.log, self.gain, self.sank), (int(i), i, i), st):
+            if v is None:
+                d.pop(k, None)
+            else:
+                d[k] = v
+
     def binned(self, v, seen, mid):
         """v's median per aperture bin, interpolated over the empty ones."""
         c = np.full(len(mid), np.nan)
@@ -142,7 +169,9 @@ class TakeInterior:
             return 0.0, np.nan
         lab = cv2.cvtColor(self.frames[i][y0:y1, x0:x1], cv2.COLOR_BGR2LAB).astype(np.float32)
         rest = m & ~teeth(lab)
-        return float(pink(lab)[m].mean()), float(np.median(lab[..., 0][rest])) if rest.sum() >= 8 else np.nan
+        core = cv2.erode(m.astype(np.uint8), np.ones((CORE, CORE), np.uint8)) > 0  # clear of the lip's own rim, as the ruler's pink_core
+        share = float(pink(lab)[core if core.sum() > 30 else m].mean())
+        return share, float(np.median(lab[..., 0][rest])) if rest.sum() >= 8 else np.nan
 
     def target(self, ap, curve=None):
         return float(np.interp(ap, 0.5 * (self.bins[:-1] + self.bins[1:]), self.curve if curve is None else curve))
@@ -222,12 +251,7 @@ class TakeInterior:
             nonp = ~pk & opening
             base = (np.median(lab[nonp], 0) if nonp.sum() > 8 else np.array([50.0, 138.0, 134.0])).astype(np.float32)
             if got > tgt:
-                need = 1.0 - tgt / got
-                for _ in range(6):  # a blend only leaves the pink test late: raise it until the share is held
-                    sunk = lab * (1 - pm * need) + base * pm * need
-                    if (float(pink(sunk)[vis].sum()) + over) / area <= tgt or need >= 1.0:
-                        break
-                    need = min(1.0, need * 1.4 + 0.1)
+                need = least_sink(lab, pm, base, vis, over, area, tgt)
         k = max(need, tail)  # the cap holds from the first frame it is needed; letting go is what is eased
         k = 0.0 if k < SANK_MIN else k
         if k > 0:

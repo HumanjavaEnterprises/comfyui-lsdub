@@ -869,7 +869,8 @@ def _parser():
         type=float,
         default=0.0,
         help="warp (coart): ms; the whole mouth plan runs this much earlier against the audio: phones, closures, tongue and "
-        "teeth shapes and --coart-dyn together (0 = off). Keeps the plan's shape and only moves it in time",
+        "teeth shapes and --coart-dyn together, snapped to whole frames of the track (0 = off). Keeps the plan's shape and only "
+        "moves it in time",
     )
     # (opt-in; audits/frame_gate.py = the checker, core/frame_gate.py = the maker): the per-frame gate ---
     ap.add_argument(

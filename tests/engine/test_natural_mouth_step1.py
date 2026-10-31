@@ -97,7 +97,6 @@ def test_pink_cap_attacks_at_once_and_releases_slowly():
     for i in (1, 2, 3):
         paint(i)
         assert T.log[i]["held"] <= T.log[i]["target"] + 1e-3  # the first breach frame is held too, not a fifth of it
-    assert T.log[1]["sank"] >= 1.0 - T.log[1]["target"] / T.log[1]["pink"]
     top = T.log[3]["sank"]
     T.curve[:] = 2.0
     tail = []
@@ -108,13 +107,72 @@ def test_pink_cap_attacks_at_once_and_releases_slowly():
     assert all(b < a for a, b in zip(tail, tail[1:])) and tail[-1] > 0
 
 
-def test_pink_tail_stops_when_it_reaches_nothing():
+def test_pink_cap_lands_on_the_target_not_far_under_it():
+    lab = np.full((64, 256, 3), 120.0, np.float32)
+    lab[..., 1] = np.linspace(143, 190, 256, dtype=np.float32)[None, :]  # every pixel pink, each leaving the test at its own blend
+    vis = np.ones(lab.shape[:2], bool)
+    pm = np.ones((*lab.shape[:2], 1), np.float32)
+    base = np.array([120.0, 128.0, 128.0], np.float32)
+    for tgt in (0.2, 0.5, 0.8):
+        k = IT.least_sink(lab, pm, base, vis, 0, vis.size, tgt)
+        held = float(IT.pink(lab * (1 - pm * k) + base * pm * k).mean())
+        assert 0.8 * tgt <= held <= tgt
+
+
+def test_least_sink_says_when_nothing_holds_the_share():
+    lab = np.full((8, 8, 3), 120.0, np.float32)
+    vis = np.ones((8, 8), bool)
+    assert IT.least_sink(lab, np.ones((8, 8, 1), np.float32), lab[0, 0], vis, 64, 64, 0.5) == 1.0  # the part it cannot sink is over
+
+
+def test_pink_tail_decays_paints_and_stops():
+    F, S, Fe, bank = clip()
+    Q = S[0][ll.LIP_IN][:, :2]
+    zero = np.zeros((200, 200), np.float32)
+    run = lambda T, i: T.paint(i, Q, (0, 0, 200, 200), 0.4, zero)[0]
+    make = lambda: IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]))
+    clean, tailed, faded = make(), make(), make()
+    for T in (clean, tailed, faded):
+        T.curve[:] = 2.0  # no frame needs the cap: only the stored tail can sink anything
+    tailed.sank[0] = 0.5
+    faded.sank[0] = IT.SANK_MIN * 1.01
+    a, b, c = run(clean, 1), run(tailed, 1), run(faded, 1)
+    assert tailed.log[1]["sank"] == pytest.approx(IT.RELEASE * 0.5, abs=1e-3)  # stored, decayed
+    assert tailed.sank[1] == pytest.approx(IT.RELEASE * 0.5, abs=1e-3)
+    assert np.abs(a - b).max() > 1  # the tail changes the pixels
+    assert faded.log[1]["sank"] == 0 and faded.sank[1] == 0  # under the floor it is off ...
+    assert np.array_equal(a, c)  # ... and paints nothing
+
+
+def test_interior_state_round_trips_and_clears():
     F, S, Fe, bank = clip()
     T = IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]))
-    T.curve[:] = 2.0
-    T.sank[-1] = IT.SANK_MIN
-    T.paint(0, S[0][ll.LIP_IN][:, :2], (0, 0, 200, 200), 0.4, np.zeros((200, 200), np.float32))
-    assert T.log[0]["sank"] == 0
+    T.log[3], T.gain[3], T.sank[3] = dict(sank=0.4), 0.9, 0.4
+    st = T.state(3)
+    T.put(3, (None, None, None))
+    assert 3 not in T.log and 3 not in T.gain and 3 not in T.sank
+    T.put(3, st)
+    assert T.state(3) == st
+
+
+def test_a_rejected_gate_candidate_leaves_no_interior_state():
+    import types
+    from lsdub_engine.core import frame_gate as FG
+
+    F, S, Fe, bank = clip()
+    T = IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]))
+    T.log[2], T.gain[2], T.sank[2] = dict(sank=0.1), 1.0, 0.1
+    clip_ = types.SimpleNamespace(comp=types.SimpleNamespace(take_interior=T))
+    held = FG.interior_hold(clip_, [2])
+    T.log[2], T.gain[2], T.sank[2] = dict(sank=0.9), 0.5, 0.9  # a candidate paints frame 2
+    got = FG.interior_release(clip_, held)
+    assert T.sank[2] == 0.1 and T.log[2]["sank"] == 0.1  # rejected: the kept render's state is back
+    FG.interior_keep(clip_, got)
+    assert T.sank[2] == 0.9 and T.gain[2] == 0.5  # kept
+    held = FG.interior_hold(clip_, [2])  # a candidate that paints no interior (layers off), kept
+    got = FG.interior_release(clip_, held)
+    FG.interior_keep(clip_, got)
+    assert 2 not in T.sank and 2 not in T.log
 
 
 def test_closed_donor_leaves_the_model_layers():

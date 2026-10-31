@@ -161,3 +161,13 @@ def test_restore_order_handles_a_run_of_three():
     assert restore_order(W) == 3
     assert [w["w"] for w in W] == ["a", "b", "c", "d"]
     assert all(x["end"] <= y["start"] + 1e-9 for x, y in zip(W, W[1:]))
+
+
+def test_restore_order_keeps_a_silent_gap_silent():
+    from lsdub_engine.core.lyric_align import restore_order
+
+    W = [_w("b", 1, 1.0, 1.4), _w("a", 0, 2.0, 2.2)]  # 0.6 s of silence between them
+    assert restore_order(W) == 2
+    assert [w["w"] for w in W] == ["a", "b"]
+    assert W[1]["start"] - W[0]["end"] == pytest.approx(0.6)
+    assert W[0]["start"] == 1.0 and W[1]["end"] == pytest.approx(2.2)

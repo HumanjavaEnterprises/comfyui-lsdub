@@ -893,9 +893,14 @@ def press_closures(Ft, Fs, closures, caps_px, scale, d0, d1, max_press, iters=3)
     return Ft
 
 
+def whole_frames(advance_s, fps):
+    """--coart-advance-ms snapped to whole frames, s: every reader of the track indexes it by frame, so the plan moves by the same."""
+    return int(round(float(advance_s or 0.0) * fps)) / fps
+
+
 def advance_frames(fr_t, advance_s, fps):
     """--coart-advance-ms on the track's own frames: frame k reads the track round(advance x fps) frames later, the last frame
-    held. Whole frames: every reader of the track indexes it by frame. advance 0 returns the list unchanged."""
+    held. advance 0 returns the list unchanged."""
     k = int(round(float(advance_s or 0.0) * fps))
     return fr_t if k <= 0 or not fr_t else fr_t[min(k, len(fr_t) - 1) :] + fr_t[-1:] * min(k, len(fr_t) - 1)
 
@@ -910,7 +915,9 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
     t0 = float(T.get("t0", fr_t[0].get("t", 0.0)))
     align = load_align(T.get("align"), a.track)
     lead, match, shift = None, None, 0.0
-    advance = float(getattr(a, "coart_advance_ms", 0.0) or 0.0) / 1000.0  # plan as if each frame showed the song this much later
+    advance = whole_frames(
+        float(getattr(a, "coart_advance_ms", 0.0) or 0.0) / 1000.0, fps
+    )  # plan as if each frame showed the song this much later
     if align is not None:
         lead, match = detect_lead(align, T["frames"], t0, min(n, len(T["frames"])), fps)  # the lead the track was BUILT with
         if match < 0.9:

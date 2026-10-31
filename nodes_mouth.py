@@ -178,7 +178,7 @@ class LSDubTweaks(io.ComfyNode):
                                         'columns frame,time_s,...,jawOpen; song time). Drives the jaw in the silences more '
                                         'cleanly. Empty = the vocal envelope only.'),
                 io.Float.Input('sync_advance_ms', default=0.0, min=0.0, max=200.0, step=10.0, optional=True,
-                               tooltip='Moves the whole mouth plan earlier against the sound, ms. It keeps the mouth\'s shapes and only '
+                               tooltip='Moves the whole mouth plan earlier against the sound, ms, snapped to whole frames. It keeps the mouth\'s shapes and only '
                                        'changes when they land. 0 = off.'),
             ],
             outputs=[T.LSDubTweaks.Output(display_name='tweaks', tooltip='The mouth controls.')],

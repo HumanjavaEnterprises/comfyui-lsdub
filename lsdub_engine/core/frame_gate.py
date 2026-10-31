@@ -117,6 +117,41 @@ def restore(ck, snap):
             ck.plan[k][i] = v
 
 
+def interior_of(clip):
+    return getattr(getattr(clip, "comp", None), "take_interior", None)
+
+
+def interior_hold(clip, frames):
+    """before a candidate renders `frames`: the take interior's state of the kept render, cleared so a candidate that paints
+    no interior leaves none. -> what interior_release wants."""
+    T = interior_of(clip)
+    if T is None:
+        return None
+    saved = {f: T.state(f) for f in frames}
+    for f in frames:
+        T.put(f, (None, None, None))
+    return saved
+
+
+def interior_release(clip, saved):
+    """after a candidate rendered: the interior's state goes back to the kept render. -> the candidate's, per frame, for
+    interior_keep. Only a kept candidate's tail and log stay."""
+    T = interior_of(clip)
+    if T is None or saved is None:
+        return {}
+    got = {f: T.state(f) for f in saved}
+    for f, st in saved.items():
+        T.put(f, st)
+    return got
+
+
+def interior_keep(clip, got):
+    T = interior_of(clip)
+    if T is not None:
+        for f, st in got.items():
+            T.put(f, st)
+
+
 def score(V, idx):
     """gate score of frames idx: severity + 1 per FAIL (+ 0.25 per SOFT)."""
     s = 0.0
@@ -440,6 +475,7 @@ def try_run(clip, ck, run, ovs, ref):
     neighbours; the checker is left UPDATED (restore 'snap' to undo)."""
     snap = snapshot(ck, run)
     res = {}
+    held = interior_hold(clip, run)
     for t in run:
         ov, extra = ovs[t]
         out, mask, ent, P = clip.render_frame(t, ov, fold=True)
@@ -447,12 +483,14 @@ def try_run(clip, ck, run, ovs, ref):
         plan_i = plan_entry(clip, t, ov, ent, P, fd, extra)
         ck.update(t, out, mask, plan_i=plan_i)
         res[t] = dict(out=out, mask=mask, ent=ent, P=P, plan_i=plan_i)
+    interior = interior_release(clip, held)
     M = ck.metrics()
     V = ck.verdict(M, ref)
-    return dict(res=res, V=V, M=M, snap=snap)
+    return dict(res=res, V=V, M=M, snap=snap, interior=interior)
 
 
 def commit_run(clip, ck, r, how, rnd):
+    interior_keep(clip, r.get("interior", {}))
     for t, (ov, extra) in r.get("ovs", {}).items():
         clip.gate_ov[t] = ov
     for t, x in r["res"].items():
@@ -708,6 +746,7 @@ def repair_window(clip, ck, win, ref, V, M, rnd, log, ctx=None, cands=()):
             fit.update(interp_params(clip, list(range(x + 1, y)), x, y, tracks, deg))
         snaps = snapshot(ck, frames)
         res = {}
+        held = interior_hold(clip, frames)
         for f in frames:
             b = clip.gate_ov.get(f, {})
             ov = dict(b)
@@ -725,6 +764,7 @@ def repair_window(clip, ck, win, ref, V, M, rnd, log, ctx=None, cands=()):
             plan_i = plan_entry(clip, f, ov, ent, P, fd, dict(S_in=Si))  # (the fitted input landmarks it now uses)
             ck.update(f, out, mask, plan_i=plan_i)
             res[f] = (out, mask, ent, P, plan_i, res_ov)
+        interior = interior_release(clip, held)
         M1 = ck.metrics()
         V1 = ck.verdict(M1, ref)
         e1 = slosh_energy(V1, M1, a0, a1)
@@ -737,11 +777,12 @@ def repair_window(clip, ck, win, ref, V, M, rnd, log, ctx=None, cands=()):
         cand = dict(deg=deg, energy=round(e1, 4), structure=okS, viseme=okV, no_fail=okF)
         rec.setdefault("tried", []).append(cand)
         if okS and okV and okF and e1 < rec["energy_before"] - 1e-6 and (best is None or e1 < best[0]):
-            best = (e1, deg, res, V1, M1)
+            best = (e1, deg, res, V1, M1, interior)
         restore(ck, snaps)
     if best is None:
         return window_fallback_commit(clip, ck, win, ref, V, M, rnd, log, rec, ctx, cands)
-    e1, deg, res, V1, M1 = best
+    e1, deg, res, V1, M1, interior = best
+    interior_keep(clip, interior)
     for f in frames:
         out, mask, ent, P, plan_i, ov = res[f]
         ck.update(f, out, mask, plan_i=plan_i)
