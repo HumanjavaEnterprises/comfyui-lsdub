@@ -5,6 +5,7 @@ types, order), required inputs are linked, the widget values are one per widget 
 ranges, types), and every link joins existing slots of the same type."""
 import glob
 import json
+import math
 import os
 import re
 
@@ -106,15 +107,25 @@ def test_the_check_catches_a_bad_widget_value(pack):
         check_workflow(wf, S)
 
 
-def test_workflow_four_mouths_the_vocalisations(pack):
+def test_workflow_four_vocalisations_are_the_recorded_choice(pack):
     wf = json.load(open([p for p in WORKFLOWS if '4-' in os.path.basename(p)][0]))
     S = schemas(pack)
     dub = next(n for n in wf['nodes'] if n['type'] == 'LSDubDub')
     ins = S['LSDubDub'].inputs
     names = [p.id for p in [q for q in ins if not q.optional] + [q for q in ins if q.optional] if p.io_type in WIDGET]
     src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts', 'make_workflows.py')).read()
-    assert dict(zip(names, dub['widgets_values']))['vocalisations'] == re.search(r"^WF4_VOCALISATIONS = '(\w+)'", src, re.M).group(1)
+    choice = re.search(r"^WF4_VOCALISATIONS = '(\w+)'", src, re.M).group(1)
+    assert choice in ('skip', 'mouth')                                                   # `rest` is not on workflow 4's menu
+    assert dict(zip(names, dub['widgets_values']))['vocalisations'] == choice
     assert len(WORKFLOWS) == 4
+
+
+def test_workflow_four_generates_no_wasted_shot(pack):
+    wf = json.load(open([p for p in WORKFLOWS if '4-' in os.path.basename(p)][0]))
+    perf = next(n for n in wf['nodes'] if n['type'] == 'LSDubPerformance')
+    s = next(v for v in perf['widgets_values'] if isinstance(v, float) and v > 0)
+    need = int(round(15.3 * 25))                                                         # the demo song
+    assert math.ceil(15.3 / s) == 3 and 3 * pack.graphs.video_frames(s, 25) >= need
 
 
 def test_project_widgets_in_ui_order(pack):

@@ -23,6 +23,7 @@ All times in the output are SOURCE-AUDIO (song/stem) time.
 
 import argparse, difflib, json, os, re, sys, tempfile
 from ..io import ff
+from .vocalisations import marked_chunks, markup_flags
 import numpy as np
 
 VOWELS = {"AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY", "IH", "IY", "OW", "OY", "UH", "UW"}
@@ -157,17 +158,27 @@ def place_lyrics(lines, env, t0, thr, lo=None, hi=None):
     return [out[i] for i in sorted(out)]
 
 
-def lyric_lines(path):
-    """the lyric sheet as lines of normalised tokens (section headers and empty lines dropped)."""
+def marked_lines(path):
+    """the lyric sheet as lines of (normalised token, flag): the markup of vocalisations.marked_chunks read, never sung. A word in
+    ( ... ) or after [skip] stays in its line, so it is aligned, with flag 'paren' / 'tag'; section headers, (x2) marks and empty
+    lines are gone."""
     out = []
-    for line in open(path):
-        line = line.strip()
-        if not line or line.startswith("["):
-            continue
-        t = [n for n in (norm(w) for w in re.split(r"[\s\-]+", line)) if n]
+    for line in open(path, encoding="utf-8"):
+        t = [(n, f) for c, f in marked_chunks(line.strip()) for n in (norm(w) for w in re.split(r"[\s\-]+", c)) if n]
         if t:
             out.append(t)
     return out
+
+
+def plain_lines(path):
+    """the sheet's lines as text with the markup gone (a speech-to-text prompt)."""
+    lines = (" ".join(c for c, _ in marked_chunks(ln.strip())) for ln in open(path, encoding="utf-8"))
+    return [ln for ln in lines if ln]
+
+
+def lyric_lines(path):
+    """the lyric sheet as lines of normalised tokens."""
+    return [[t for t, _ in ln] for ln in marked_lines(path)]
 
 
 def unheard_lines(lines, words):
@@ -322,16 +333,18 @@ def stt(audio, t0, t1, model="large-v3", prompt="", device="cpu", device_index=0
 
 
 def lyric_tokens(path):
-    toks = []
-    for line in open(path):
-        line = line.strip()
-        if not line or line.startswith("["):
-            continue
-        for w in re.split(r"[\s\-]+", line):
-            n = norm(w)
-            if n:
-                toks.append(n)
-    return toks
+    return [t for ln in lyric_lines(path) for t in ln]
+
+
+def mark_vocal(final, lines):
+    """the sheet's markup onto the aligned words: word['vocal'] = 'paren' / 'tag' on a marked word; a word with no mark gets no key,
+    so a sheet without markup writes the file it always did. vocalisations.classify honours the key, whatever track the Dub builds."""
+    marks = [m for ln in lines for m in ln]
+    if not any(f for _, f in marks):
+        return
+    for w, f in zip(final, markup_flags([norm(w["w"]) for w in final], marks)):
+        if f:
+            w["vocal"] = f
 
 
 def reconcile(whisper, lyr):
@@ -1068,6 +1081,7 @@ def main(argv=None):
         for p in w["phones"]:
             p["p"] = p["p"].rstrip("012")
             p["start"], p["end"] = round(p["start"], 3), round(p["end"], 3)
+    mark_vocal(final, marked_lines(a.lyrics))
     xc = rhubarb_crosscheck(final, json.load(open(a.rhubarb_json))) if a.rhubarb_json else None
     out = {
         "audio": a.audio,

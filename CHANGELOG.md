@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Lip-lock is gone from the pack: the landing preset carries no lip-colour geometry and no argv changes.
+- The vendored `lsdub_engine/workflows/*.json` are gone; `graphs.py` is the single source of the generator graphs.
+- The lyric sheet's scat markup, `( ... )` and `[skip]`, now reaches the Dub: Align reads it, leaves it out of the speech-to-text prompt, and flags those words in `align.json`.
+- Workflow 4 uses `shot_seconds` 5.5, so the demo song takes 3 generated shots, not 4.
 - `lsdub_engine/` and `tests/engine/` are now build output, never edited here; `lsdub_engine/VERSION` carries a tree hash that CI checks.
   Presets move to `lsdub_engine/core/presets.py`, recipes arrive beside them.
 - One cache reset: every stage key moves once in this release, so the generator slots (LTX, Qwen) re-run too, along with analysis, kits and shots. Earlier folders stay on disk. It groups four changes: the engine version now includes the vendored tree hash, kits hash by bytes instead of modification time, the unused project field `vocalisations` is gone, and `mouth_stack` arrives. A `project.json` from 0.1.3 still loads.

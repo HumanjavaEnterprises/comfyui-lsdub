@@ -88,6 +88,7 @@ They live in `example_workflows/` and show up in ComfyUI's template browser. Wor
    Queue stays blocked until the workflow's name is there). Works
    best with worded lyrics: the Dub here sets `vocalisations` to `mouth`, so scat (da da, ooh) is sung like words.
    With `skip`, those passages keep LTX-2.5's own mouth motion and Verify leaves their frames out of the sync score.
+   Syllables LSDub doesn't know as scat go in the lyric sheet as `(ba dee)` or after `[skip]`; Align passes the mark to the Dub.
 
 ## The nodes
 
@@ -177,6 +178,7 @@ Python SDK (`pip install comfy-sdk`).
 - **What runs where:** the dub and QA always run locally.
 - **Plan:** API-key runs need a **paid Comfy Cloud plan**. Free-tier accounts are refused, and LSDub says so in plain
   words.
+- **Hosted speech-to-text:** on a hosted GPU worker, Align runs Whisper on the CPU.
 - **Models:** Comfy Cloud has the same generator models. LSDub renames the one file whose name differs there (the
   Qwen-Image-Edit Lightning LoRA).
 - **Cost:** cloud runs use your Comfy credits.

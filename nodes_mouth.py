@@ -39,11 +39,11 @@ def _paint_warnings(argv):
 
 def _stack(project, identity):
     """(recipe, per-face argv) of this face. mouth_stack picks the recipe; on `plain`, a face the preset lists keeps the preset's
-    recipe. Lip-lock geometry belongs to one take, so it stays out of the argv."""
+    recipe."""
     p = presets.get(project.preset)
     listed = identity in p.face_overrides
     recipe = p.recipe if project.mouth_stack == 'plain' and listed else recipes.MOUTH_STACKS[project.mouth_stack]
-    return recipe, recipes.without(p.face_overrides.get(identity, ()), {'--warp-lip-lock'})
+    return recipe, p.face_overrides.get(identity, ())
 
 
 def _paint_flags(project, kit, tw, vocalisations):

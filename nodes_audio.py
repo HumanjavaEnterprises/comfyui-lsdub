@@ -26,9 +26,10 @@ def _input_path(p):
 
 
 def lyric_prompt(path, limit=600):
-    """the lyric sheet as a speech-to-text prompt (section headers dropped): the recogniser hears sung words it would
+    """the lyric sheet as a speech-to-text prompt (section headers and scat markup dropped): the recogniser hears sung words it would
     otherwise turn into other words (a chorus of names, invented words)."""
-    lines = [ln.strip() for ln in open(path, encoding='utf-8') if ln.strip() and not ln.strip().startswith('[')]
+    from .lsdub_engine.core import lyric_align as LA
+    lines = LA.plain_lines(path)
     return ' '.join(ln if ln[-1] in '.,!?;:' else ln + '.' for ln in lines)[:limit]
 
 

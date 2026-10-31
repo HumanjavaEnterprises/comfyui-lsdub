@@ -4,7 +4,7 @@
 (presets.py) says who is in the cast and which recipe they get.
 
   plain             no face flags: what a face without a preset entry gets
-  layers_v16_1      the landing preset's stack, the one that ships. Per-face data (lip-lock geometry) comes from the Preset
+  layers_v16_1      the landing preset's stack, the one that ships. A face's own argv, if it has one, comes from the Preset
                     and slots in at `overrides_at`, so the expanded argv is token for token the preset's flags
   layers_v16_1_min  the same minus the flags listed in `inert_under`. A candidate, nothing ships it
   morph             the `lsdub pipeline` path: `paint --mode morph` (the paint default), no warp flags

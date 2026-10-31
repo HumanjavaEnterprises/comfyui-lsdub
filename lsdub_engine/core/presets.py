@@ -10,7 +10,7 @@ no family names); a project picks a preset by name.
   colours         review-sheet colours (BGR)
   recipe          the paint recipe (recipes.py) of this preset's kit faces
   face_overrides  identity -> that face's own argv. A face listed here gets the recipe, opt-in per face, never a default;
-                  any other face paints plain. Lip-lock geometry lives here: it is one take's data, not the recipe's
+                  any other face paints plain
 """
 
 from dataclasses import dataclass, field
@@ -51,7 +51,7 @@ LANDING = Preset(
     families={"alcyone": "pleiadian", "merope": "pleiadian", "maia": "pleiadian", "zeta": "grey", "mantid": "mantis"},
     colours={"red_nova": (40, 40, 230), "sky_lux": (200, 80, 255)},
     recipe="layers_v16_1",
-    face_overrides={"red_nova": ("--warp-lip-lock", "107,169.7,157.6")},
+    face_overrides={"red_nova": ()},
 )
 
 PRESETS = {"none": NEUTRAL, "landing": LANDING}

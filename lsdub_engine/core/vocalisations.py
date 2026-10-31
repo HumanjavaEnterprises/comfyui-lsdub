@@ -152,50 +152,52 @@ def read_words(path):
 _REPEAT = re.compile(r"^\s*x?\s*\d+\s*x?\s*$", re.I)
 
 
+def marked_chunks(line):
+    """one line of the sheet -> [(text, flag)], its words as written with the markup gone: flag as in lyric_marks."""
+    out = []
+    line = re.sub(r"\[(?!skip\])[^\]]*\]", " ", line, flags=re.I)  # section headers
+    tag = False
+    depth = 0
+    buf = ""
+
+    def flush(buf, flag):
+        if buf.strip():
+            out.append((buf.strip(), flag))
+
+    i = 0
+    low = line.lower()
+    while i < len(line):
+        if low.startswith("[skip]", i):
+            flush(buf, "tag" if tag else ("paren" if depth else None))
+            buf = ""
+            tag = True
+            i += 6
+            continue
+        ch = line[i]
+        if ch == "(":
+            flush(buf, "tag" if tag else ("paren" if depth else None))
+            buf = ""
+            depth += 1
+            j = line.find(")", i)
+            if j > i and _REPEAT.match(line[i + 1 : j]):
+                depth -= 1
+                i = j + 1
+                continue
+        elif ch == ")" and depth:
+            flush(buf, "tag" if tag else "paren")
+            buf = ""
+            depth -= 1
+        else:
+            buf += ch
+        i += 1
+    flush(buf, "tag" if tag else ("paren" if depth else None))
+    return out
+
+
 def lyric_marks(text):
     """the lyric sheet -> [(token, flag)]: flag 'paren' inside ( ... ), 'tag' after [skip] to the end of the line, None
     otherwise. Other [...] (section headers) are dropped; '(x2)'-style repeat marks are dropped."""
-    out = []
-    for line in str(text).splitlines():
-        line = re.sub(r"\[(?!skip\])[^\]]*\]", " ", line, flags=re.I)  # section headers
-        tag = False
-        depth = 0
-        buf = ""
-
-        def flush(buf, flag):
-            for w in buf.split():
-                t = norm(w)
-                if t:
-                    out.append((t, flag))
-
-        i = 0
-        low = line.lower()
-        while i < len(line):
-            if low.startswith("[skip]", i):
-                flush(buf, "tag" if tag else ("paren" if depth else None))
-                buf = ""
-                tag = True
-                i += 6
-                continue
-            ch = line[i]
-            if ch == "(":
-                flush(buf, "tag" if tag else ("paren" if depth else None))
-                buf = ""
-                depth += 1
-                j = line.find(")", i)
-                if j > i and _REPEAT.match(line[i + 1 : j]):
-                    depth -= 1
-                    i = j + 1
-                    continue
-            elif ch == ")" and depth:
-                flush(buf, "tag" if tag else "paren")
-                buf = ""
-                depth -= 1
-            else:
-                buf += ch
-            i += 1
-        flush(buf, "tag" if tag else ("paren" if depth else None))
-    return out
+    return [(t, f) for line in str(text).splitlines() for c, f in marked_chunks(line) for t in map(norm, c.split()) if t]
 
 
 def markup_flags(words, marks):
@@ -239,6 +241,9 @@ def classify(occ, extra=frozenset(), marks=None, all_words=None):
         t = norm(o["w"])
         o["vocal"] = False
         o["reason"] = None
+        if o.get("mark"):  # Align's own word flag: the sheet's markup, carried in align.json
+            o["vocal"], o["reason"] = True, f"markup:{o['mark']}"
+            continue
         if mf is not None and mf[k]:
             o["vocal"], o["reason"] = True, f"markup:{mf[k]}"
             continue
@@ -351,7 +356,7 @@ def track_occurrences(T, A=None):
             o = dict(w=fr[k].get("word", ""), f0=k, f1=j, t0=t0 + k / fps, t1=t0 + (j + 1) / fps, ai=a if a >= 0 else None)
             if o["ai"] is not None:
                 aw = A["words"][o["ai"]]
-                o.update(t0=float(aw["start"]), t1=float(aw["end"]), src=aw.get("src"))
+                o.update(t0=float(aw["start"]), t1=float(aw["end"]), src=aw.get("src"), mark=aw.get("vocal"))
             occ.append(o)
         k = j + 1
     return occ
@@ -680,7 +685,10 @@ def for_warp(a):
 # ------------------------------------------------------------------------------------------------------- CLI --
 def scan_alignment(A, skip_words=(), lyrics=None, merge_gap=MERGE_GAP):
     """the whole song: every vocalisation span in an alignment -> [{t0, t1, words, reasons, idx}]."""
-    occ = [dict(w=w.get("w", ""), t0=float(w["start"]), t1=float(w["end"]), ai=j, src=w.get("src")) for j, w in enumerate(A["words"])]
+    occ = [
+        dict(w=w.get("w", ""), t0=float(w["start"]), t1=float(w["end"]), ai=j, src=w.get("src"), mark=w.get("vocal"))
+        for j, w in enumerate(A["words"])
+    ]
     occ.sort(key=lambda o: (o["t0"], o["t1"]))
     marks = lyric_marks(open(lyrics, encoding="utf-8").read()) if lyrics else None
     extra = read_words(skip_words) if isinstance(skip_words, str) else frozenset(norm(w) for w in skip_words or ())

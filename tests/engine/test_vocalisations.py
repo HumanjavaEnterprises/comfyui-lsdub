@@ -472,3 +472,52 @@ def test_cli_knows_track():
     from lsdub_engine import cli
 
     assert cli.CMDS["track"] == "core.vocalisations" and "lsdub track" in cli.HELP
+
+
+# ------------------------------------------------------------------------------- the sheet's markup through Align --
+SHEET = "[Verse 1]\nhello there (x2)\n[skip] ba dee\nfly (skoo-bop) me\n"
+
+
+def _sheet(tmp_path, text=SHEET):
+    p = tmp_path / "lyrics.txt"
+    p.write_text(text)
+    return str(p)
+
+
+def test_lyric_lines_read_the_markup_grammar(tmp_path):
+    from lsdub_engine.core import lyric_align as LA
+
+    p = _sheet(tmp_path)
+    assert LA.lyric_lines(p) == [["hello", "there"], ["ba", "dee"], ["fly", "skoo", "bop", "me"]]
+    assert LA.lyric_tokens(p) == ["hello", "there", "ba", "dee", "fly", "skoo", "bop", "me"]
+    assert LA.plain_lines(p) == ["hello there", "ba dee", "fly skoo-bop me"]
+    assert [t for t, f in LA.marked_lines(p)[2] if f] == ["skoo", "bop"]
+
+
+def test_an_unmarked_sheet_reads_as_it_did(tmp_path):
+    from lsdub_engine.core import lyric_align as LA
+
+    p = _sheet(tmp_path, "[Chorus]\nit's, it's about-that time\n\n24/7 now\n")
+    assert LA.lyric_lines(p) == [["it's", "it's", "about", "that", "time"], ["247", "now"]]
+    w = [dict(w=t) for t in LA.lyric_tokens(p)]
+    LA.mark_vocal(w, LA.marked_lines(p))
+    assert not any("vocal" in x for x in w)
+
+
+def test_align_flags_reach_the_track_with_no_sheet(tmp_path):
+    from lsdub_engine.core import lyric_align as LA
+
+    p = _sheet(tmp_path)
+    toks = LA.lyric_tokens(p)
+    A = dict(words=[dict(w=t, start=i * 0.4, end=(i + 1) * 0.4 - 0.02) for i, t in enumerate(toks)])
+    LA.mark_vocal(A["words"], LA.marked_lines(p))
+    assert [w["w"] for w in A["words"] if "vocal" in w] == ["ba", "dee", "skoo", "bop"]
+    fr = [dict(word="", t=(i + 0.5) / 25) for i in range(80)]
+    for w in A["words"]:
+        for i in range(int(w["start"] * 25), int(w["end"] * 25)):
+            fr[i]["word"] = w["w"]
+    f = vz.find_spans(dict(fps=25, t0=0.0, frames=fr), A)  # no lyrics given: only the alignment says it
+    assert [s["words"] for s in f["spans"]] == [["ba", "dee"], ["skoo", "bop"]]
+    assert {r for s in f["spans"] for r in s["reasons"]} == {"markup:tag", "markup:paren"}
+    out, _ = vz.scan_alignment(A)
+    assert [s["words"] for s in out] == [["ba", "dee"], ["skoo", "bop"]]

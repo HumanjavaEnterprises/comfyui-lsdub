@@ -127,11 +127,7 @@ def _flags(pack, stack='plain', preset='none', identity='singer', settings='', v
 
 
 def _landing(pack):
-    P = pack.nodes_mouth.presets.LANDING
-    f = list(P.flags_for('red_nova'))
-    i = f.index('--warp-lip-lock')
-    del f[i:i + 2]
-    return f
+    return list(pack.nodes_mouth.presets.LANDING.flags_for('red_nova'))
 
 
 def test_argv_snapshot_plain_and_landing(pack):

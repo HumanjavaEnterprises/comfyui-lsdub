@@ -190,6 +190,7 @@ def byo_inputs(wf):
 
 
 WF4_VOCALISATIONS = 'mouth'                                                          # the recorded choice for workflow 4
+WF4_SHOT_SECONDS = 5.5                     # 3 shots of 137 frames cover the 383 of the 15.3 s demo song; at 5.0 (121) a 4th runs
 
 
 def dub_and_qa(wf, kit_kw, audio='source', vocalisations='skip'):
@@ -277,7 +278,7 @@ def make_character_sing():
     wf.add('load_char', 'LoadImage', (0, 250), image=DEMO + 'landing_still.png')
     wf.add('video', 'LSDubPerformance', (400, 0), prompt='close-up, she sings to the camera on a small club stage, her mouth clearly '
                                                        'visible, warm spotlight, gentle camera push in',
-           negative_prompt='blurry, distorted face, extra fingers, text, watermark', shot_seconds=5.0, chain='same_still')
+           negative_prompt='blurry, distorted face, extra fingers, text, watermark', shot_seconds=WF4_SHOT_SECONDS, chain='same_still')
     for s_, o, i in (('project', 'project', 'project'), ('load_char', 0, 'character'), ('song', 'song', 'song')): wf.link(s_, o, 'video', i)
     wf.add('shots', 'LSDubShotSplit', (800, 0)).link('project', 'project', 'shots', 'project').link('video', 'source', 'shots', 'source')
     wf.add('lyrics', 'LSDubLyricsSlot', (1200, 800), text=LYRICS_ALR).link('project', 'project', 'lyrics', 'project')
