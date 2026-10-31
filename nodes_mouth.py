@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import sys
+import time
 
 from comfy_api.v0_0_2 import io
 
@@ -418,17 +419,19 @@ class LSDubDub(io.ComfyNode):
             sid, k = s['shot'], keys[s['shot']]
             st = project.shot(sid, k)
             if shots_todo(project, k, [sid], forced):
+                t0, c0 = time.perf_counter(), time.process_time()
                 try:
                     if os.path.exists(st.path('gate.json')): os.remove(st.path('gate.json'))   # never a stale gate
                     render, info = cls.run_shot(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast, st,
                                                 vocalisations)
                     reason = '' if info.get('pass') else (f"sync gate failed: measured corr {info.get('corr')} "
                                                            f"(open in silence {info.get('open_in_silence')})")
-                    st.mark_done(bool(info.get('pass')), corr=info.get('corr'), auto=(info.get('auto') or {}).get('winner'),
+                    st.mark_done(bool(info.get('pass')), time.perf_counter() - t0, time.process_time() - c0,
+                                 corr=info.get('corr'), auto=(info.get('auto') or {}).get('winner'),
                                  render=render, reason=reason or info.get('mask_note', ''))
                 except Exception as e:                                  # a failed shot does not stop the cut
                     _log(f'shot {sid} failed: {type(e).__name__}: {e}')
-                    st.mark_done(False, error=f'{type(e).__name__}: {e}', reason=f'dub error: {type(e).__name__}: {e}')
+                    st.mark_done(False, time.perf_counter() - t0, time.process_time() - c0, error=f'{type(e).__name__}: {e}', reason=f'dub error: {type(e).__name__}: {e}')
             d = st.done() or {}
             r = d.get('render') if d.get('render') and os.path.exists(d.get('render')) else ''
             ok = bool(d.get('pass'))

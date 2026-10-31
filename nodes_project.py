@@ -2,12 +2,14 @@
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """Project nodes: the project folder every LSDub node writes into, and the lyrics slot."""
 import os
+import sys
 
 import folder_paths
 from comfy_api.v0_0_2 import io
 
 from . import lsdub_types as T
 from .lsdub_engine import presets
+from .lsdub_engine.core.cpu_env import thread_report
 from .project import MODES, Project, parse_force_shots, stage_key, text_hash
 
 
@@ -60,6 +62,7 @@ class LSDubProjectNode(io.ComfyNode):
 
     @classmethod
     def execute(cls, name, root, mode, fps, song_offset, preset, seed, force_shots, backend='local'):
+        print(f'[LSDub] {thread_report()}', file=sys.stderr)            # observation only: sets no thread count
         return io.NodeOutput(cls.build(name, root, mode, fps, song_offset, preset, seed, force_shots, backend).ensure())
 
 

@@ -150,7 +150,9 @@ class StageCache:
         d = self.done()
         return d is not None and (bool(d.get('pass', False)) or not need_pass)
 
-    def mark_done(self, passed=True, **info):
+    def mark_done(self, passed=True, elapsed_s=None, process_time_s=None, **info):
+        if elapsed_s is not None: info['elapsed_s'] = round(elapsed_s, 3)
+        if process_time_s is not None: info['process_time_s'] = round(process_time_s, 3)
         os.makedirs(self.dir, exist_ok=True)
         tmp = self.done_path + '.tmp'
         with open(tmp, 'w') as f: json.dump({'pass': bool(passed), 'time': time.time(), **_canon(info)}, f, indent=1)

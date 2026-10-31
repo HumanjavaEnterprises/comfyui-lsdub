@@ -35,6 +35,15 @@ def test_stage_done_roundtrip(pack, tmp_path):
     assert p.stage('audio/align', 'k2').done() is None                                    # a new key = a new folder
 
 
+def test_mark_done_records_the_timings(pack, tmp_path):
+    st = _proj(pack, tmp_path).stage('audio/align', 'k1')
+    st.mark_done(True, 1.23456, 0.5, corr=0.9)
+    d = st.done()
+    assert d['elapsed_s'] == 1.235 and d['process_time_s'] == 0.5 and d['corr'] == 0.9
+    st.mark_done(True)
+    assert 'elapsed_s' not in st.done()
+
+
 def test_per_shot_skip_failed_and_force(pack, tmp_path):
     P = pack.project
     p = _proj(pack, tmp_path)
@@ -66,11 +75,12 @@ def test_lyrics_slot_cache(pack, tmp_path):
     assert c.path != a.path and os.path.exists(a.path)                                  # old take kept
 
 
-def test_project_node(pack, tmp_path):
+def test_project_node(pack, tmp_path, capfd):
     N = pack.nodes_project
     kw = dict(name='cut', root=str(tmp_path), mode='test_learn', fps=25.0, song_offset=12.0, preset='landing', seed=1,
               force_shots='21, 23')
     p = N.LSDubProjectNode.execute(**kw).args[0]
+    assert 'lsdub threads: cpu_count=' in capfd.readouterr().err
     assert p.force_shots == (21, 23) and p.mode == 'test_learn' and os.path.isdir(p.dir)
     assert N.LSDubProjectNode.fingerprint_inputs(**kw) == N.LSDubProjectNode.fingerprint_inputs(**kw)
     assert N.LSDubProjectNode.fingerprint_inputs(**{**kw, 'force_shots': ''}) != N.LSDubProjectNode.fingerprint_inputs(**kw)
