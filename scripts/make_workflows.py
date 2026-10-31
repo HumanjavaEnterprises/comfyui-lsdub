@@ -4,6 +4,7 @@
 """Build example_workflows/*.json (ComfyUI UI format) from the LSDub node schemas, plus same-name .jpg thumbnails.
 
   python scripts/make_workflows.py            (no ComfyUI needed: the schemas are read with the test stubs)
+  python scripts/make_workflows.py --check    (the committed JSONs against what this script builds; writes nothing)
 
 Workflows 1 to 3 use preset=landing, workflow 4 preset=none; all use backend=local and the demo assets from scripts/fetch_demo.py."""
 import json
@@ -35,6 +36,12 @@ CORE = {   # core nodes: (inputs [(name, type)], outputs [(name, type)], widgets
 }
 
 
+# trailing optionals and sockets added after the example workflows were saved: left out of a workflow unless it sets them, so the
+# JSONs stay what they were and the frontend fills the default. Mirrors the PENDING lists in tests/test_example_workflows.py.
+PENDING = {'LSDubProject': ('mouth_stack',), 'LSDubScorecard': ('sharpness_mode',), 'LSDubTweaks': ('sync_phrases',)}
+PENDING_SOCKETS = {'LSDubFixIt': ('scorecard', 'ruler')}
+
+
 def ui_order(inputs):
     """the frontend fills widgets_values in input_order: every required input, then every optional one."""
     return [p for p in inputs if not p.optional] + [p for p in inputs if p.optional]
@@ -57,10 +64,12 @@ def schema(node_id):
 class WF:
     def __init__(self, title):
         self.title, self.nodes, self.links, self.ids = title, [], [], {}
+        self.tail = 0                                                               # nodes numbered after the note
 
     def add(self, key, ntype, pos, **w):
-        title, lane = w.pop('_title', None), w.pop('_lane', None)
-        nid = len(self.nodes) + 1
+        title, lane, tail = w.pop('_title', None), w.pop('_lane', None), w.pop('_tail', False)
+        nid = len(self.nodes) + 1 + (1 if tail and getattr(self, 'note_text', None) else 0)
+        self.tail += bool(tail)
         if ntype in CORE:
             ins, outs, wb = CORE[ntype]
             node = {'id': nid, 'type': ntype, 'pos': list(pos), 'size': [300, 120], 'flags': {}, 'order': nid, 'mode': 0,
@@ -70,7 +79,9 @@ class WF:
         else:
             s = schema(ntype)
             ins, wv = [], []
-            for p in ui_order(s.inputs):
+            shown = [p for p in ui_order(s.inputs) if p.id not in PENDING_SOCKETS.get(ntype, ())
+                     and (p.id not in PENDING.get(ntype, ()) or p.id in w)]
+            for p in shown:
                 t = p.io_type
                 if t in WIDGET:
                     wv.append(w.get(p.id, p.kw.get('default', (p.kw.get('options') or [''])[0] if t == 'COMBO' else
@@ -86,7 +97,7 @@ class WF:
                     'color': LANE_COLOUR.get(s.category, '#333'), 'title': s.display_name}
         node['_api'] = dict(w)
         if ntype not in CORE:
-            names = [n for p in ui_order(schema(ntype).inputs) if p.io_type in WIDGET
+            names = [n for p in shown if p.io_type in WIDGET
                      for n in ((p.id, None) if has_control(p) else (p.id,))]   # None = the frontend's control widget
             node['_api'] = {k: v for k, v in zip(names, node['widgets_values']) if k is not None}
         elif ntype == 'SaveVideo':
@@ -132,11 +143,13 @@ class WF:
         for lane in ('video', 'audio', 'mouth', 'qa'):
             row = [n for n in self.nodes if n['_lane'] == lane]
             if not row: continue
-            h = max(n['size'][1] for n in row) + 80
+            h = max(n['size'][1] for n in row[:len(row) - (self.tail if lane == 'mouth' else 0)]) + 80
             x = x0
             for n in row:
                 n['pos'] = [x, y + 50]
+                if lane != 'mouth' or n['id'] <= len(self.nodes) - self.tail + 1: width = x + n['size'][0] + gap
                 x += n['size'][0] + gap
+            x = width
             groups.append({'title': LANE_TITLE[lane], 'bounding': [x0 - 20, y, x - x0 + 20, h], 'color': GROUP_COLOUR[lane],
                            'font_size': 28, 'flags': {}})
             bands[lane] = y
@@ -149,7 +162,7 @@ class WF:
         groups = self.layout()
         nodes = [{k: v for k, v in n.items() if k not in ('_api', '_lane')} for n in self.nodes]
         if getattr(self, 'note_text', None):
-            nodes.insert(0, {'id': len(self.nodes) + 1, 'type': 'MarkdownNote', 'pos': [0, 0], 'size': [480, 400], 'flags': {},
+            nodes.insert(0, {'id': len(self.nodes) - self.tail + 1, 'type': 'MarkdownNote', 'pos': [0, 0], 'size': [480, 400], 'flags': {},
                              'order': 0, 'mode': 0, 'inputs': [], 'outputs': [], 'properties': {}, 'title': 'Start here',
                              'widgets_values': [self.note_text], 'color': '#432', 'bgcolor': '#653'})
         return {'last_node_id': len(self.nodes) + 1, 'last_link_id': len(self.links), 'nodes': nodes, 'links': self.links,
@@ -193,13 +206,17 @@ WF4_VOCALISATIONS = 'mouth'                                                     
 WF4_SHOT_SECONDS = 5.5                     # 3 shots of 137 frames cover the 383 of the 15.3 s demo song; at 5.0 (121) a 4th runs
 
 
+def add_tweaks(wf, **kw):
+    """last, numbered after the note: where the Tweaks node sits in the saved workflows."""
+    wf.add('tweaks', 'LSDubTweaks', (1200, 700), _tail=True, **kw).link('tweaks', 'tweaks', 'dub', 'tweaks')
+
+
 def dub_and_qa(wf, kit_kw, audio='source', vocalisations='skip'):
     wf.add('kit', 'LSDubBuildLipKit', (1200, 1000), **kit_kw).link('project', 'project', 'kit', 'project')
     wf.add('dub', 'LSDubDub', (1600, 700), audio=audio, vocalisations=vocalisations)
     for s, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('triage', 'shots', 'shots'), ('song', 'song', 'song'),
                     ('align', 'align', 'align'), ('kit', 'kit', 'kit')):
         wf.link(s, o, 'dub', i)
-    wf.add('tweaks', 'LSDubTweaks', (1200, 700)).link('tweaks', 'tweaks', 'dub', 'tweaks')
     wf.add('verify', 'LSDubVerify', (2000, 700))
     for s, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('dub', 'render', 'render'), ('triage', 'shots', 'shots'),
                     ('song', 'song', 'song'), ('align', 'align', 'align')):
@@ -237,6 +254,7 @@ def byo():
     byo_inputs(wf)
     analysis(wf, demo_transcript=True)
     dub_and_qa(wf, {'identity': 'red_nova', 'kit_dir': DEMO + 'kits/red_nova'})
+    add_tweaks(wf)
     return wf
 
 
@@ -259,6 +277,7 @@ def prompt_everything():
     wf.link('lyrics', 'lyrics', 'song', 'lyrics')
     dub_and_qa(wf, {'identity': 'singer', 'kit_dir': '', 'shot_id': 0}, audio='song', vocalisations='skip')
     wf.link('video', 'source', 'kit', 'source').link('shots', 'shots', 'kit', 'shots')
+    add_tweaks(wf)
     return wf
 
 
@@ -290,6 +309,7 @@ def make_character_sing():
         wf.link(s_, o, 'triage', i)
     dub_and_qa(wf, {'identity': 'singer', 'kit_dir': '', 'shot_id': 0}, audio='song', vocalisations=WF4_VOCALISATIONS)
     wf.link('video', 'source', 'kit', 'source').link('shots', 'shots', 'kit', 'shots')
+    add_tweaks(wf)
     return wf
 
 
@@ -310,17 +330,24 @@ def thumb(path, title, sub, still):
 def main():
     out = os.path.join(ROOT, 'example_workflows')
     os.makedirs(out, exist_ok=True)
-    still = sys.argv[1] if len(sys.argv) > 1 else ''
+    check = '--check' in sys.argv
+    args = [a for a in sys.argv[1:] if a != '--check']
+    still, stale = args[0] if args else '', []
     for name, wf, sub in (('1-LSDub-Prompt-Everything', prompt_everything(), 'still -> video, tags -> song, lip kit, dub, QA'),
                           ('2-LSDub-BYO-Clip-and-Song', byo(), 'your clip + song + lyrics + lip kit -> the dub'),
                           ('3-LSDub-Test-and-Learn', test_and_learn(), 'triage, sync QA and fix-it notes, no dub'),
                           ('4-LSDub-Make-Your-Character-Sing', make_character_sing(), 'a song + a character image -> a singing video')):
+        if check:
+            if json.load(open(os.path.join(out, name + '.json'))) != json.loads(json.dumps(wf.json())): stale.append(name)
+            continue
         json.dump(wf.json(), open(os.path.join(out, name + '.json'), 'w'), indent=1)
         if os.environ.get('LSDUB_API_OUT'):
             json.dump(wf.api(), open(os.path.join(os.environ['LSDUB_API_OUT'], name + '.api.json'), 'w'), indent=1)
         shot = os.environ.get('LSDUB_THUMB_' + name.split('-')[0])                 # a frame from a real run, if given
-        thumb(os.path.join(out, name + '.jpg'), name.split('-', 1)[1].replace('LSDub-', '').replace('-', ' '), sub, shot or still)
+        if shot or still:                                                          # no picture given: the committed thumbnail stays
+            thumb(os.path.join(out, name + '.jpg'), name.split('-', 1)[1].replace('LSDub-', '').replace('-', ' '), sub, shot or still)
         print(name, len(wf.nodes), 'nodes', len(wf.links), 'links')
+    if check and stale: raise SystemExit(f'stale example workflows: {stale}')
 
 
 if __name__ == '__main__':

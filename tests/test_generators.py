@@ -241,3 +241,11 @@ def test_performance_fingerprint_follows_the_project(pack, tmp_path):
     a = P.fingerprint_inputs(_proj(pack, tmp_path, fps=25.0), img, song, 'x', '')
     b = P.fingerprint_inputs(pack.project.Project(root=str(tmp_path), name='other', fps=25.0).ensure(), img, song, 'x', '')
     assert a != b
+
+
+def test_the_generator_builds_the_committed_workflows():
+    import subprocess
+    import sys
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    r = subprocess.run([sys.executable, os.path.join(root, 'scripts', 'make_workflows.py'), '--check'], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr

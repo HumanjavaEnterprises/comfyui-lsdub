@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `scripts/make_workflows.py` builds the committed example workflows byte for byte again; `--check` compares without writing, and thumbnails are left alone unless a picture is given.
 - LSDub Mouth Tweaks gains optional `sync_advance_ms` (default 0): the whole mouth plan lands that much earlier against the sound, shapes unchanged. At 0 the value is left out of the tweaks hash, so 0 and an older saved Tweaks node key the same; wiring a Tweaks node into a workflow that had none still moves that workflow's shot keys.
 - LSDub Verify reports `env_corr`, `env_best`, `env_lag_ms`: the mouth against the vocal's loudness with no alignment, next to the sync score, which reads the curve the dub was painted from. Reported, they move no band.
 - `--warp-interior-source take`: the pink sink holds from the first frame it is needed, lands on its target and lets go over a few frames; the take's pink share is read clear of the lip rim, with the fill stopping at 0.85 of it (this changes that flag's render); softening 0.012 to 0.02 of the box's side (`SOFT`).
