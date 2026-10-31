@@ -21,7 +21,7 @@
    "properties": {},
    "title": "Start here",
    "widgets_values": [
-    "## LSDub 4: Make Your Character Sing\n**Does:** a song + a character image -> a video of the character singing it: vocal split, lead vocal, alignment, an LTX-2.5 performance as long as the song, a lip kit from it, the dub, Verify (the sync score) and the saved video with the song.\n\n**Needs:** a big GPU (or backend = comfy_cloud), the generator models and the Mel-Band RoFormer vocal checkpoint in models/audio_separation (README).\n\n**Runs on:** a 96 GB card, or Comfy Cloud on a paid plan. The demo song is \"About That Time\", an ACE-Step song of ours.\n\n**Change:** *Load Audio* (your song), *Load Image* (your character), *LSDub Performance* prompt, *LSDub Lyrics*."
+    "## LSDub 4: Make Your Character Sing\n**Does:** a song + a character image -> a video of the character singing it: vocal split, lead vocal, alignment, an LTX-2.5 performance as long as the song, a lip kit from it, the dub, Verify (the sync score) and the saved video with the song.\n\n**Needs:** a big GPU (or backend = comfy_cloud), the generator models and the Mel-Band RoFormer vocal checkpoint in models/audio_separation (README).\n\n**Runs on:** a 96 GB card, or Comfy Cloud on a paid plan. The demo song is \"About That Time\", an ACE-Step song of ours.\n\n**Change:** *Load Audio* (your song), *Load Image* (your character), *LSDub Performance* prompt, *LSDub Lyrics*, and clear *LSDub Align* transcript_json (it holds the demo song's words)."
    ],
    "color": "#432",
    "bgcolor": "#653"
@@ -534,7 +534,7 @@
    "widgets_values": [
     "",
     "large-v3",
-    ""
+    "lsdub_demo_alr_stt.json"
    ],
    "color": "#523",
    "title": "LSDub Align"

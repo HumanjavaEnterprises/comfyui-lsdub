@@ -267,7 +267,7 @@ LYRICS_ALR = ("aged like rocks, still in the box\ntimeless on the shelf, winding
 
 def make_character_sing():
     wf = WF('LSDub 4: Make Your Character Sing')
-    wf.note('## LSDub 4: Make Your Character Sing\n**Does:** a song + a character image -> a video of the character singing it: vocal split, lead vocal, alignment, an LTX-2.5 performance as long as the song, a lip kit from it, the dub, Verify (the sync score) and the saved video with the song.\n\n**Needs:** a big GPU (or backend = comfy_cloud), the generator models and the Mel-Band RoFormer vocal checkpoint in models/audio_separation (README).\n\n**Runs on:** ' + RUNTIMES[4] + '\n\n**Change:** *Load Audio* (your song), *Load Image* (your character), *LSDub Performance* prompt, *LSDub Lyrics*.')
+    wf.note('## LSDub 4: Make Your Character Sing\n**Does:** a song + a character image -> a video of the character singing it: vocal split, lead vocal, alignment, an LTX-2.5 performance as long as the song, a lip kit from it, the dub, Verify (the sync score) and the saved video with the song.\n\n**Needs:** a big GPU (or backend = comfy_cloud), the generator models and the Mel-Band RoFormer vocal checkpoint in models/audio_separation (README).\n\n**Runs on:** ' + RUNTIMES[4] + '\n\n**Change:** *Load Audio* (your song), *Load Image* (your character), *LSDub Performance* prompt, *LSDub Lyrics*, and clear *LSDub Align* transcript_json (it holds the demo song\'s words).')
     wf.add('project', 'LSDubProject', (0, 0), name='lsdub-character-sing', mode='run', preset='none', song_offset=0.0,
            backend='local')
     wf.add('load_song', 'LoadAudio', (0, 500), audio=DEMO + 'alr_song_15s.wav')
@@ -282,7 +282,7 @@ def make_character_sing():
     for s_, o, i in (('project', 'project', 'project'), ('load_char', 0, 'character'), ('song', 'song', 'song')): wf.link(s_, o, 'video', i)
     wf.add('shots', 'LSDubShotSplit', (800, 0)).link('project', 'project', 'shots', 'project').link('video', 'source', 'shots', 'source')
     wf.add('lyrics', 'LSDubLyricsSlot', (1200, 800), text=LYRICS_ALR).link('project', 'project', 'lyrics', 'project')
-    wf.add('align', 'LSDubAlign', (1600, 800))
+    wf.add('align', 'LSDubAlign', (1600, 800), transcript_json=DEMO + 'alr_stt.json')
     for s_, o, i in (('project', 'project', 'project'), ('song', 'song', 'song'), ('lyrics', 'lyrics', 'lyrics')): wf.link(s_, o, 'align', i)
     wf.add('triage', 'LSDubTriage', (1200, 0))
     for s_, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('shots', 'shots', 'shots'), ('song', 'song', 'song')):
