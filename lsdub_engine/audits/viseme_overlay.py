@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """viseme_overlay.py — `lsdub annotate`: the lyrics annotated to simple mouth shapes, one compact card per frame.
 
   lsdub annotate --video in.mp4 --track track.json --out out.mp4 [--corner auto|lower-right|lower-left|band] [--scale 1.0]

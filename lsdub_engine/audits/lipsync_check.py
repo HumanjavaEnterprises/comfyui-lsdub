@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """lipsync_check.py — automatic lip-sync checker: measured mouth opening in a video vs Audio2Face-3D jawOpen.
 
 Per video frame: MediaPipe FaceLandmarker -> inner-lip gap (lm 13-14) / face height (lm 10-152).

@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """mouth_warp.py: the --mode warp engine of lsdub paint ("warp, don't paste"). Called through mouth_paint.py.
 
 No library mouth is painted. The take's OWN lips are moved, per frame, toward the shape the audio asks for, by a smooth
@@ -780,7 +780,7 @@ def face_region(img, P, io, box):
     face mesh's outline, FACE_OVAL, filled) and, beyond it, the take's own pixels: skin (mouth_morph.skin_px) or its own mouth
     (outer lip + 0.03 IOD), specks opened (0.012 IOD), gaps closed (0.03 IOD), only the piece that holds the mouth, holes
     filled; all within the mesh hull grown 0.3 IOD (a skin-coloured background beside the head never counts as face).
-    (Lipness is NOT a face cue here: on mv30 NC the auburn hair reads as lip-coloured, lipness >= 0.35, over most of it.)"""
+    (Lipness is NOT a face cue here: on long auburn hair the strands read as lip-coloured, lipness >= 0.35, over most of it.)"""
     from . import teeth_layer as tl
 
     x0, y0, x1, y1 = box
@@ -810,8 +810,8 @@ def face_region(img, P, io, box):
 
 
 class YawClamp:
-    """v12 (--warp-yaw-clamp M, opt-in): the PLAN keeps the mouth inside the face under yaw. mv30 NC f74-76: the turned
-    head's FAR corner of a wider, more open planned mouth crossed the cheek's silhouette onto the hair; the lip layer then
+    """v12 (--warp-yaw-clamp M, opt-in): the PLAN keeps the mouth inside the face under yaw. On a turned head the
+    FAR corner of a wider, more open planned mouth crossed the cheek's silhouette onto the hair; the lip layer then
     drew the warped hair there and its non-lip cleanup painted it over with skin (a mottled patch with dark strokes).
     Per frame an allowed region = the take's own face (face_region: the skull pose's face mesh outline, extended by the take's
     skin pixels and its own mouth). The far half of the mouth = the side of the corner nearer the nose tip in the picture. A

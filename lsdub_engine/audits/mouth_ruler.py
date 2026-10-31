@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """mouth_ruler.py: `lsdub mouth-ruler`, the baseline rulers of the natural mouth build (step 0). CPU, no models beyond the
 MediaPipe face landmarker. Each video is tracked on its own and regions come from THAT video's mesh: the render's lips are
 not the take's lips. In every "A -> B" the left side is the take.

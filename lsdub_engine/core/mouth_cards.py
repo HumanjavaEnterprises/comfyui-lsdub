@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """mouth_cards.py — build a DETAILED, FACE-SPECIFIC card representation of every viseme from a mouth kit.
 
 The card glyph in viseme_overlay.glyph() is a generic, procedural lip shape (same for every face). This builds

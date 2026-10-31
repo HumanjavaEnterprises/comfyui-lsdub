@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """face_scan.py — scan a take's face: per-frame 3D face mesh + head pose, then pick the pose keyframe(s) for a
 PER-SHOT mouth library (lsdub mouths prep --frame N), so the library mouths are native to the shot's own
 angle, light and lens instead of a front view borrowed from another shot.
@@ -45,33 +45,38 @@ def scan(video, upscale=2.0):
     fps = cap.get(cv2.CAP_PROP_FPS) or 25
     rows, P3 = [], []
     i = 0
-    while True:
-        ok, fr = cap.read()
-        if not ok:
-            break
-        H, W = fr.shape[:2]
-        big = cv2.resize(fr, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
-        r = l.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(big[:, :, ::-1])), int(i * 1000 / fps))
-        if r.face_landmarks:
-            p = np.array([[q.x * W, q.y * H, q.z * W] for q in r.face_landmarks[0]])
-            M = np.array(r.facial_transformation_matrixes[0])
-            fh = np.linalg.norm(p[10, :2] - p[152, :2])
-            y, pt, ro = euler(M)
-            rows.append(
-                {
-                    "f": i,
-                    "yaw": round(y, 2),
-                    "pitch": round(pt, 2),
-                    "roll": round(ro, 2),
-                    "open": round(float(np.linalg.norm(p[13, :2] - p[14, :2]) / fh), 4),
-                    "face_h": round(float(fh), 1),
-                }
+    try:
+        while True:
+            ok, fr = cap.read()
+            if not ok:
+                break
+            H, W = fr.shape[:2]
+            big = cv2.resize(fr, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
+            r = l.detect_for_video(
+                mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(big[:, :, ::-1])), int(i * 1000 / fps)
             )
-            P3.append(p)
-        else:
-            rows.append({"f": i, "yaw": None})
-            P3.append(np.full((478, 3), np.nan))
-        i += 1
+            if r.face_landmarks:
+                p = np.array([[q.x * W, q.y * H, q.z * W] for q in r.face_landmarks[0]])
+                M = np.array(r.facial_transformation_matrixes[0])
+                fh = np.linalg.norm(p[10, :2] - p[152, :2])
+                y, pt, ro = euler(M)
+                rows.append(
+                    {
+                        "f": i,
+                        "yaw": round(y, 2),
+                        "pitch": round(pt, 2),
+                        "roll": round(ro, 2),
+                        "open": round(float(np.linalg.norm(p[13, :2] - p[14, :2]) / fh), 4),
+                        "face_h": round(float(fh), 1),
+                    }
+                )
+                P3.append(p)
+            else:
+                rows.append({"f": i, "yaw": None})
+                P3.append(np.full((478, 3), np.nan))
+            i += 1
+    finally:
+        l.close()
     return rows, np.array(P3), fps
 
 

@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """stylized.py — classical-animation mouth rules for LSDub's non-human / cutout / puppet path.
 
 Single source of the shape set, phoneme->anchor map, decomposition axes, per-anchor puppet gape, and the

@@ -1,7 +1,7 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
-"""coart.py: the COARTICULATION target planner of --mode warp (mv30 v10c: --warp-target coart; the default v9 keeps
+"""coart.py: the COARTICULATION target planner of --mode warp (v10c: --warp-target coart; the default v9 keeps
 mouth_warp.target_features, the per-frame step targets).
 
 v9 aims every frame at its own viseme's band (the take's shape clipped into the band, pushed toward the class centre):

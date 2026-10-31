@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """v9 per-frame gate, the MAKER + CONFIRMATION (lsdub/core/frame_gate.py) on a synthetic clip, CPU only. The clip's
-input track is HELD for its first frames (no detection) while the head drifts -- the mv30 S2 / S5 / S8 starts in
+input track is HELD for its first frames (no detection) while the head drifts -- the fast-head starts in
 miniature: the warp moves the wrong pixels there. A fake detector stands in for MediaPipe (it measures the synthetic
 lips). With --warp-gate off the render is the batch's bit-for-bit; render_frame(i, {}) reproduces every batch frame;
 repair re-makes the failing frames (FAIL -> not FAIL) without making their neighbours fail."""
@@ -368,7 +368,7 @@ def test_unresolved_none_leaves_an_unfixable_frame_as_round_0(clip_dir):
 
 # ------------------------------------------------------------------------------- v11 --
 def test_held_fix_never_feeds_a_false_face_fit_to_the_warp(clip_dir, monkeypatch):
-    # mv30 v10d S3 s1234: one IMAGE-mode re-detection locked onto a false face 0.8 IOD up; held_fix substituted it and the
+    # seen in v10d: one IMAGE-mode re-detection locked onto a false face 0.8 IOD up; held_fix substituted it and the
     # k5 smoothing spread it over 5 frames -> the gate's lm_hold drew the mouth at the nostrils. v11: it is never used.
     from test_frame_gate import _false_fit
 

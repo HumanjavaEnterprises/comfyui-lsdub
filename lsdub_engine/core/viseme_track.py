@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """viseme_track.py — phone timings (lsdub align JSON) -> per-frame viseme track + ARKit-pose curves.
 
 Viseme set: the 15 Oculus/Meta OVR visemes (sil PP FF TH DD kk CH SS nn RR aa E ih oh ou). The mouth library renders 13

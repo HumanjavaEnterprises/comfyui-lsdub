@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """sung_dyn.py — v14: a SUNG mouth-dynamics curve from the vocal itself, for the warp's coarticulation planner.
 
 The coart planner (lsdub/core/coart.py) sets each phone segment's opening from the segment's MEAN audio openness, so

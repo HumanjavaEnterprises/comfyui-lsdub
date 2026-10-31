@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """frame_gate.py (core): the MAKER and the CONFIRMATION of the v9 per-frame gate (the CHECKER: audits/frame_gate.py).
 
 Round 0 is the v8 render (mouth_warp.WarpClip.run_batch). The checker reads every frame against its neighbours and the

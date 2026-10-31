@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """sync_strip.py — the lip-sync QA strip: the vocal's waveform scrolls under the video past a fixed playhead.
 
 Each syllable crosses the centre line the moment it is heard, so lips vs voice can be judged by eye and ear

@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """mouth_library.py — a per-character viseme MOUTH LIBRARY from one frame, with Qwen-Image-Edit-2511.
 
   prep:   pick the most-closed-mouth frame of a take (MediaPipe FaceLandmarker), crop a square around the face, 1024 px
@@ -57,10 +57,10 @@ TARGET = {
 }
 
 
-def landmarker(video=False):
+def landmarker(video=False, tracking=None):
     mp = LM.mp()
 
-    return mp, LM.get("video" if video else "image", conf=0.2, model=MODEL)
+    return mp, LM.get("video" if video else "image", conf=0.2, tracking=tracking, model=MODEL)
 
 
 def landmarks(img, lm=None):
@@ -110,24 +110,29 @@ def region_mask(p, shape, grow=0.12, blur=0.04):
 
 
 def prep(a):
-    mp, l = landmarker(video=True)
+    mp, l = landmarker(video=True, tracking=0.5)
     cap = cv2.VideoCapture(a.video)
     fps = cap.get(cv2.CAP_PROP_FPS) or 25
     best = None
     i = 0
-    while True:
-        ok, fr = cap.read()
-        if not ok:
-            break
-        r = l.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(fr[:, :, ::-1])), int(i * 1000 / fps))
-        if r.face_landmarks:
-            H, W = fr.shape[:2]
-            p = np.array([[q.x * W, q.y * H] for q in r.face_landmarks[0]])
-            m = mouth_metrics(p)
-            if a.frame is None or a.frame == i:
-                if best is None or m["open"] < best[0]:
-                    best = (m["open"], i, fr.copy(), p)
-        i += 1
+    try:
+        while True:
+            ok, fr = cap.read()
+            if not ok:
+                break
+            r = l.detect_for_video(
+                mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(fr[:, :, ::-1])), int(i * 1000 / fps)
+            )
+            if r.face_landmarks:
+                H, W = fr.shape[:2]
+                p = np.array([[q.x * W, q.y * H] for q in r.face_landmarks[0]])
+                m = mouth_metrics(p)
+                if a.frame is None or a.frame == i:
+                    if best is None or m["open"] < best[0]:
+                        best = (m["open"], i, fr.copy(), p)
+            i += 1
+    finally:
+        l.close()
     if best is None:
         raise RuntimeError("lip kit: no readable face in this clip; build the kit from a close-up shot of the singer")
     _, idx, fr, p = best

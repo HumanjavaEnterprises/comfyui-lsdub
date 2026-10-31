@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 # fmt: off
 """lip_layers.py: v4 mouth layering helpers, shared by --mode warp and --mode morph (all CPU, opt-in by flags).
 

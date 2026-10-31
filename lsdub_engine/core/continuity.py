@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """continuity.py: `lsdub continuity`, the last-4-frames continuity maker / checker / confirmation for a painted mouth. CPU.
 
 A single bad painted frame (an aliased, jumped or smeared mouth) ruins the shot even when its neighbours are fine. This

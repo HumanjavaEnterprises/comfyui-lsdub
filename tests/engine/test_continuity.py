@@ -118,7 +118,7 @@ def test_remake_still_offers_the_take_where_it_follows_the_plan():
 
 
 def test_squeeze_reverts_only_runs_that_show_a_lip_ghost():
-    """v3_4 19 / 29: a squeeze run (take open, plan shut) with no ghost in the lip zone is the SUNG closure: keep it.
+    """a squeeze run (take open, plan shut) with no ghost in the lip zone is the SUNG closure: keep it.
     A run with a blue-grey ghost in the upper (lip) part of the paint region still goes back to the take (sky B)."""
     t = np.full((40, 40, 3), (90, 120, 180), np.uint8)
     m = np.zeros((40, 40), bool)

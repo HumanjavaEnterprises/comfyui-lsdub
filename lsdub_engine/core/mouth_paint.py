@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """mouth_paint.py — paint viseme mouths (lsdub mouths) onto a calm body take, frame by frame.
 
 Per frame: MediaPipe FaceLandmarker on the take (gap-filled, temporally smoothed) -> a similarity transform from the
@@ -1193,7 +1193,7 @@ def _parser():
         "--mesh-smooth",
         default="sg7",
         help="--mouth-render mesh3d: zero-phase filter on the rigid pose parameters "
-        "(as --anchor-smooth). sg7 measured best on the mv30 nose-circle and S7 swings; sg13 is ~equal on slow S1",
+        "(as --anchor-smooth). sg7 measured best on a nose-circle and fast head swings; sg13 is ~equal on slow ones",
     )
     ap.add_argument(
         "--mesh-lam",

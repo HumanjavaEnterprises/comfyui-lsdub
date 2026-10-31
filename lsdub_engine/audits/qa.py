@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """qa.py: `lsdub qa`, a general LSDub QA tool for a contributed long video with many shots. CPU (own shot
 detector; YuNet + MediaPipe faces; DINOv2 identity, all already in LSDub). Two modes:
 

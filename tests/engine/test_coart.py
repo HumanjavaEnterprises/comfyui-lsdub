@@ -79,7 +79,7 @@ def test_blend_is_a_partition_of_unity():
 
 
 def wobble(n, mid=0.5, amp=0.3, wid=0.18):
-    """a take that moves (its opening / width wobbling at the syllable rate, like the mv30 takes in their own units)."""
+    """a take that moves (its opening / width wobbling at the syllable rate, like sung takes in their own units)."""
     t = np.arange(n)
     return np.stack([mid + amp * np.sin(t / 2.5), wid * np.cos(t / 3.0)], 1)
 
@@ -123,7 +123,7 @@ def test_short_vowel_undershoots_long_vowel_reaches():
 
 
 def test_dynamics_prior_lands_velocity_near_the_take():
-    # a natural take (a smooth wobble, ~ the mv30 takes' own velocity in their units) and a busy phone string whose
+    # a natural take (a smooth wobble, ~ a sung take's own velocity in their units) and a busy phone string whose
     # blended targets (closures every 5th syllable) step much faster than the take moves
     rng = np.random.default_rng(1)
     ph = []

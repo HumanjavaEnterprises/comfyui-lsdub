@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """rhubarb_cues.py — Rhubarb Lip Sync (bundled PocketSphinx + CMU en-us model) as a cross-check /
 fallback viseme source.
 

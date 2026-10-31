@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """medium.py: `lsdub medium`, the tier-2 dub for a singer face of ~120-300 px (research "Sync the singers by shot size",
 recommendation 4). CPU.
 

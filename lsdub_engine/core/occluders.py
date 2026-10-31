@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """occluders.py: `lsdub occluders`, masks of what sits IN FRONT of the mouth (a mic, a hand, hair). GPU.
 
 The painter must never paint over an object that crosses the face: its pixels come from the take, untouched. This

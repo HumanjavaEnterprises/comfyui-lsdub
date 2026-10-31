@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """tooth_scale.py: the TOOTH-SCALE ruler (v13). CPU.
 
 Founder on v12: the rendered teeth look about 1/5 too wide relative to the head on the close-ups. Teeth are bone: their

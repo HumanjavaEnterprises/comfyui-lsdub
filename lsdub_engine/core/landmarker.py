@@ -4,21 +4,22 @@
 CPU delegate. IMAGE mode is stateless: one shared instance per option set, callers do not close it. VIDEO mode keeps a timestamp
 per instance, so each get() is a new one, and the caller closes it when its clip ends."""
 
-import logging, sys
+import atexit, logging, sys, threading
 
 from .._models import face_landmarker_path
 from .cpu_env import guard
 
 log = logging.getLogger("lsdub")
 _shared = {}
-_warned = False
+_lock = threading.Lock()
+_checked = False
 
 
 def mp():
     """the mediapipe module, the GL variables set first."""
-    global _warned
-    if "mediapipe" in sys.modules and not _warned:
-        _warned = True
+    global _checked
+    first, _checked = not _checked, True
+    if first and "mediapipe" in sys.modules:  # after the first call the import is this function's own
         log.warning("mediapipe was imported before the landmarker factory: its GL setup may already be fixed")
     guard()
     import mediapipe
@@ -52,12 +53,17 @@ def get(mode="image", conf=0.2, num_faces=1, matrices=False, tracking=None, pres
     if mode == "video":
         return _make(True, conf, num_faces, matrices, tracking, presence, model)
     key = (conf, num_faces, matrices, presence, model)
-    if key not in _shared:
-        _shared[key] = _make(False, conf, num_faces, matrices, tracking, presence, model)
-    return _shared[key]
+    with _lock:
+        if key not in _shared:
+            _shared[key] = _make(False, conf, num_faces, matrices, tracking, presence, model)
+        return _shared[key]
 
 
 def close_all():
     """close the shared instances (a host's model-unload)."""
-    while _shared:
-        _shared.popitem()[1].close()
+    with _lock:
+        while _shared:
+            _shared.popitem()[1].close()
+
+
+atexit.register(close_all)  # before interpreter teardown, where FaceLandmarker.__del__ finds its library half gone

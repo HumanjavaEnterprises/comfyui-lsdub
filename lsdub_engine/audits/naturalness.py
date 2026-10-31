@@ -1,7 +1,7 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
-"""naturalness.py: the NATURALNESS RULER (mv30 v10c). How does a render's mouth MOTION differ, statistically, from the
+"""naturalness.py: the NATURALNESS RULER (v10c). How does a render's mouth MOTION differ, statistically, from the
 take's own? The take is the same face moving the way it really moves; a render whose mouth reaches every phone's shape,
 steps between shapes and makes shape combinations the face never makes reads over-articulated even when every shape is
 "right". CPU.

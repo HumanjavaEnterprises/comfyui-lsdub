@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """plane_fit.py — does the mouth sit ON the face's 3D surface, or is it a flat sticker? (founder 2026-10-15: "more
 accurate to the face and the facial plane").
 

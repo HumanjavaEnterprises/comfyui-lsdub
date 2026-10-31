@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """vocal_split.py — ML vocal separation (Mel-Band RoFormer) for the lead-vocal drive.
 
 The mouth must follow the LEAD singer only. A DSP centre-extract leaves backing harmonies and reverb in the
@@ -17,6 +17,7 @@ ComfyUI venv as-is.
 The ComfyUI node (comfyui/nodes_vocal.py) wraps `separate()` on ComfyUI AUDIO dicts.
 """
 
+from .._models import CACHE
 from ..io import ff
 import argparse, os
 import numpy as np
@@ -26,7 +27,7 @@ from torch import nn
 
 SR = 44100
 CFG = dict(dim=384, depth=6, num_bands=60, dim_head=64, heads=8, n_fft=2048, hop=441, win=2048, mask_depth=2, chunk=352800, overlap=2)
-DEFAULT_CKPT = os.path.expanduser("~/ComfyUI/models/audio_separation/MelBandRoformer_kim_vocals.ckpt")
+DEFAULT_CKPT = os.environ.get("LIPS_VOCAL_CKPT") or os.path.join(CACHE, "audio_separation", "MelBandRoformer_kim_vocals.ckpt")
 CKPT_SHA256 = "87201f4d31afb5bc79993230fc49446918425574db48c01c405e44f365c7559e"
 
 

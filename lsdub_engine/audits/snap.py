@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """snap.py: how SNAPPY a mouth is, measured on the delivered pixels (a per-frame opening series, e.g.
 sync_qa.measured_opening). CPU, no models. Three numbers:
 

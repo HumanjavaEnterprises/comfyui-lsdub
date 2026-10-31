@@ -94,5 +94,5 @@ def test_gpu_todo_names_no_machine_and_sing_takes_a_preset():
     from lsdub_engine.core import sing as S
 
     src = open(S.__file__, encoding="utf-8").read()
-    assert "gpu" + "run" not in src and "~/" not in src
+    assert "gpu" + "run" not in src and "~" + "/" not in src
     assert "--preset" in src

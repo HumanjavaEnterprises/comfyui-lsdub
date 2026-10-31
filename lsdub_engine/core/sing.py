@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """sing.py: `lsdub sing`, the ONE standard path for every sung cut (founder: the mediums and close-ups are "not close
 enough ... not quite snappy enough"; the per-shot face / lip deep dive is a standard step, for EVERY sung shot). CPU.
 

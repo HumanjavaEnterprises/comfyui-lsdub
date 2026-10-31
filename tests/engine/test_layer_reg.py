@@ -125,7 +125,7 @@ def test_interior_clip_keeps_the_interior_inside_the_warped_lips():
     out1, _ = comp.composite(take, 2, S[2], P, 20.0)
     out0, _ = base.composite(take, 2, S[2], P, 20.0)
     assert np.abs(out1.astype(int) - out0.astype(int)).mean() < 0.5
-    # 2. the planned mouth placed 0.45 IOD above the real lips (what a false face fit did to mv30 S3): the warped frame
+    # 2. the planned mouth placed 0.45 IOD above the real lips (what a false face fit did to one shot): the warped frame
     # (here: the take itself) has no lips around that opening, so no cavity / tooth pixel is drawn there; the face shows
     Pu = P.copy()
     Pu[:, 1] -= 0.45 * io

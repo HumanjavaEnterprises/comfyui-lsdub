@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """pose_mix.py — cross-fade the paints of a shot made from SEVERAL pose libraries (one per lsdub scan cluster),
 weighted per frame by the head pose: each frame leans on the library shot closest to its own yaw/pitch, with a
 smoothstep hand-over between cluster centres (eased in time, so no pop at the switch). Masks are mixed the same way.

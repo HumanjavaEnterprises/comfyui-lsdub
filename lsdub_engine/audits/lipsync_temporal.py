@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 # fmt: off
 """lipsync_temporal.py: temporal/composite metrics for a painted lip-sync video (supporting evidence; the eye decides).
 

@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """sync_qa.py: `lsdub sync-qa`, the mouth sync QA video (founder: "this card / QA tool is amazing, bake it in"). CPU.
 
 One video to judge timing by eye AND by numbers, per frame:

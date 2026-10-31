@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """cast.py: `lsdub cast`, find the known characters (the singers) in every shot, so the dub knows WHO to animate WHERE.
 
   enroll  reference images (canon, head turns, sheets) -> a cast db: per character, DINOv2 head-crop embeddings

@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """teeth_layer.py: v5 rigid teeth for --mode warp (--warp-teeth rigid). All CPU.
 
 Teeth are bone: they never stretch, squash or change size. Lips may move and resize; teeth may only move as the skull
@@ -450,7 +450,7 @@ class TeethLayer:
         height (exposed_up) whose arches are clearly APART (a DARK run of >= ~0.04 IOD below the upper incisal edge,
         stats apart_dark), near the median head pose and sharp -- not the largest tooth area: a smile over clenched teeth
         has a large area but carries the lower row on the same plate under a dark bite line, so the plate showed two
-        stacked rows of incisors ('teeth inside teeth', mv30 S3 s1234 f25). The extra harvest frames (_upper_candidates)
+        stacked rows of incisors ('teeth inside teeth'). The extra harvest frames (_upper_candidates)
         are scored the same way. Logged: build_log."""
         n = len(self.frames)
         h = np.array([self.exposed_up(i) for i in range(n)])

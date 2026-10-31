@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """animator_pass.py — rebuild a viseme track the way an animator would (docs/ANIMATOR_RULES.md).
 
 Input: the word/phone alignment (tools/lyric_align.py JSON) + the dry vocal. Output: a track in the same per-frame

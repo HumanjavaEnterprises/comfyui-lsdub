@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """grammar.py: `lsdub grammar`, the shot-grammar gate. Every sung word must land on a shot where its singer's face is
 big enough for the kind of line it is (research: "Sync the singers by shot size", recommendation 1).
 

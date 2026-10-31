@@ -8,7 +8,7 @@ import importlib
 import os
 import sys
 
-DOCS_URL = "https://github.com/HumanjavaEnterprises/lsdub/blob/main/docs"
+DOCS_URL = "https://github.com/HumanjavaEnterprises/comfyui-lsdub/blob/main"
 HELP_SHIP = """
   lsdub align     lyrics + vocal -> word/phone timings (sphinx | mfa | best)
   lsdub visemes   timings -> per-frame viseme track (min-hold 3)
@@ -157,7 +157,7 @@ def main(argv=None):
 
         print("face landmarker ->", fetch_face_landmarker())
         print("face detector ->", fetch_yunet())
-        print(f"Rhubarb / MFA / ComfyUI models are installed separately: see {DOCS_URL}/INSTALL.md")
+        print(f"Rhubarb / MFA / ComfyUI models are installed separately: see {DOCS_URL}/MODELS.md")
         return 0
     if cmd == "verify-watermark":
         from . import watermark

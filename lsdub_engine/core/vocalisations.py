@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """vocalisations.py — the non-lexical vocalisations / ad-libs of a song ("uh uh uh", "ah ah ah", "da da da", "mm",
 "hey", "whoa") found in a viseme track, marked, and handled by the warp: skip them (the take's own mouth), drive them to
 rest, or mouth them (v9).

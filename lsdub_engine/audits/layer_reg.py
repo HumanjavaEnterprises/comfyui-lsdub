@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """layer_reg.py: the inter-layer REGISTRATION ruler (v11). CPU.
 
 Founder on v10: "the sloppiness in the mouth has gone from the lips to the registration of the sub-elements of the mouth
@@ -59,7 +59,7 @@ OFFSETS = (
     ("bite", "upper - lower incisal edge"),
 )
 FLOOR = 0.0528  # gate_report: a window whose summed slosh (5 offsets, IOD / frame) is >= this is reported: v9's own
-# p95 of the per-window sum over its 7 mv30 shots (re-rendered bit for bit with the reg log)
+# p95 of the per-window sum over its 7 test shots (re-rendered bit for bit with the reg log)
 
 
 def _pt(r, k, j=None):

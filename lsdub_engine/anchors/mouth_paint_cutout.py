@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """mouth_paint_cutout.py — paint viseme mouths onto a non-human cutout face (rocks / objects / muppets).
 
 No MediaPipe face tracking. The mouth lives at a FIXED region in the frame (a single x,y,w,h, or a per-frame

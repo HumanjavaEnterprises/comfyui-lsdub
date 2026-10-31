@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """scorecard.py: `lsdub scorecard`, score a delivered film SHOT BY SHOT, so the weak shots show up front (founder: "score
 the videos shot to shot, so we see up front which shots score lower vs higher"). CPU.
 
@@ -25,7 +25,7 @@ Component values:
   sync      clip((corr_pm1 - 0.2) / 0.6)            corr 0.2 -> 0, 0.8 -> 1 (corr_pm1 = best within +-1 frame)
   silence   1 - clip((open_in_silence - 0.15) / 0.4)
   snap      mean of: closure_hit, 1 - clip((rise_ms - 40) / 160)   (whichever are measurable)
-  travel    clip((p95 - p5 of the opening - 0.04) / 0.10): how far the mouth moves (catches a held gape: v3_4 cut 21)
+  travel    clip((p95 - p5 of the opening - 0.04) / 0.10): how far the mouth moves (catches a held gape)
   tier      the singer's tier vs the line's need: met 1, one tier short 0.6, two 0.3, none 0.1
   mouth     the singer's mouth-visible share (cast landmarks, no occlusion, no mic at the lips)
   canon     clip((similarity - 0.45) / 0.25) of the singer's face, or else the largest face >= 80 px; an 'unknown'

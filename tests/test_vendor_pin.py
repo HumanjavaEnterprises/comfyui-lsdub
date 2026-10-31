@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""lsdub_engine/ is build output: VERSION names the lsdub commit and hashes the tree it wrote. CI's vendor job rebuilds it."""
+"""lsdub_engine/ is build output: VERSION hashes the tree that was written, and any hand edit breaks the hash."""
 import hashlib
 import os
 import re
@@ -13,9 +13,10 @@ def _version():
     return dict(ln.split(': ', 1) for ln in open(os.path.join(ENG, 'VERSION'), encoding='utf-8').read().splitlines())
 
 
-def test_version_names_a_clean_commit():
+def test_version_is_clean_and_names_no_commit():
     v = _version()
-    assert re.fullmatch(r'[0-9a-f]{40}', v['source_head']) and v['uncommitted'] == '0' and v['pack_version']
+    assert 'source_head' not in v and v['uncommitted'] == '0' and v['pack_version']
+    assert re.fullmatch(r'[0-9a-f]{64}', v['tree_sha256'])
 
 
 def test_tree_hash_matches():

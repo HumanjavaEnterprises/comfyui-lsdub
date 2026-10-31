@@ -206,7 +206,7 @@ def test_word_singer_is_the_attack_cut_not_an_early_onset():
 
 
 def test_a_line_sung_ahead_of_its_cut_belongs_to_that_cut():
-    """v3_2 cut 21: 'pleiadians' starts 0.23 s before cut 21, whose script Lyric cell begins with it (Sky's line): the
+    """a word that leads its cut: 'pleiadians' starts 0.23 s before the cut, whose script Lyric cell begins with it (Sky's line): the
     word is Sky's, so Sky's face is not a 'largest non-singer'. A plain held note (checker #1) keeps its attack cut."""
     B = {
         0: {"singers": {"red_nova"}, "solo": False, "section": "V"},
@@ -221,7 +221,7 @@ def test_a_line_sung_ahead_of_its_cut_belongs_to_that_cut():
 
 
 def test_cut_px_is_the_singer_while_present():
-    """QA2 cut 16: Red is in frame at ~55 px for part of the words, absent for the rest -> the cut reads wide ~55, not
+    """Red is in frame at ~55 px for part of the words, absent for the rest -> the cut reads wide ~55, not
     none / 0; the absent words still fail on their own."""
     B = G.script_beats(SCRIPT, "landing")
     R = G.grammar(_cast([("red_nova", 25, 37, 55)]), _cut(), [_w("a", 1.0, 1.4), _w("b", 1.6, 1.9)], B, song_offset=0.0, preset="landing")
@@ -229,7 +229,7 @@ def test_cut_px_is_the_singer_while_present():
 
 
 def test_mic_share_flags_chrome_at_the_lips():
-    """QA2 cut 19: a grey / chrome mic over the lip zone hides the mouth; skin and a dark open mouth do not."""
+    """a grey / chrome mic over the lip zone hides the mouth; skin and a dark open mouth do not."""
     import numpy as np
 
     img = np.zeros((200, 200, 3), np.uint8)

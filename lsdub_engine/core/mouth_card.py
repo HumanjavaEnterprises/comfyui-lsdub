@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """mouth_card.py — v12: the mouth card (lsdub annotate's per-frame card) as a toggle on the paint path.
 
   lsdub paint ... --out shot.mp4 --annotate [--annotate-corner auto|lower-right|lower-left|band] [--annotate-faces heads.json]

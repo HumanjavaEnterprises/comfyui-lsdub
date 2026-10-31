@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""lsdub: photoreal sung lip-sync from words.
+"""LSDub: photoreal sung lip-sync from words.
 
 Pipeline: forced alignment -> visemes -> per-shot pose-native mouth library ->
 mesh-mapped paint (clean plate, skull-lock, jaw-lock) -> word-lead -> zero-phase
 temporal calm -> optical-flow pin. Non-human subjects (rocks, cut-outs, muppets)
 go through the `anchors` cutout/puppet modes instead of face tracking.
 
-Public API is lazy: `import lsdub` stays cheap (no cv2/mediapipe/scipy/comfy
+Public API is lazy: importing this package stays cheap (no cv2/mediapipe/scipy/comfy
 pulled in). Access a module by name and it is imported from its subpackage, e.g.
 `lsdub_engine.mouth_paint`, `lsdub_engine.mouth_paint_cutout`. The canonical
 import paths are the subpackages themselves (`lsdub_engine.core.mouth_paint`, ...).
@@ -61,10 +61,10 @@ _API = {**_SHIP, **_DEV}
 __all__ = ["__version__", *sorted(_API)]
 
 
-def __getattr__(name):  # PEP 562: lazy module access, keeps `import lsdub` cheap
+def __getattr__(name):  # PEP 562: lazy module access, keeps the package import cheap
     target = _API.get(name)
     if target is None:
-        raise AttributeError(f"module 'lsdub' has no attribute {name!r}")
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     mod = importlib.import_module(f".{target}", __name__)
     globals()[name] = mod
     return mod

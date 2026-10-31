@@ -23,6 +23,9 @@ from fractions import Fraction
 PIPE, DEVNULL, STDOUT, CalledProcessError = subprocess.PIPE, subprocess.DEVNULL, subprocess.STDOUT, subprocess.CalledProcessError
 ALLOWED = ("ffmpeg", "ffprobe")
 TOOLS = ("rhubarb", "mfa")
+ENGINE = __name__.rpartition(".io")[0]  # as imported: the engine alone, or a host's package around it
+_TOP = ENGINE.rpartition(".")[2]  # the engine's own name, what `-m` starts
+_HOME = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # the folder holding the engine
 
 
 def _resolve(exe, allowed):
@@ -263,12 +266,27 @@ def tool(argv, **kw):
     return subprocess.run(_argv(argv, TOOLS), shell=False, **kw)  # noqa: S603
 
 
+def _engine_module(module):
+    """the top-level `-m` name of an engine module, given under the package as imported here or as the bare package."""
+    for head in (ENGINE, _TOP):
+        if module.startswith(head + "."):
+            return _TOP + module[len(head) :]
+    raise ValueError(f"ff: only engine modules may be run, got {module!r}")
+
+
+def _engine_env(env):
+    env = dict(os.environ if env is None else env)
+    env["PYTHONPATH"] = os.pathsep.join(p for p in (_HOME, env.get("PYTHONPATH")) if p)
+    return env
+
+
 def python(interpreter, module, args, **kw):
     """run `<interpreter> -m <module> args`; interpreter None = this one, else an existing executable named python*; module
-    must be one of the engine's own (lsdub.*)."""
+    must be one of the engine's own. The child imports the engine top-level, from the folder that holds it, whatever package a
+    host loaded it under."""
     kw.pop("shell", None)
-    if not module.startswith("lsdub."):
-        raise ValueError(f"ff: only engine modules may be run, got {module!r}")
+    module = _engine_module(module)
+    kw["env"] = _engine_env(kw.get("env"))
     if interpreter is None:  # as started: a venv's python resolves out of the venv
         return subprocess.run([sys.executable, "-m", module, *[str(a) for a in args]], shell=False, **kw)  # noqa: S603
     exe = os.path.realpath(interpreter)

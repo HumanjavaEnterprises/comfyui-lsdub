@@ -12,7 +12,9 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BANNED = re.compile('|'.join(['latent' + 'sync', 'wav2' + 'lip', 'sad' + 'talker', 'muse' + 'talk', 'insight' + 'face',
-                              'arc' + 'face', 'ante' + 'lope', 'code' + 'former', 'gfp' + 'gan', '/ho' + 'me/', 'gpu' + 'host']), re.I)
+                              'arc' + 'face', 'ante' + 'lope', 'code' + 'former', 'gfp' + 'gan', '/ho' + 'me/', 'gpu' + 'host',
+                              r'\bmv\d+\b', r'\bv\d+_\d+\b', r'\bQA\d+ cut\b', r'\bs1234\b']), re.I)
+MACHINE_PATH = re.compile('~' + r'/(?!\.cache/lsdub\b)')
 SKIP_DIRS = {'.git', '__pycache__', '.ruff_cache', '.pytest_cache'}
 # every external process goes through io/ff.py (ffmpeg/ffprobe, the opt-in aligners, a validated interpreter)
 SUBPROCESS_OK = {os.path.join('lsdub_engine', 'io', 'ff.py')}
@@ -31,7 +33,7 @@ def test_scrub_grep_is_empty():
     for p in _files():
         try: txt = open(p, encoding='utf-8').read()
         except (UnicodeDecodeError, OSError): continue
-        hits += [f'{os.path.relpath(p, ROOT)}:{i + 1}' for i, ln in enumerate(txt.splitlines()) if BANNED.search(ln)]
+        hits += [f'{os.path.relpath(p, ROOT)}:{i + 1}' for i, ln in enumerate(txt.splitlines()) if BANNED.search(ln) or MACHINE_PATH.search(ln)]
     assert not hits, hits
 
 

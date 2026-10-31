@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """mouth_morph.py: the --mode morph engine of lsdub paint (v5 viseme paint). Called through mouth_paint.py.
 
 What it changes vs the v4 (legacy) paint, one option per problem:
@@ -79,7 +79,7 @@ ANCH = [
 ]
 
 
-# --anchors strict: skull-rigid points only (nose bridge/tip + eye corners). Measured on mv30 takes: residual after a
+# --anchors strict: skull-rigid points only (nose bridge/tip + eye corners). Measured on sung takes: residual after a
 # similarity ~2 % IOD and r(lip gap) ~0.0, vs ANCH 5-11 % / r ~0.5 (cheeks, alar base and the oval move with the mouth).
 ANCH_STRICT = [168, 6, 197, 195, 5, 4, 1, 33, 133, 362, 263]
 IRIS = [468, 473]  # optional (--anchors strict+iris): stable detections but they follow gaze, not the skull

@@ -31,8 +31,10 @@ def thread_report():
     read only if something already imported it, so asking never changes which OpenMP runtime the process ends up with)."""
     cv2 = sys.modules.get("cv2")
     torch = sys.modules.get("torch")
+    cv2_file = getattr(cv2, "__file__", None)
+    cv2_file = "/".join(cv2_file.split(os.sep)[-2:]) if cv2_file else None  # the package-relative tail: the rest names a machine
     return (
         f"lsdub threads: cpu_count={os.cpu_count()} cv2={getattr(cv2, '__version__', None)} "
-        f"cv2_threads={cv2.getNumThreads() if cv2 else None} cv2_file={getattr(cv2, '__file__', None)} "
+        f"cv2_threads={cv2.getNumThreads() if cv2 else None} cv2_file={cv2_file} "
         f"torch_threads={torch.get_num_threads() if torch else None} OMP_NUM_THREADS={os.environ.get('OMP_NUM_THREADS')}"
     )

@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """cadence.py: the CHECKER for motion cadence (held / skipped frames). CPU. The maker is lsdub/core/retime.py.
 
 frame-gate measures the mouth as EXCESS over the take, so a hitch the take already has (a generator stall: the picture

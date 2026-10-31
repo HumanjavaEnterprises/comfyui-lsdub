@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """frame_gate.py: the CHECKER of the v9 per-frame gate (the maker / confirmation loop is lsdub/core/frame_gate.py). CPU.
 
 Every frame of a render is checked against its neighbours and against the source take, in the SKULL-STABILISED mouth
@@ -109,7 +109,7 @@ HARD = dict(fold=0.0, outside=0.02, drift_slide=0.05, held_lm_err=0.06)
 # which rulers make a frame's verdict (the others are evidence for the cause attribution / logged)
 VERDICT_KEYS = ("pop", "step", "mc", "geom", "drift", "teeth", "colour", "leak", "lipleak", "viseme", "lm_err")  # seam / teeth_ncc: logged
 # v11: a re-detection is only used when it is a plausible fit of the face the take's track follows (redet_ok /
-# redet_check). MediaPipe's IMAGE mode can lock onto a false, smaller face on a single frame (mv30 v10d S3 s1234 f50 and
+# redet_check). MediaPipe's IMAGE mode can lock onto a false, smaller face on a single frame (seen in v10d and
 # s2718 f82: the whole mesh 0.8 IOD off at a third of the size). Trusted, such a fit became the gate's "repaired" input
 # track (lm_hold through held_fix, k5-smoothed over 5 frames) and the warp drew the new mouth at the nostrils; it also
 # raised false lm_err FAILs on the frames around it. Bounds, from v9's 7 takes and their renders (the take side and the
@@ -414,7 +414,7 @@ class Checker:
         if getattr(self, "leak_scene", False) and i is not None:
             # v11 (opt-in): the SCENE is not a leak -- a pixel that is just as dark / tooth-like in the take at the same
             # place, outside the take's own mouth (its outer lip grown 25 %), is hair / a nostril / background the bigger
-            # ROI of a wider planned mouth reaches (mv30 NC f74-76: ~80 % of the "leak" was the hair at the far corner)
+            # ROI of a wider planned mouth reaches (on a turned head ~80 % of the "leak" was the hair at the far corner)
             tk = self.take[i][y0:y1, x0:x1]
             labk = cv2.cvtColor(tk, cv2.COLOR_BGR2LAB)
             Sk = np.asarray(self.S[i], float)[:, :2] - [x0, y0]

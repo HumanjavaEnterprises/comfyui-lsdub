@@ -209,7 +209,7 @@ def test_verdict_strip_marks_each_frame():
 
 # ------------------------------------------------------------------------- v11: implausible re-detections --
 def _false_fit(P, up=-0.8, scale=0.33, iod=120.0):
-    """a false face fit (MediaPipe IMAGE mode on mv30 S3 s1234 f50): the whole mesh `up` IOD higher at `scale` of the size."""
+    """a false face fit (MediaPipe IMAGE mode): the whole mesh `up` IOD higher at `scale` of the size."""
     Q = np.array(P, float)
     c = Q[:, :2].mean(0)
     Q[:, :2] = c + (Q[:, :2] - c) * scale + [0, up * iod]

@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """mouth_layers.py: v7 layered mouth compositor for --mode warp (--warp-compose layers). All CPU.
 
 Founder on v6: "uncanny valley ... the lower teeth look like just the middle 2 or 4 ... build it up as layers". So the
@@ -56,7 +56,7 @@ v11 (opt-in unless noted):
            corner past the take's, half the opening increase, 0.15 IOD x |sin yaw| -- the far corner in full), x K: the
            L1 cover's hull (lip_layers.corner_points), and the L6 fill also takes the old-mouth material the warp MOVED
            onto what was skin in the take there (corner_residue). v10c's wider openings showed the take's old lip / cavity
-           at turned-head corners (mv30 NC f74-76, S8): the search stopped at the take's own (unwarped) lip hull.
+           at turned-head corners (far corner on a turned head): the search stopped at the take's own (unwarped) lip hull.
   CLIP     --warp-interior-clip: the interior (L2 cavity, L3 lower arch + tongue, L4 upper arch) is only ever seen THROUGH
            the warped lips: the planned opening is kept where the warped frame has lip pixels above AND below it along the
            mouth's own vertical (enclosed), feathered <= 1 px; an opening the warped lips do not enclose shows the warped
@@ -234,7 +234,7 @@ def synth_teeth(T, src, lo, hi, p, iod, texel, upper, r_e, th, x_hl=0.0, line=0.
 
 # ---------------------------------------------------------------------- v13: the anthropometric layout (--warp-arch-layout) --
 # mesiodistal crown widths ALONG THE ARC, per the anthropometric IOD = the inter-PUPIL distance (63 mm; the founder's table,
-# mv30 v13): upper central, lateral, canine, premolar 1, premolar 2, molar 1 (+ molar 2, 9 mm: beyond the table, only reached
+# v13): upper central, lateral, canine, premolar 1, premolar 2, molar 1 (+ molar 2, 9 mm: beyond the table, only reached
 # by a widened arc); lower central, lateral, canine, premolars (+ molars 1 / 2, 11 / 10 mm: beyond the table). lsdub's own IOD
 # (|Cm[263] - Cm[33]|, the outer eye corners) is ~1.45 x that on these faces, so the table is scaled by the face's own
 # inter-pupil distance (the iris centres 468 / 473 of the median canonical face), not by lsdub's IOD.
@@ -2889,7 +2889,7 @@ class LayerCompositor:
         and face_t: where the TAKE shows face at a pixel -- skin (mouth_morph.skin_px), lip (lipness >= 0.35) or its own
         mouth (its outer-lip hull grown 0.12) -- vs hair / background (never painted over, never drawn as lip). v12 face
         (a bool box, --warp-yaw-clamp on a frame it clamps, mouth_warp.YawClamp.face_box): the take's own skin / lips instead
-        (on mv30 NC the auburn hair passes lipness >= 0.35, so v11's face_t let the residue fill paint skin over the hair)."""
+        (on long auburn hair the strands pass lipness >= 0.35, so v11's face_t let the residue fill paint skin over the hair)."""
         from . import mouth_morph as mm
 
         h, w = take.shape[:2]

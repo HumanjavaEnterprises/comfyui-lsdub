@@ -1,6 +1,6 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-#!/usr/bin/env python3
 """slip_audit.py — does the painted mouth stay PINNED to the face, or swim behind it? (founder 2026-10-15, v11 05C:
 "the mouth is swimming behind the locked-in spot on the face ... it's mouthing accurately, just positioning")
 
