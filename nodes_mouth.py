@@ -46,11 +46,17 @@ def _stack(project, identity):
     return recipe, p.face_overrides.get(identity, ())
 
 
+def _advance(tw):
+    """the Tweaks' sync_advance_ms as paint flags; settings come after it, so a flag typed there wins."""
+    ms = (getattr(tw, 'flags', None) or {}).get('sync_advance_ms')
+    return ['--coart-advance-ms', str(ms)] if ms else []
+
+
 def _paint_flags(project, kit, tw, vocalisations):
     """the shot's flags for sing. --vocalisations is a user-level flag: settings can change it."""
     recipe, face = _stack(project, kit.identity)
     return paint_api.flags(recipe, lib=kit.dir, mode_mods=SING_EXTRA, face_overrides=face,
-                           user_overrides=['--vocalisations', vocalisations, *paint_api.split_settings(tw.settings)])
+                           user_overrides=['--vocalisations', vocalisations, *_advance(tw), *paint_api.split_settings(tw.settings)])
 
 
 class LSDubBuildLipKit(io.ComfyNode):
@@ -171,12 +177,15 @@ class LSDubTweaks(io.ComfyNode):
                                 tooltip='Optional: a jaw-curve CSV for the whole song (one row per frame, '
                                         'columns frame,time_s,...,jawOpen; song time). Drives the jaw in the silences more '
                                         'cleanly. Empty = the vocal envelope only.'),
+                io.Float.Input('sync_advance_ms', default=0.0, min=0.0, max=200.0, step=10.0, optional=True,
+                               tooltip='Moves the whole mouth plan earlier against the sound, ms. It keeps the mouth\'s shapes and only '
+                                       'changes when they land. 0 = off.'),
             ],
             outputs=[T.LSDubTweaks.Output(display_name='tweaks', tooltip='The mouth controls.')],
         )
 
     @classmethod
-    def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv=''):
+    def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv='', sync_advance_ms=0.0):
         try:
             paint_api.split_settings(settings)
         except ValueError as e:
@@ -185,6 +194,8 @@ class LSDubTweaks(io.ComfyNode):
         if jaw_csv and not os.path.exists(jaw_csv): raise FileNotFoundError(f'LSDub Mouth Tweaks: no jaw CSV {jaw_csv}')
         flags = dict(lead=lead, word_close=word_close, face_target=face_target, snap=snap, auto=auto, continuity=continuity,
                      jaw_csv=jaw_csv, jaw_csv_hash=file_hash(jaw_csv) if jaw_csv else '')
+        if sync_advance_ms:  # absent at 0: a tweaks hash, and every shot behind it, stays what it was
+            flags['sync_advance_ms'] = float(sync_advance_ms)
         return io.NodeOutput(T.Tweaks(flags=flags, settings=settings.strip(), hash=text_hash(json.dumps(flags, sort_keys=True) + settings)))
 
 

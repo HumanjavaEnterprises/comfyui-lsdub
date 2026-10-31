@@ -893,6 +893,13 @@ def press_closures(Ft, Fs, closures, caps_px, scale, d0, d1, max_press, iters=3)
     return Ft
 
 
+def advance_frames(fr_t, advance_s, fps):
+    """--coart-advance-ms on the track's own frames: frame k reads the track round(advance x fps) frames later, the last frame
+    held. Whole frames: every reader of the track indexes it by frame. advance 0 returns the list unchanged."""
+    k = int(round(float(advance_s or 0.0) * fps))
+    return fr_t if k <= 0 or not fr_t else fr_t[min(k, len(fr_t) - 1) :] + fr_t[-1:] * min(k, len(fr_t) - 1)
+
+
 def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
     """mouth_warp's entry (--warp-target coart): the track's alignment and lead, the jaw split on the model (the take's
     own share measured on S3raw, its raw track), the optional dynamics source (--coart-dyn), the plan;
@@ -903,8 +910,9 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
     t0 = float(T.get("t0", fr_t[0].get("t", 0.0)))
     align = load_align(T.get("align"), a.track)
     lead, match, shift = None, None, 0.0
+    advance = float(getattr(a, "coart_advance_ms", 0.0) or 0.0) / 1000.0  # plan as if each frame showed the song this much later
     if align is not None:
-        lead, match = detect_lead(align, fr_t, t0, min(n, len(fr_t)), fps)
+        lead, match = detect_lead(align, T["frames"], t0, min(n, len(T["frames"])), fps)  # the lead the track was BUILT with
         if match < 0.9:
             lead = None
         else:
@@ -920,10 +928,10 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
     held = held_frames(S3raw[:n]) if S3raw is not None else None
     dyn = None
     if getattr(a, "coart_dyn", None) and float(getattr(a, "coart_dyn_mix", 0.0) or 0.0) > 0:
-        dyn = load_dyn(a.coart_dyn, t0, n, fps)
+        dyn = load_dyn(a.coart_dyn, t0 + advance, n, fps)
         if dyn is None:
             print(f"coart: --coart-dyn {a.coart_dyn} unreadable or does not cover this clip; no dynamics mix")
-    x, pp, info = plan(u, fr_t, fps, t0, None, bands, a, align, shift, Fu, held, dyn)
+    x, pp, info = plan(u, fr_t, fps, t0 + advance, None, bands, a, align, shift, Fu, held, dyn)
     Ft = denorm(x, model.rng)
     rng = model.rng
     gs = max(1e-6, rng["g_hi"] - rng["g_lo"])
@@ -937,6 +945,7 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
         lead=lead,
         lead_match=match,
         lead_shift=shift,
+        advance_s=advance,
         jaw_share=s,
         jaw_share_take=s_take,
         dyn_source=getattr(a, "coart_dyn", None),

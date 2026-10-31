@@ -1,6 +1,6 @@
 {
- "last_node_id": 21,
- "last_link_id": 39,
+ "last_node_id": 22,
+ "last_link_id": 40,
  "nodes": [
   {
    "id": 21,
@@ -759,7 +759,7 @@
     {
      "name": "tweaks",
      "type": "LSDUB_TWEAKS",
-     "link": null
+     "link": 40
     },
     {
      "name": "masks",
@@ -1067,6 +1067,48 @@
    ],
    "color": "#255",
    "title": "LSDub Save Cut"
+  },
+  {
+   "id": 22,
+   "type": "LSDubTweaks",
+   "pos": [
+    1280,
+    814
+   ],
+   "size": [
+    340,
+    294
+   ],
+   "flags": {},
+   "order": 22,
+   "mode": 0,
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "tweaks",
+     "type": "LSDUB_TWEAKS",
+     "links": [
+      40
+     ],
+     "slot_index": 0
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LSDubTweaks"
+   },
+   "widgets_values": [
+    0.06,
+    0.06,
+    512.0,
+    true,
+    true,
+    true,
+    "",
+    "",
+    0.0
+   ],
+   "color": "#532",
+   "title": "LSDub Mouth Tweaks"
   }
  ],
  "links": [
@@ -1381,6 +1423,14 @@
    20,
    1,
    "LSDUB_RENDER"
+  ],
+  [
+   40,
+   22,
+   0,
+   15,
+   8,
+   "LSDUB_TWEAKS"
   ]
  ],
  "groups": [

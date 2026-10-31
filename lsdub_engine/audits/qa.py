@@ -421,6 +421,8 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
             c0, cb, lag = Q.tracking(op, tg, fps, keep=keep)
             c1 = max(c0, Q.tracking(op, tg, fps, max_lag=1, keep=keep)[1])
             out["vocal_frac"] = vocal_frac
+            ec, eb, el = Q.tracking(op, np.asarray(env[: len(op)], float), fps, keep=keep)  # no alignment in this reading
+            out.update(env_corr=round(ec, 3), env_best=round(eb, 3), env_lag_ms=el)
             if keep is not None:
                 out["corr_all"] = round(Q.tracking(op, tg, fps)[0], 3)
             out.update(
@@ -562,6 +564,10 @@ def write_triage(meta, shots, out):
     )
 
 
+def _audio_cell(r):
+    return "" if r.get("env_best") is None else f"{r['env_best']:+.2f} @ {r['env_lag_ms']:+.0f}"
+
+
 def write_verify(meta, rows, out):
     order = sorted(
         rows,
@@ -581,6 +587,8 @@ def write_verify(meta, rows, out):
         "score",
         "delta",
         "corr",
+        "env_corr",
+        "env_lag_ms",
         "mouth_range",
         "open_in_silence",
         "mouth_visible",
@@ -600,15 +608,18 @@ def write_verify(meta, rows, out):
         "",
         f"Likely-success score 0-100 per dubbed shot: PASS >= {PASS_BAND:.0f}, REVIEW >= {REVIEW_BAND:.0f}, else FAIL. "
         f"COVERAGE (no readable target) = REVIEW, n/a; no voice = n/a; N/A = left as source. Identity drift = DINOv2 cosine vs --before < {ID_DRIFT}.",
+        "`sync corr` reads the mouth against the opening built from the alignment, the curve the dub itself was painted from: a high "
+        "number says the render followed its plan, and cannot see a wrong alignment. `audio` reads it against the vocal's "
+        "loudness with no alignment, best lag in ms (+ = the mouth trails): reported, it moves no band.",
         "",
-        "| shot | t (s) | band | score | Δ vs before | class | sync corr | travel | silence | mouth | identity | reason |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| shot | t (s) | band | score | Δ vs before | class | sync corr | audio | travel | silence | mouth | identity | reason |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in order:
         L.append(
             f"| {r['shot']} | {r['start']:.2f}-{r['end']:.2f} | **{r['band']}** | {'-' if r['score'] is None else (format(r['score'], '.0f'))} | "
             f"{'' if r.get('delta') is None else (format(r['delta'], '+.0f'))} | {r['class']} | {'' if r.get('corr') is None else (format(r['corr'], '+.2f'))} | "
-            f"{r.get('mouth_range', '')} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
+            f"{_audio_cell(r)} | {r.get('mouth_range', '')} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
             f"{r['mouth_visible']:.0%} | {'' if r.get('identity_cos') is None else r['identity_cos']} | {r['reason']} |"
         )
     open(out + ".md", "w").write("\n".join(L) + "\n")

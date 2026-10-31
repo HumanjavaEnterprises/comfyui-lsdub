@@ -84,6 +84,39 @@ def test_pink_never_above_the_takes_share():
     assert cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_BGR2LAB)[100, 100, 0] < cv2.cvtColor(F[0], cv2.COLOR_BGR2LAB)[100, 100, 0] + 40
 
 
+def test_pink_cap_attacks_at_once_and_releases_slowly():
+    F, S, Fe, bank = clip()
+    T = IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]))
+    Q = S[0][ll.LIP_IN][:, :2]
+    zero = np.zeros((200, 200), np.float32)
+    paint = lambda i: T.paint(i, Q, (0, 0, 200, 200), 0.4, zero)
+    T.curve[:] = 2.0  # the take's share is out of reach: nothing to cap
+    paint(0)
+    assert T.log[0]["sank"] == 0
+    T.curve[:] = 0.2
+    for i in (1, 2, 3):
+        paint(i)
+        assert T.log[i]["held"] <= T.log[i]["target"] + 1e-3  # the first breach frame is held too, not a fifth of it
+    assert T.log[1]["sank"] >= 1.0 - T.log[1]["target"] / T.log[1]["pink"]
+    top = T.log[3]["sank"]
+    T.curve[:] = 2.0
+    tail = []
+    for i in range(4, 8):
+        paint(i)
+        tail.append(T.log[i]["sank"])
+    assert tail[0] == pytest.approx(IT.RELEASE * top, abs=2e-3)  # eased, not dropped to 0
+    assert all(b < a for a, b in zip(tail, tail[1:])) and tail[-1] > 0
+
+
+def test_pink_tail_stops_when_it_reaches_nothing():
+    F, S, Fe, bank = clip()
+    T = IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]))
+    T.curve[:] = 2.0
+    T.sank[-1] = IT.SANK_MIN
+    T.paint(0, S[0][ll.LIP_IN][:, :2], (0, 0, 200, 200), 0.4, np.zeros((200, 200), np.float32))
+    assert T.log[0]["sank"] == 0
+
+
 def test_closed_donor_leaves_the_model_layers():
     F, S, Fe, bank = clip()
     S[:] = face(gap=1.0)

@@ -981,6 +981,10 @@ class WarpClip:
         fr_t = T["frames"]
         n = a.frames or len(fr_t)
         S3raw, fps, found = _track(a, n)
+        if g("warp_target", "v9") == "coart" and g("coart_advance_ms", 0.0):
+            from . import coart
+
+            fr_t = coart.advance_frames(fr_t, a.coart_advance_ms / 1000.0, float(T.get("fps", 25)))
         n = min(n, len(S3raw))
         S3raw = S3raw[:n]
         S = mp_.smooth_track(S3raw, g("track_smooth", "k5"))

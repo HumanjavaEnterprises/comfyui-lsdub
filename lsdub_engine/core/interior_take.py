@@ -13,6 +13,8 @@ from . import lip_layers as ll
 
 LIP_IN, LIP_OUT = ll.LIP_IN, ll.LIP_OUT
 PINK_ROOM = 0.94  # the fill's pink stops this far under the take's share
+RELEASE = 0.8  # the pink sink's share kept per frame after the last frame that needed it
+SANK_MIN = 0.005  # a sink below this is off
 OPEN_MIN = 0.06  # a donor below this aperture (x mouth width) shows no interior
 HOLD = 0.50  # keep the running donor while its cost is within this of the best one
 DWELL = 10  # frames a new donor stays, unless it stops being open enough
@@ -213,22 +215,26 @@ class TakeInterior:
             over = int(pink(ol)[opening & ~vis].sum())
         got = (float(pink(lab)[vis].sum()) + over) / area
         tgt = PINK_ROOM * self.target(ap_out)  # the ruler's contour reaches past the plan: the lip rim it catches is counted here
-        k = 0.0
-        if got > tgt:  # never pinker than the take at this aperture: the excess sinks into the cavity's colour
-            k = 1.0 - tgt / got
+        need, tail = 0.0, RELEASE * self.sank.get(i - 1, 0.0)
+        if got > tgt or tail >= SANK_MIN:  # never pinker than the take at this aperture: the excess sinks into the cavity's colour
             pk = pink(lab)
             pm = cv2.GaussianBlur(pk.astype(np.float32), (0, 0), 1.0)[..., None]
             nonp = ~pk & opening
             base = (np.median(lab[nonp], 0) if nonp.sum() > 8 else np.array([50.0, 138.0, 134.0])).astype(np.float32)
-            for _ in range(6):  # a blend only leaves the pink test late: raise it until the share is held
-                sunk = lab * (1 - pm * k) + base * pm * k
-                if (float(pink(sunk)[vis].sum()) + over) / area <= tgt or k >= 1.0:
-                    break
-                k = min(1.0, k * 1.4 + 0.1)
-            k = 0.8 * self.sank.get(i - 1, k) + 0.2 * k  # no flicker from one frame's share
+            if got > tgt:
+                need = 1.0 - tgt / got
+                for _ in range(6):  # a blend only leaves the pink test late: raise it until the share is held
+                    sunk = lab * (1 - pm * need) + base * pm * need
+                    if (float(pink(sunk)[vis].sum()) + over) / area <= tgt or need >= 1.0:
+                        break
+                    need = min(1.0, need * 1.4 + 0.1)
+        k = max(need, tail)  # the cap holds from the first frame it is needed; letting go is what is eased
+        k = 0.0 if k < SANK_MIN else k
+        if k > 0:
             lab = lab * (1 - pm * k) + base * pm * k
         self.sank[i] = k
-        self.log[int(i)] = dict(donor=j, pink=round(got, 4), target=round(tgt, 4), sank=round(k, 3))
+        held = (float(pink(lab)[vis].sum()) + over) / area
+        self.log[int(i)] = dict(donor=j, pink=round(got, 4), held=round(held, 4), target=round(tgt, 4), sank=round(k, 3))
         bgr = cv2.cvtColor(np.clip(lab + 0.5, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR).astype(np.float32)
         a = cv2.GaussianBlur(cv2.dilate(opening.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(np.float32), (0, 0), 0.6)
         return bgr, a

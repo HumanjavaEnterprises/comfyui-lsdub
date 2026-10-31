@@ -199,6 +199,7 @@ def dub_and_qa(wf, kit_kw, audio='source', vocalisations='skip'):
     for s, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('triage', 'shots', 'shots'), ('song', 'song', 'song'),
                     ('align', 'align', 'align'), ('kit', 'kit', 'kit')):
         wf.link(s, o, 'dub', i)
+    wf.add('tweaks', 'LSDubTweaks', (1200, 700)).link('tweaks', 'tweaks', 'dub', 'tweaks')
     wf.add('verify', 'LSDubVerify', (2000, 700))
     for s, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('dub', 'render', 'render'), ('triage', 'shots', 'shots'),
                     ('song', 'song', 'song'), ('align', 'align', 'align')):

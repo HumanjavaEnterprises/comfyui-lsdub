@@ -785,6 +785,40 @@ def rhubarb_crosscheck(words, rh):
     }
 
 
+def restore_order(words):
+    """words sorted by start, each with its lyric position `idx`. A phrase split for a retry aligns its fragments apart,
+    so a fragment can land before the one the lyrics put ahead of it, and sorting by time then swaps the words. A run of
+    words out of lyric order keeps the time span it covers; its words take that span in lyric order, each at its share of
+    the run's length, phones scaled with it. In place. -> how many words moved. Words in order are not touched."""
+    order = sorted(range(len(words)), key=lambda i: words[i]["idx"])
+    rank = [0] * len(words)
+    for r, i in enumerate(order):
+        rank[i] = r
+    moved, i = 0, 0
+    while i < len(words):
+        j, top = i, rank[i]
+        while j < top:
+            j += 1
+            top = max(top, rank[j])
+        if j > i:
+            run = words[i : j + 1]
+            lo, hi = min(w["start"] for w in run), max(w["end"] for w in run)
+            run.sort(key=lambda w: w["idx"])
+            total = sum(max(1e-3, w["end"] - w["start"]) for w in run)
+            t = lo
+            for w in run:
+                s0, d0 = w["start"], max(1e-3, w["end"] - w["start"])
+                f = (hi - lo) / total
+                for p in w["phones"]:
+                    p["start"], p["end"] = t + (p["start"] - s0) * f, t + (p["end"] - s0) * f
+                w["start"], w["end"] = t, t + d0 * f
+                t += d0 * f
+            words[i : j + 1] = run
+            moved += len(run)
+        i = j + 1
+    return moved
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--audio", required=True)
@@ -1027,6 +1061,9 @@ def main(argv=None):
         if a.aligner == "best":
             report.append({"sphinx_chain_report": base_rep})
     final.sort(key=lambda w: w["start"])
+    swapped = restore_order(final)
+    if swapped:
+        notes.append(f"{swapped} word(s) came back out of lyric order from separate fragments: put back in order")
     for prev, w in zip(final, final[1:]):  # mixed sphinx/whisper phrases can overlap: split the overlap at its midpoint
         if w["start"] < prev["end"]:
             m = (w["start"] + prev["end"]) / 2

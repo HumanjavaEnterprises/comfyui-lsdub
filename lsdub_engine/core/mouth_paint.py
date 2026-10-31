@@ -723,7 +723,8 @@ def _parser():
         choices=["model", "take"],
         default="model",
         help="warp (layers): the opening's tongue and cavity. model = the drawn layers, take = the take's own closest frame by shape "
-        "and pose, Lab-matched per frame, its pink share held to the take's at that aperture",
+        "and pose, Lab-matched per frame; where its pink share would pass the take's at that aperture the excess sinks into the "
+        "cavity's colour from that frame on, and the sink lets go over a few frames",
     )
     ap.add_argument(
         "--warp-teeth-fit",
@@ -862,6 +863,13 @@ def _parser():
         default=0.0,
         help="warp (coart): 0..1; weight of --coart-dyn in the target "
         "(0 = off); the aligner's closures stay hard and the pauses keep the rest shape",
+    )
+    ap.add_argument(
+        "--coart-advance-ms",
+        type=float,
+        default=0.0,
+        help="warp (coart): ms; the whole mouth plan runs this much earlier against the audio: phones, closures, tongue and "
+        "teeth shapes and --coart-dyn together (0 = off). Keeps the plan's shape and only moves it in time",
     )
     # (opt-in; audits/frame_gate.py = the checker, core/frame_gate.py = the maker): the per-frame gate ---
     ap.add_argument(

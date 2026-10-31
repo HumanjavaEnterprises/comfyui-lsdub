@@ -126,3 +126,38 @@ def test_dub_passes_the_vocalisations_mode(pack, tmp_path, monkeypatch):
         v,
     )
     assert k("mouth") != k("skip") and k("skip") == k("skip")
+
+
+def _w(name, idx, a, b):
+    return dict(w=name, idx=idx, start=a, end=b, phones=[dict(p="AH", start=a, end=(a + b) / 2), dict(p="T", start=(a + b) / 2, end=b)])
+
+
+def test_restore_order_puts_a_swapped_pair_back_inside_its_span():
+    from lsdub_engine.core.lyric_align import restore_order
+
+    W = [_w("its", 0, 7.88, 8.41), _w("that", 2, 8.41, 8.68), _w("about", 1, 8.68, 9.19), _w("time", 3, 9.19, 9.8)]
+    assert restore_order(W) == 2
+    assert [w["w"] for w in W] == ["its", "about", "that", "time"]
+    assert W[1]["start"] == 8.41 and abs(W[2]["end"] - 9.19) < 1e-9
+    assert abs(W[1]["end"] - W[2]["start"]) < 1e-9
+    assert abs(W[1]["phones"][-1]["end"] - W[1]["end"]) < 1e-9 and abs(W[2]["phones"][0]["start"] - W[2]["start"]) < 1e-9
+    assert abs((W[1]["end"] - W[1]["start"]) / (W[2]["end"] - W[2]["start"]) - 0.51 / 0.27) < 1e-6  # each keeps its own length
+
+
+def test_restore_order_leaves_words_in_order_untouched():
+    from lsdub_engine.core.lyric_align import restore_order
+    import copy
+
+    W = [_w("a", 0, 0.0, 0.2), _w("b", 1, 0.25, 0.5), _w("c", 5, 0.5, 0.9)]
+    before = copy.deepcopy(W)
+    assert restore_order(W) == 0
+    assert W == before
+
+
+def test_restore_order_handles_a_run_of_three():
+    from lsdub_engine.core.lyric_align import restore_order
+
+    W = [_w("c", 2, 1.0, 1.2), _w("a", 0, 1.2, 1.4), _w("b", 1, 1.4, 1.6), _w("d", 3, 1.7, 1.9)]
+    assert restore_order(W) == 3
+    assert [w["w"] for w in W] == ["a", "b", "c", "d"]
+    assert all(x["end"] <= y["start"] + 1e-9 for x, y in zip(W, W[1:]))

@@ -85,6 +85,18 @@ def split_settings(text):
         raise ValueError(f"unmatched quote in {text!r}: put a value holding a space or an apostrophe in double quotes") from None
 
 
+def advance_s(args):
+    """--coart-advance-ms in these flags, in seconds (the last one wins, as the parser's would); 0 when absent."""
+    a = [str(x) for x in args or ()]
+    v = 0.0
+    for i, x in enumerate(a):
+        if x == "--coart-advance-ms" and i + 1 < len(a):
+            v = float(a[i + 1])
+        elif x.startswith("--coart-advance-ms="):
+            v = float(x.split("=", 1)[1])
+    return v / 1000.0
+
+
 def coart_dyn(args, dyn):
     """--coart-dyn belongs to the coart planner: nothing else reads it."""
     return ("--coart-dyn", dyn, "--coart-dyn-mix", "1.0") if target(args) == "coart" else ()

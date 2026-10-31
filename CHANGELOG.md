@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- LSDub Mouth Tweaks gains optional `sync_advance_ms` (default 0): the whole mouth plan lands that much earlier against the sound, shapes unchanged. Off, no cache key moves.
+- LSDub Verify reports `env_corr`, `env_best`, `env_lag_ms`: the mouth against the vocal's loudness with no alignment, next to the sync score, which reads the curve the dub was painted from. Reported, they move no band.
+- `--warp-interior-source take`: the pink sink holds from the first frame it is needed and lets go over a few frames (this changes that flag's render); softening 0.012 to 0.02 of the box's side (`SOFT`).
+- New mouth-warp flags through `settings`: `--warp-teeth-fit take`, `--occluder-plate`, `--coart-advance-ms`. Mouth Ruler gains `pink_core`.
+- Align: words a phrase split left out of lyric order go back in order inside the span they cover.
 - Lip-lock is gone from the pack: the landing preset carries no lip-colour geometry and no argv changes.
 - The vendored `lsdub_engine/workflows/*.json` are gone; `graphs.py` is the single source of the generator graphs.
 - The lyric sheet's scat markup, `( ... )` and `[skip]`, now reaches the Dub: Align reads it, leaves it out of the speech-to-text prompt, and flags those words in `align.json`.

@@ -342,3 +342,24 @@ def test_vocalisation_span_follows_the_vocalisations_mode():
     assert (
         not any(s["v"] in ("skip", "rest") and s["a"] < 0.8 and s["b"] > 0.2 for s in i_mouth["segments"]) and x_mouth[mid, 0].mean() > 0.7
     )
+
+
+def test_advance_frames_reads_the_track_later():
+    fr = [dict(vis=str(i)) for i in range(6)]
+    assert coart.advance_frames(fr, 0.0, 25) is fr
+    got = coart.advance_frames(fr, 0.08, 25)
+    assert [f["vis"] for f in got] == ["2", "3", "4", "5", "5", "5"] and len(got) == 6
+
+
+def test_advance_flag_defaults_off():
+    from lsdub_engine.core import mouth_paint as MP
+
+    assert MP._parser().parse_args(["--video", "-", "--track", "-", "--out", "-"]).coart_advance_ms == 0.0
+
+
+def test_advance_s_reads_the_flag_from_settings():
+    from lsdub_engine.core import paint_api
+
+    assert paint_api.advance_s(()) == 0.0
+    assert paint_api.advance_s(["--x", "1", "--coart-advance-ms", "60"]) == 0.06
+    assert paint_api.advance_s(["--coart-advance-ms=30", "--coart-advance-ms", "90"]) == 0.09

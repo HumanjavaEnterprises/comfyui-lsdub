@@ -180,3 +180,22 @@ def test_a_lone_apostrophe_stops_at_the_tweaks_node_with_a_clear_message(pack):
 def test_a_failed_gate_names_the_vocalisation(pack):
     note = pack.nodes_mouth._vocal_note
     assert note({'vocal_frac': 0.4}).startswith('vocalisation spans cover 40%') and note({'vocal_frac': 0.1}) == '' and note({}) == ''
+
+
+def test_sync_advance_reaches_the_paint_flags_and_settings_win(pack):
+    tw = types.SimpleNamespace(settings='', flags=dict(sync_advance_ms=60.0))
+    a = pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers'), _kit('a'), tw, 'skip')
+    assert a[a.index('--coart-advance-ms') + 1] == '60.0'
+    tw.settings = '--coart-advance-ms 30'
+    a = pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers'), _kit('a'), tw, 'skip')
+    assert a[len(a) - 1 - a[::-1].index('--coart-advance-ms') + 1] == '30'
+    tw.flags = {}
+    tw.settings = ''
+    assert '--coart-advance-ms' not in pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers'), _kit('a'), tw, 'skip')
+
+
+def test_sync_advance_at_zero_keeps_the_tweaks_hash(pack):
+    N = pack.nodes_mouth.LSDubTweaks
+    base = (0.06, 0.06, 512.0, True, True, True, '')
+    assert N.execute(*base).args[0].hash == N.execute(*base, '', 0.0).args[0].hash
+    assert N.execute(*base).args[0].hash != N.execute(*base, '', 60.0).args[0].hash
