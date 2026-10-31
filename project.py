@@ -14,9 +14,19 @@ import hashlib
 import json
 import os
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
-from .lsdub_engine import __version__ as ENGINE_VERSION
+from .lsdub_engine import __version__
+
+
+def _engine_version():
+    """the release plus the vendored tree: keys move when the engine does, a pack-only release moves none."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lsdub_engine', 'VERSION'), encoding='utf-8') as f:
+        tree = dict(ln.split(': ', 1) for ln in f.read().splitlines())['tree_sha256']
+    return f'{__version__}+{tree[:12]}'
+
+
+ENGINE_VERSION = _engine_version()
 
 MODES = ('run', 'test_learn')
 STAGES = ('slots/video', 'slots/still', 'slots/song', 'slots/lyrics', 'audio/split', 'audio/lead', 'audio/align',
@@ -73,11 +83,11 @@ class Project:
     mode: str = 'run'
     fps: float = 25.0
     song_offset: float = 0.0
-    vocalisations: str = 'skip'
     seed: int = 0
     preset: str = 'none'
     backend: str = 'local'
     force_shots: tuple = field(default_factory=tuple)
+    mouth_stack: str = 'plain'
 
     def __post_init__(self):
         if self.mode not in MODES: raise ValueError(f'mode must be one of {MODES}, got {self.mode!r}')
@@ -89,10 +99,10 @@ class Project:
 
     def cache_key(self):
         """what downstream keys depend on: not force_shots (forcing a shot must not move every key), not mode (only the
-        dub reads it, so test_learn and run share their analysis) and not seed (only the generator slots use it, and
-        they key on it themselves)."""
+        dub reads it, so test_learn and run share their analysis), not seed (only the generator slots use it, and
+        they key on it themselves) and not mouth_stack (the shot key folds it, analysis stays shared)."""
         d = asdict(self)
-        for k in ('force_shots', 'root', 'mode', 'seed', 'backend'): d.pop(k)
+        for k in ('force_shots', 'root', 'mode', 'seed', 'backend', 'mouth_stack'): d.pop(k)
         return text_hash(canonical(d))
 
     def ensure(self):
@@ -122,8 +132,8 @@ class Project:
     def from_json(cls, d):
         d = dict(d)
         d['force_shots'] = tuple(d.get('force_shots') or ())
-        d.pop('engine_version', None)
-        return cls(**d)
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in known})         # an older project.json carries fields since removed
 
 
 class StageCache:

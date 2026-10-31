@@ -23,6 +23,9 @@ def schemas(pack):
     return out
 
 
+PENDING = {'LSDubProject': ('mouth_stack',)}                                        # appended trailing optionals
+
+
 def has_control(p):
     """the frontend rule: an INT/COMBO named seed or noise_seed, or declared with control_after_generate, gets a
     'control after generate' widget right after it, so one extra value in widgets_values."""
@@ -69,6 +72,9 @@ def check_workflow(wf, S):
             if not p.optional: assert i['link'] is not None and i['link'] in links, f"{n['type']}.{p.id} is not linked"
         assert [(o['name'], o['type']) for o in n['outputs']] == [(o.display_name, o.io_type) for o in s.outputs], n['type']
         wv = list(n['widgets_values'])
+        pending = PENDING.get(n['type'], ())                                            # saved before these: they take their default
+        if len(wv) == len(widgets) + sum(has_control(p) for p in widgets) - len(pending):
+            widgets = [p for p in widgets if p.id not in pending]
         n_values = len(widgets) + sum(has_control(p) for p in widgets)
         assert len(wv) == n_values, f"{n['type']}: {len(wv)} widget values for {n_values} widget slots"
         for p in widgets:                                                               # read them the way the frontend does
@@ -114,7 +120,7 @@ def test_project_widgets_in_ui_order(pack):
         s = schemas(pack)['LSDubProject']
         ordered = [p for p in s.inputs if not p.optional] + [p for p in s.inputs if p.optional]
         names = [k for p in ordered if p.io_type in WIDGET
-                 for k in ((p.id, 'control_after_generate') if has_control(p) else (p.id,))]
+                 for k in ((p.id, 'control_after_generate') if has_control(p) else (p.id,)) if k != 'mouth_stack']
         vals = dict(zip(names, n['widgets_values']))
         assert len(names) == len(n['widgets_values']), (f, n['widgets_values'])
         assert vals['seed'] == 0 and vals['control_after_generate'] == 'fixed', (f, vals)

@@ -4,6 +4,9 @@
 
 - `lsdub_engine/` and `tests/engine/` are now build output, never edited here; `lsdub_engine/VERSION` carries a tree hash that CI checks.
   Presets move to `lsdub_engine/core/presets.py`, recipes arrive beside them.
+- One cache reset: every stage key moves once in this release, so the generator slots (LTX, Qwen) re-run too, along with analysis, kits and shots. Earlier folders stay on disk. It groups four changes: the engine version now includes the vendored tree hash, kits hash by bytes instead of modification time, the unused project field `vocalisations` is gone, and `mouth_stack` arrives. A `project.json` from 0.1.3 still loads.
+- LSDub Project gains `mouth_stack` (`plain`, `layers`). It does not change the render yet; `layers` shots keep separate cache folders.
+- The Dub logs paint flags that have no effect on a run and records them in the shot's `done.json`. Model unload also closes the shared face landmarkers.
 
 ## 0.1.3 (2026-10-30)
 

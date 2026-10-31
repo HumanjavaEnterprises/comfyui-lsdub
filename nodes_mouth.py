@@ -18,12 +18,23 @@ from comfy_api.v0_0_2 import io
 from . import lsdub_types as T
 from . import media
 from .media import kit_folder
-from .lsdub_engine.core import presets
+from .lsdub_engine.core import presets, recipes
 from .lsdub_engine.core.steps import call
 from .project import file_hash, shots_todo, stage_key, text_hash
 
 DUB_VERDICTS = ('DUB', 'DUB-MEDIUM')
 SING_EXTRA = ['--warp-track-mode', 'chain']                 # the standard sing recipe's track mode
+
+
+def _paint_warnings(argv):
+    """what these flags will not do on this run; observation only, argv goes to the paint unchanged."""
+    from .lsdub_engine.core import mouth_paint
+    try:
+        out = mouth_paint.paint_warnings(argv)
+    except SystemExit:                                                   # a flag paint rejects: the render reports it
+        return []
+    for w in out: _log(f'paint: {w}')
+    return out
 
 
 def _kit_flags(project, identity):
@@ -68,7 +79,7 @@ class LSDubBuildLipKit(io.ComfyNode):
         for d, _, fs in sorted(os.walk(kit_dir)):
             for f in sorted(fs):
                 p = os.path.join(d, f)
-                h.append(f'{os.path.relpath(p, kit_dir)}:{os.path.getsize(p)}:{int(os.path.getmtime(p))}')
+                h.append(f"{os.path.relpath(p, kit_dir).replace(os.sep, '/')}:{os.path.getsize(p)}:{file_hash(p)}")
         return text_hash('\n'.join(h))
 
     @classmethod
@@ -336,6 +347,9 @@ class LSDubDub(io.ComfyNode):
     def _shot_key(cls, project, source, s, song, align, kit, tweaks, masks, cast, vocalisations='skip'):
         occ = (masks.shots or {}).get(str(s['shot'])) if masks else None
         extra = {} if vocalisations == 'skip' else {'vocalisations': vocalisations}      # skip = the keys before the option
+        if project.mouth_stack != 'plain':                                               # plain = the keys before the option
+            extra.update(mouth_stack=project.mouth_stack, identity=kit.identity,
+                         recipe=recipes.MOUTH_STACKS[project.mouth_stack])
         return stage_key('LSDubDub/shot', {'f': [s['f0'], s['f1']], 'start': s['start'], 'target': s.get('target'),
                                            'box': s.get('box'), 'occ': file_hash(occ) if occ and os.path.exists(occ) else '', **extra},
                          [project.cache_key(), source.hash, song.cache_key(), align.hash, kit.hash, tweaks.cache_key(),
@@ -384,6 +398,7 @@ class LSDubDub(io.ComfyNode):
         f = tw.flags
         pa = ['--lib', kit.dir, *_kit_flags(project, kit.identity), *SING_EXTRA, *tw.settings.split(),
               '--vocalisations', vocalisations]
+        warned = _paint_warnings(pa)
         info = SING.run(take, align.align, song.lead or song.vocal or song.mix, s['start'] - project.song_offset,
                         st.path('sung.mp4'), work, pa, char=s['target'] if cast else None, db=cast.db if cast else None,
                         box=None if cast else s.get('box'), face_target=float(f.get('face_target', 512.0)),
@@ -396,6 +411,7 @@ class LSDubDub(io.ComfyNode):
         else:
             shutil.copyfile(st.path('sung.mp4'), render)
         if note: info['mask_note'] = note
+        if warned: info['paint_warnings'] = warned
         return render, info
 
     @classmethod
@@ -428,7 +444,8 @@ class LSDubDub(io.ComfyNode):
                                                            f"(open in silence {info.get('open_in_silence')})")
                     st.mark_done(bool(info.get('pass')), time.perf_counter() - t0, time.process_time() - c0,
                                  corr=info.get('corr'), auto=(info.get('auto') or {}).get('winner'),
-                                 render=render, reason=reason or info.get('mask_note', ''))
+                                 render=render, reason=reason or info.get('mask_note', ''),
+                                 paint_warnings=info.get('paint_warnings', []))
                 except Exception as e:                                  # a failed shot does not stop the cut
                     _log(f'shot {sid} failed: {type(e).__name__}: {e}')
                     st.mark_done(False, time.perf_counter() - t0, time.process_time() - c0, error=f'{type(e).__name__}: {e}',

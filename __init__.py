@@ -8,6 +8,8 @@ if __package__:   # loaded as a package (ComfyUI, tests/conftest.py); pytest's b
     import folder_paths
     from comfy_api.v0_0_2 import ComfyExtension, io
 
+    from . import devices
+    devices.hook_unload()
     from . import nodes_audio, nodes_mouth, nodes_project, nodes_qa, nodes_video, nodes_vocal
 
     folder_paths.add_model_folder_path('lsdub', os.path.join(folder_paths.models_dir, 'lsdub'))

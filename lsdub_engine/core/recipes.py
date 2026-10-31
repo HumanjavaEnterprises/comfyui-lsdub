@@ -221,6 +221,9 @@ RECIPES = {
 }
 
 
+MOUTH_STACKS = {"plain": "plain", "layers": "layers_v16_1"}  # the pack's mouth_stack option -> the recipe it resolves to
+
+
 def get(name):
     if name not in RECIPES:
         raise ValueError(f"unknown recipe {name!r} (have {sorted(RECIPES)})")

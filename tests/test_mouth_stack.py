@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
+"""mouth_stack and the one re-key release: plain shots keep the key they had, layers shots get their own, old projects load."""
+import json
+import os
+import shutil
+import sys
+import types
+
+from test_example_workflows import WIDGET, has_control, schemas
+
+OLD_PROJECT = '''{
+ "root": "/tmp/p", "name": "cut", "mode": "run", "fps": 25.0, "song_offset": 0.0, "vocalisations": "skip",
+ "seed": 0, "preset": "none", "backend": "local", "force_shots": [21], "engine_version": "0.1.0"
+}'''
+
+
+def _proj(pack, **kw):
+    return pack.project.Project(root='/r', name='cut', **kw)
+
+
+def _key(pack, project, kit_id='a', vocalisations='skip'):
+    ns = types.SimpleNamespace
+    ck = ns(cache_key=lambda: 'ck')
+    return pack.nodes_mouth.LSDubDub._shot_key(project, ns(hash='src'), dict(shot=1, f0=0, f1=9, start=0.0, target='a', box=None), ck,
+                                               ns(hash='al'), ns(hash='kh', identity=kit_id), ck, None, None, vocalisations)
+
+
+def test_widget_order(pack):
+    s = schemas(pack)['LSDubProject']
+    ordered = [p for p in s.inputs if not p.optional] + [p for p in s.inputs if p.optional]
+    names = [k for p in ordered if p.io_type in WIDGET for k in ((p.id, 'fixed') if has_control(p) else (p.id,))]
+    assert names == ['name', 'root', 'mode', 'fps', 'song_offset', 'preset', 'seed', 'fixed', 'force_shots', 'backend', 'mouth_stack']
+    p = ordered[-1]
+    assert p.kw['options'] == ['plain', 'layers'] and p.kw['default'] == 'plain' and p.optional
+
+
+def test_project_key_snapshot(pack):
+    assert _proj(pack).cache_key() == _proj(pack, mouth_stack='layers').cache_key()
+    assert _proj(pack).cache_key() == pack.project.text_hash(pack.project.canonical(
+        {'name': 'cut', 'fps': 25.0, 'song_offset': 0.0, 'preset': 'none'}))
+
+
+def test_plain_shot_key_is_the_formula_without_the_option(pack):
+    P = pack.project
+    p = _proj(pack)
+    want = P.stage_key('LSDubDub/shot', {'f': [0, 9], 'start': 0.0, 'target': 'a', 'box': None, 'occ': ''},
+                       [p.cache_key(), 'src', 'ck', 'al', 'kh', 'ck', ''])
+    assert _key(pack, p) == want
+    assert _key(pack, p, kit_id='renamed') == want                                  # A1: identity is not in a plain key
+
+
+def test_layers_shot_key_folds_stack_identity_recipe(pack):
+    lay = _proj(pack, mouth_stack='layers')
+    assert _key(pack, lay) != _key(pack, _proj(pack))
+    assert _key(pack, lay) != _key(pack, lay, kit_id='b')
+
+
+def test_literal_old_project_loads(pack, tmp_path):
+    f = tmp_path / 'project.json'
+    f.write_text(OLD_PROJECT)
+    p = pack.project.Project.from_json(json.load(open(f)))
+    assert p.force_shots == (21,) and p.mouth_stack == 'plain' and not hasattr(p, 'vocalisations')
+
+
+def test_kit_hash_is_bytes_not_mtime(pack, tmp_path):
+    a = tmp_path / 'a'
+    a.mkdir()
+    (a / 'x.npy').write_bytes(b'one')
+    b = tmp_path / 'b'
+    shutil.copytree(a, b)
+    os.utime(b / 'x.npy', (1, 1))
+    H = pack.nodes_mouth.LSDubBuildLipKit._hash
+    assert H(str(a)) == H(str(b))
+    (b / 'x.npy').write_bytes(b'two')
+    assert H(str(a)) != H(str(b))
+
+
+def test_engine_version_carries_the_tree(pack):
+    tree = open(os.path.join(os.path.dirname(pack.project.__file__), 'lsdub_engine', 'VERSION')).read().split('tree_sha256: ')[1][:12]
+    assert pack.project.ENGINE_VERSION.endswith('+' + tree)
+
+
+def test_unload_closes_landmarkers(pack):
+    import comfy.model_management as mm
+    calls = []
+    mm.unload_all_models = lambda: calls.append('unload')
+    pack.devices.hook_unload()
+    pack.devices.hook_unload()                                                       # once
+    name = pack.__name__ + '.lsdub_engine.core.landmarker'
+    real = sys.modules.get(name)
+    sys.modules[name] = types.SimpleNamespace(close_all=lambda: calls.append('close'))
+    try:
+        mm.unload_all_models()
+    finally:
+        sys.modules.pop(name)
+        if real: sys.modules[name] = real
+    assert calls == ['unload', 'close']
+
+
+def test_node_paint_warnings(pack, capfd):
+    w = pack.nodes_mouth._paint_warnings(['--lib', 'k', '--mode', 'morph', '--warp-temporal', '0.3'])
+    assert w and '--warp-' in w[0]
+    assert pack.nodes_mouth._paint_warnings(['--not-a-flag']) == []

@@ -8,7 +8,7 @@ import folder_paths
 from comfy_api.v0_0_2 import io
 
 from . import lsdub_types as T
-from .lsdub_engine.core import presets
+from .lsdub_engine.core import presets, recipes
 from .lsdub_engine.core.cpu_env import thread_report
 from .project import MODES, Project, parse_force_shots, stage_key, text_hash
 
@@ -45,15 +45,20 @@ class LSDubProjectNode(io.ComfyNode):
                                tooltip='Where the generator slots (song, still, video, lip kit) run: local = this '
                                        'ComfyUI\'s GPU and models; comfy_cloud = Comfy Cloud, signed in with your comfy.org '
                                        'account (needs a paid Comfy Cloud plan; uses your credits). The dub and QA always run locally.'),
+                io.Combo.Input('mouth_stack', options=sorted(recipes.MOUTH_STACKS, key='plain layers'.split().index), default='plain',
+                               optional=True,
+                               tooltip='The mouth recipe for this project. Not wired to the render yet: layers renders '
+                                       'the same pixels as plain today and only keeps its shots in their own cache folders.'),
             ],
             outputs=[T.LSDubProject.Output(display_name='project', tooltip='The project: pass it to every LSDub node.')],
         )
 
     @classmethod
-    def build(cls, name, root, mode, fps, song_offset, preset, seed, force_shots, backend='local'):
+    def build(cls, name, root, mode, fps, song_offset, preset, seed, force_shots, backend='local', mouth_stack='plain'):
         return Project(root=root or default_root(), name=name.strip(), mode=mode, fps=float(fps),
                        song_offset=float(song_offset), seed=int(seed), preset=preset,
-                       force_shots=parse_force_shots(force_shots), backend=backend or 'local')
+                       force_shots=parse_force_shots(force_shots), backend=backend or 'local',
+                       mouth_stack=mouth_stack or 'plain')
 
     @classmethod
     def fingerprint_inputs(cls, **kw):
@@ -61,9 +66,9 @@ class LSDubProjectNode(io.ComfyNode):
         return stage_key('LSDubProject', p.to_json())                  # every field: a mode or backend change re-runs it
 
     @classmethod
-    def execute(cls, name, root, mode, fps, song_offset, preset, seed, force_shots, backend='local'):
+    def execute(cls, name, root, mode, fps, song_offset, preset, seed, force_shots, backend='local', mouth_stack='plain'):
         print(f'[LSDub] {thread_report()}', file=sys.stderr)            # observation only: sets no thread count
-        return io.NodeOutput(cls.build(name, root, mode, fps, song_offset, preset, seed, force_shots, backend).ensure())
+        return io.NodeOutput(cls.build(name, root, mode, fps, song_offset, preset, seed, force_shots, backend, mouth_stack).ensure())
 
 
 def norm_lyrics(text):

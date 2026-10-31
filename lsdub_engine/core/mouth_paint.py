@@ -1300,6 +1300,11 @@ def lip_stats_warnings(g):
     return [f"{', '.join(off)}: lip_stats failed on every frame, off for this run"] if off else []
 
 
+def paint_warnings(argv):
+    """validate_paint_args over a host's flags, before the render: argv without --video, --track, --out."""
+    return validate_paint_args(_parser().parse_args(["--video", "-", "--track", "-", "--out", "-", *map(str, argv)]))
+
+
 def warn_paint(lines, verbose=False):
     """warnings go to stderr: stdout stays the paint's own report. Several become one summary line unless verbose."""
     if len(lines) > 1 and not verbose:

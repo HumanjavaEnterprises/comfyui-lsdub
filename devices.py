@@ -3,6 +3,7 @@
 """devices.py: ComfyUI picks the device for the torch parts (identity embedder, speech-to-text, vocal split); light CV
 (face finding, landmarks, sync math) stays on the CPU. Models are offloaded when a node finishes."""
 import os
+import sys
 
 import folder_paths
 
@@ -24,6 +25,23 @@ def offload_device():
 def free():
     import comfy.model_management as mm
     if hasattr(mm, 'soft_empty_cache'): mm.soft_empty_cache()
+
+
+def hook_unload():
+    """ComfyUI has no unload callback: unload_all_models also closes the shared face landmarkers, if any were made."""
+    import comfy.model_management as mm
+    orig = getattr(mm, 'unload_all_models', None)
+    if orig is None or getattr(orig, '_lsdub', False): return
+
+    def unload_all_models(*a, **kw):
+        r = orig(*a, **kw)
+        lm = sys.modules.get(__package__ + '.lsdub_engine.core.landmarker')
+        if lm is not None:
+            try: lm.close_all()
+            except Exception as e: print(f'[LSDub] landmarker close: {e}', file=sys.stderr)
+        return r
+    unload_all_models._lsdub = True
+    mm.unload_all_models = unload_all_models
 
 
 def models_dir(*parts):
