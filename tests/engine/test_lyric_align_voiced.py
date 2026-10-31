@@ -82,8 +82,8 @@ def test_dub_passes_the_vocalisations_mode(pack, tmp_path, monkeypatch):
     seen = {}
     import importlib
 
-    sing = importlib.import_module(pack.__name__ + ".lsdub.core.sing")
-    continuity = importlib.import_module(pack.__name__ + ".lsdub.core.continuity")
+    sing = importlib.import_module(pack.__name__ + ".lsdub_engine.core.sing")
+    continuity = importlib.import_module(pack.__name__ + ".lsdub_engine.core.continuity")
 
     def fake_run(take, align, vocal, t0, out, work, pa, **kw):
         seen["pa"] = list(pa)

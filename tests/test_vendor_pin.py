@@ -21,9 +21,8 @@ def test_version_names_a_clean_commit():
 def test_tree_hash_matches():
     h = hashlib.sha256()
     for d, ds, fs in sorted(os.walk(ENG)):
-        ds[:] = sorted(x for x in ds if x != '__pycache__')
         for f in sorted(fs):
-            if f != 'VERSION':
+            if f != 'VERSION' and '__pycache__' not in d:
                 p = os.path.join(d, f)
                 h.update(os.path.relpath(p, ENG).encode() + b'\0')
                 h.update(open(p, 'rb').read())
