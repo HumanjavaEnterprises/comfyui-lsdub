@@ -12,11 +12,12 @@ from scipy.ndimage import gaussian_filter1d
 from . import lip_layers as ll
 
 LIP_IN, LIP_OUT = ll.LIP_IN, ll.LIP_OUT
+PINK_ROOM = 0.94  # the fill's pink stops this far under the take's share
 OPEN_MIN = 0.06  # a donor below this aperture (x mouth width) shows no interior
 HOLD = 0.50  # keep the running donor while its cost is within this of the best one
 DWELL = 10  # frames a new donor stays, unless it stops being open enough
 STILL_PCT = 60  # the frames below this percentile of the plan's gap speed count as held: the donor does not change on them
-SOFT = 0.012  # the interior's softening, x the box's side, at least 1 px
+SOFT = 0.02  # the interior's softening, x the box's side, at least 1 px
 FADE = 5  # frames of cross-fade around a donor switch
 OPEN_KEEP = 0.70  # the running donor may stay down to this share of the planned gap
 OPEN_FIT = (
@@ -90,7 +91,7 @@ class TakeInterior:
         for c in range(3):
             ring[:, c] = np.interp(idx, idx[good], ring[good, c]) if good.any() else 0.0
         self.ring = gaussian_filter1d(ring, 2.0, axis=0, mode="nearest")
-        self.log, self.gain = {}, {}
+        self.log, self.gain, self.sank = {}, {}, {}
 
     def binned(self, v, seen, mid):
         """v's median per aperture bin, interpolated over the empty ones."""
@@ -211,7 +212,7 @@ class TakeInterior:
             ol = cv2.cvtColor(np.clip(over_rgb, 0, 255).astype(np.uint8), cv2.COLOR_BGR2LAB).astype(np.float32)
             over = int(pink(ol)[opening & ~vis].sum())
         got = (float(pink(lab)[vis].sum()) + over) / area
-        tgt = self.target(ap_out)
+        tgt = PINK_ROOM * self.target(ap_out)  # the ruler's contour reaches past the plan: the lip rim it catches is counted here
         k = 0.0
         if got > tgt:  # never pinker than the take at this aperture: the excess sinks into the cavity's colour
             k = 1.0 - tgt / got
@@ -224,8 +225,132 @@ class TakeInterior:
                 if (float(pink(sunk)[vis].sum()) + over) / area <= tgt or k >= 1.0:
                     break
                 k = min(1.0, k * 1.4 + 0.1)
-            lab = sunk
+            k = 0.8 * self.sank.get(i - 1, k) + 0.2 * k  # no flicker from one frame's share
+            lab = lab * (1 - pm * k) + base * pm * k
+        self.sank[i] = k
         self.log[int(i)] = dict(donor=j, pink=round(got, 4), target=round(tgt, 4), sank=round(k, 3))
         bgr = cv2.cvtColor(np.clip(lab + 0.5, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR).astype(np.float32)
         a = cv2.GaussianBlur(cv2.dilate(opening.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(np.float32), (0, 0), 0.6)
         return bgr, a
+
+
+# --warp-teeth-fit take
+LINE_DEPTH = 0.06  # a row this much darker than the crown above it is the take's bite line: the atlas below it is the other arch
+COMB = 0.004  # the atlas's softening along the arch, x IOD: the column grille of the harvest and the hard crown lines
+FIT_MAX = 1.35  # the most the arch may be lifted
+LINE_SPAN = 0.30  # the bite line is looked for in this share of the crown nearest the edge
+
+
+def clean_atlas(arch, iod, upper=True, th=None):
+    """one arch, cleaned once in atlas space (so it cannot boil): dark specks gone, the harvest's strip past the bite line cut
+    (one arch, no second row under the first), the column grille and crown lines softened along the arch. In place, returns the log."""
+    T = arch.tex.astype(np.float32).copy()
+    Th, Tw = T.shape[:2]
+    r_e = (0.0 - arch.h0) * arch.texel - 0.5
+    th = max(4.0, (0.09 * iod if th is None else th) * arch.texel)
+    rows = np.arange(Th, dtype=np.float32)
+    d = r_e - rows if upper else rows - r_e  # 0 at the incisal edge, + toward the gum
+    crown = (d >= -0.5) & (d <= th)
+    rgb = np.clip(T[..., :3], 0, 255).astype(np.uint8)
+    k = max(3, int(0.012 * iod * arch.texel) | 1)
+    T[..., :3] = np.where(crown[:, None, None] & (T[..., 3:4] > 0.5), cv2.medianBlur(rgb, min(k, 5)).astype(np.float32), T[..., :3])
+    L = cv2.cvtColor(np.clip(T[..., :3], 0, 255).astype(np.uint8), cv2.COLOR_BGR2LAB)[..., 0].astype(np.float32)
+    sm = cv2.GaussianBlur(L, (0, 0), max(1.0, 0.02 * iod * arch.texel), sigmaY=0.1)  # along the arch: the line, not the teeth
+    near = np.nonzero((d >= 0) & (d <= LINE_SPAN * th))[0]
+    above = np.nonzero((d > LINE_SPAN * th) & (d <= 0.7 * th))[0]
+    cut = np.full(Tw, -1, np.float32)
+    if len(near) >= 3 and len(above) >= 2:
+        body = np.median(sm[above], 0)
+        rw = near[np.argmin(sm[near], 0)]
+        dip = sm[rw, np.arange(Tw)]
+        ok = (dip < (1 - LINE_DEPTH) * body) & (T[above, :, 3].mean(0) > 0.5)
+        kk = max(3, int(0.08 * iod * arch.texel) | 1)
+        rw = cv2.medianBlur(rw.astype(np.float32)[None, :], min(kk, 5)).ravel()
+        cut = np.where(ok, rw, -1.0)
+        for c in np.nonzero(ok)[0]:
+            s = d - (r_e - cut[c] if upper else cut[c] - r_e)  # + = crown side of the line
+            T[:, c, 3] *= np.clip(0.5 + s / max(1.0, 0.25 * arch.texel), 0, 1)
+    sg = max(0.8, COMB * iod * arch.texel)
+    pm = np.dstack([T[..., :3] * T[..., 3:4], T[..., 3]])
+    bl = cv2.GaussianBlur(pm, (0, 0), sg, sigmaY=0.1)
+    m = crown[:, None, None].astype(np.float32)
+    pm = pm * (1 - m) + bl * m
+    T = np.dstack([pm[..., :3] / np.maximum(pm[..., 3:4], 1e-3), pm[..., 3]])
+    arch.tex = T.astype(np.float32)
+    return dict(cut_cols=int((cut >= 0).sum()), comb_sigma=round(float(sg), 2))
+
+
+class TeethFit:
+    """--warp-teeth-fit take: the arch's lightness held to the take's own teeth at this aperture. Never above the take's."""
+
+    def __init__(self, frames, S):
+        n = len(frames)
+        self.ap = np.array([aperture(np.asarray(s)) for s in S])
+        L = np.full(n, np.nan)
+        for i in range(n):
+            P = np.asarray(S[i])[:, :2]
+            x0, y0, x1, y1 = box_of(P[LIP_IN], *frames[i].shape[:2], 2)
+            if x1 - x0 < 4 or y1 - y0 < 4:
+                continue
+            m = poly(P[LIP_IN] - [x0, y0], (y1 - y0, x1 - x0))
+            lab = cv2.cvtColor(frames[i][y0:y1, x0:x1], cv2.COLOR_BGR2LAB).astype(np.float32)
+            t = m & teeth(lab)
+            if t.sum() >= 25:
+                L[i] = float(lab[..., 0][t].mean())
+        ok = np.isfinite(L)
+        self.seen = int(ok.sum())
+        self.bins = np.linspace(float(self.ap.min()), float(self.ap.max()) + 1e-6, 6)
+        mid, c = 0.5 * (self.bins[:-1] + self.bins[1:]), []
+        for b in range(5):
+            hit = ok & (self.ap >= self.bins[b]) & (self.ap < self.bins[b + 1])
+            c.append(float(np.median(L[hit])) if hit.any() else np.nan)
+        c = np.array(c)
+        g = np.isfinite(c)
+        self.mid, self.curve = mid[g], c[g]
+        self.gain, self.log = {}, {}
+
+    def apply(self, i, rgb, a, ap):
+        """the arch (BGR float, alpha) -> BGR, lifted to the take at aperture ap; a smoothed gain, so no flicker."""
+        vis = a > 0.5
+        if not len(self.curve) or vis.sum() < 12:
+            return rgb
+        lab = cv2.cvtColor(np.clip(rgb, 0, 255).astype(np.uint8), cv2.COLOR_BGR2LAB).astype(np.float32)
+        t = vis & teeth(lab)
+        if t.sum() < 12:
+            return rgb
+        tgt = float(np.interp(ap, self.mid, self.curve))
+        g = float(np.clip(tgt / max(1.0, float(lab[..., 0][t].mean())), 1.0, FIT_MAX))
+        g = 0.8 * self.gain.get(i - 1, g) + 0.2 * g
+        self.gain[i] = g
+        self.log[int(i)] = dict(gain=round(g, 3), target=round(tgt * 100 / 255, 1))
+        lab[..., 0] = np.clip(lab[..., 0] * g, 0, 255)
+        out = cv2.cvtColor(lab.astype(np.uint8), cv2.COLOR_LAB2BGR).astype(np.float32)
+        return np.where(vis[..., None], out, rgb)
+
+
+def seal_edge(a):
+    """the arch's alpha tail: its column quads overlap in the half-transparent rows, and that double "over" is the comb under the
+    biting edge. Averaged along the row, then a short ramp, the edge has no columns left."""
+    s = cv2.GaussianBlur(a, (0, 0), 2.0, sigmaY=0.1)
+    t = np.clip((s - 0.12) / 0.76, 0, 1)
+    return (t * t * (3 - 2 * t)).astype(np.float32)
+
+
+def corner_guard(rgb5, outer, opening, io, lipc):
+    """the take's dark corner crease the warp stretches into the lip band: those pixels take the lip colour around them.
+    -> (rgb, guarded px)."""
+    lab = cv2.cvtColor(np.clip(rgb5, 0, 255).astype(np.uint8), cv2.COLOR_BGR2LAB).astype(np.float32)
+    band = outer & ~opening
+    if band.sum() < 30:
+        return rgb5, 0
+    cols = np.nonzero(opening.any(0))[0]
+    if not len(cols):
+        return rgb5, 0
+    span = max(4.0, 0.22 * (cols[-1] - cols[0]))
+    xx = np.arange(rgb5.shape[1], dtype=np.float32)[None, :]
+    corner = (xx < cols[0] + span) | (xx > cols[-1] - span)
+    dark = band & corner & (lab[..., 0] < 0.62 * float(np.median(lab[..., 0][band])))
+    if not dark.any():
+        return rgb5, 0
+    m = cv2.GaussianBlur(cv2.dilate(dark.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(np.float32), (0, 0), 1.0)[..., None]
+    return rgb5 * (1 - m) + lipc * m, int(dark.sum())

@@ -65,7 +65,8 @@ def test_lossless_write_round_trips(tmp_path):
     assert all((a == b).all() for a, b in zip(F, M.read(p, 3)[0]))
 
 
-def test_take_interior_fills_with_the_takes_pixels():
+def test_take_interior_fills_with_the_takes_pixels(monkeypatch):
+    monkeypatch.setattr(IT, "PINK_ROOM", 1.0)
     F, S, Fe, bank = clip()
     T = IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]))
     Q = S[0][ll.LIP_IN][:, :2]
@@ -135,3 +136,47 @@ def test_interior_donor_holds_through_a_wobble():
     plan = [40 + 2 * (-1) ** i for i in range(40)]
     js = _pick(take, plan)
     assert (js[1:] != js[:-1]).sum() <= 1
+
+
+def test_teeth_fit_flags_default_off():
+    a = MP._parser().parse_args(BASE)
+    assert a.warp_teeth_fit == "off" and a.occluder_plate is False and ML.LayerCompositor.teeth_fit is None
+
+
+def test_teeth_fit_lifts_to_the_take_and_never_above():
+    F = [np.full((200, 200, 3), 235, np.uint8) for _ in range(8)]
+    S = np.array([face() for _ in range(8)])
+    fit = IT.TeethFit(F, S)
+    rgb, a = np.full((40, 40, 3), 180, np.float32), np.ones((40, 40), np.float32)
+    out = fit.apply(0, rgb, a, 0.4)
+    assert out.mean() > 200 and fit.log[0]["gain"] > 1
+    bright = np.full((40, 40, 3), 250, np.float32)
+    assert fit.apply(1, bright, a, 0.4).mean() >= 249 and IT.FIT_MAX >= fit.log[1]["gain"] >= 1
+
+
+def test_clean_atlas_cuts_past_the_bite_line_and_the_grille():
+    class A:
+        h0, texel = -40.0, 4
+
+    A.tex = np.zeros((400, 200, 4), np.float32)
+    A.tex[..., :3], A.tex[..., 3] = 200, 1
+    r_e = (0 - A.h0) * A.texel - 0.5
+    A.tex[int(r_e) - 8 : int(r_e) - 6] = [90, 90, 90, 1]  # the bite line
+    A.tex[int(r_e) - 6 :: 1, ::2, :3] = 120  # the grille in the strip below it
+    log = IT.clean_atlas(A, 100.0, True)
+    assert log["cut_cols"] > 150
+    assert A.tex[int(r_e) - 3, 100, 3] < 0.1 and A.tex[int(r_e) - 30, 100, 3] > 0.9
+
+
+def test_plate_removes_the_object_and_restore_puts_it_back():
+    from lsdub_engine.core import occluders as OC
+
+    f = np.full((60, 60, 3), 120, np.uint8)
+    f[20:40, 25:35] = 10
+    occ = np.zeros((1, 60, 60), np.float32)
+    occ[0, 20:40, 25:35] = 1
+    p = OC.plate([f], (occ * 255).astype(np.uint8), 1)
+    assert abs(int(p[0][30, 30, 0]) - 120) < 12
+    outs = [p[0].copy()]
+    OC.restore(outs, [f], occ, 1)
+    assert outs[0][30, 30, 0] < 30

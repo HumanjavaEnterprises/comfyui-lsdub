@@ -54,6 +54,7 @@ CRF_WARP = 14  # the warp's own writer (mouth_warp.WarpClip.write)
 STAT_KEYS = (
     "w",
     "pink_frac",
+    "pink_core",
     "cav_L50",
     "cav_black_frac",
     "cav_mid_frac",
@@ -197,6 +198,10 @@ def frame_stats(f, p):
         te = (L > 55) & (C < 22)
         d["teeth_frac"] = float(te.mean())
         d["pink_frac"] = float(((L > 25) & (a > 14) & (L <= 75)).mean())
+        core = erode(mi, 7)  # 3 px clear of the tracked contour: the lip's own rim does not count
+        if core.sum() > 30:
+            pk = (l[..., 0] > 25) & (l[..., 1] > 14) & (l[..., 0] <= 75)
+            d["pink_core"] = float(pk[core].mean())
         if te.sum() > 25:
             d["teeth_L"] = float(L[te].mean())
             d["teeth_C"] = float(C[te].mean())

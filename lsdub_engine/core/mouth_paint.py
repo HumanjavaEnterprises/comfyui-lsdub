@@ -725,6 +725,13 @@ def _parser():
         help="warp (layers): the opening's tongue and cavity. model = the drawn layers, take = the take's own closest frame by shape "
         "and pose, Lab-matched per frame, its pink share held to the take's at that aperture",
     )
+    ap.add_argument(
+        "--warp-teeth-fit",
+        choices=["off", "take"],
+        default="off",
+        help="warp (layers): take = the arch cleaned once in the atlas (specks, the strip past the bite line, the column grille) and "
+        "its lightness held to the take's teeth at that aperture, never above; a dark crease at the lip corners takes the lip's colour",
+    )
     ap.add_argument("--warp-lossless", action="store_true", help="warp: write --out lossless (an intermediate of a later step)")
     ap.add_argument(
         "--warp-tongue-lit", type=float, default=1.0, help="warp (wedge tongue): the tongue's light vs the take's own tongue pixels"
@@ -871,6 +878,11 @@ def _parser():
         "--occluder-mask",
         help="warp: masks npz from `lsdub occluders` (a mic, a hand in front of the mouth); "
         "the take's own pixels are kept under it, after the gate",
+    )
+    ap.add_argument(
+        "--occluder-plate",
+        action="store_true",
+        help="warp (with --occluder-mask): warp a plate with the object painted out, the take's object composited last, so the warp cannot smear it",
     )
     ap.add_argument("--occluder-grow", type=int, default=3, help="warp: px the occluder mask is grown before the feathered blend")
     ap.add_argument("--warp-gate-rounds", type=int, default=3, help="warp: repair rounds (fixing frame t changes t+1's continuity)")

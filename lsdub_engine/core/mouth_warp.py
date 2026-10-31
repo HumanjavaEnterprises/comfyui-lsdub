@@ -1088,6 +1088,13 @@ class WarpClip:
             frames.append(fr)
         cap.release()
         n = len(frames)
+        self.mic_frames = None
+        if getattr(a, "occluder_plate", False) and getattr(a, "occluder_mask", None):
+            # the warp never sees the mic: it runs on a mic-free plate, and the take's mic goes back last (lsdub/core/occluders.py)
+            from . import occluders
+
+            self.mic_frames = frames
+            frames = occluders.plate(frames, occluders.load(a.occluder_mask, n, (H, W)), int(getattr(a, "occluder_grow", 3)))
         self.fr_t, self.n, self.S3raw, self.fps, self.found, self.S, self.pl, self.C, self.F, self.model = (
             fr_t,
             n,
@@ -1495,6 +1502,12 @@ class WarpClip:
                 from .interior_take import TakeInterior
 
                 comp.take_interior = TakeInterior(self.bank, frames, S, Fe, self.scale, g("warp_pose_w", 2.0))
+            if opt("warp_teeth_fit", "off") == "take":
+                from .interior_take import TeethFit, clean_atlas
+
+                comp.teeth_fit = TeethFit(frames, S)
+                iod = float(comp.t.iod)
+                comp.teeth_fit.clean = dict(up=clean_atlas(comp.up, iod, True), lo=clean_atlas(comp.lo, iod, False))
         self.teeth, self.comp, self.md, self.fit_t = teeth, comp, md, fit_t
 
     def _patch(self, i, ov):
@@ -1766,6 +1779,8 @@ class WarpClip:
             info["layers"] = self.comp.info()
             if self.comp.take_interior is not None:
                 info["layers"]["interior_take"] = self.comp.take_interior.log
+            if self.comp.teeth_fit is not None:
+                info["layers"]["teeth_fit"] = dict(clean=self.comp.teeth_fit.clean, frames=self.comp.teeth_fit.log)
             info["layers"]["bite_overlap"] = self.comp.bite_overlap(self.P_out, self.Fe[:, 0])
             if "corridor" in info["layers"]:  # the corridor's summary from the delivered frames' own entries
                 info["layers"]["corridor"] = self.comp.corridor_info([((l or {}).get("reg") or {}).get("corridor") for l in self.log])
@@ -1860,7 +1875,7 @@ def run(a):
         from . import occluders
 
         occ = occluders.load(a.occluder_mask, clip.n, (clip.H, clip.W))
-        cov = occluders.restore(clip.outs, clip.frames, occ, int(getattr(a, "occluder_grow", 3)))
+        cov = occluders.restore(clip.outs, clip.mic_frames or clip.frames, occ, int(getattr(a, "occluder_grow", 3)))
         for i, c in enumerate(cov):
             if clip.log[i] is not None:
                 clip.log[i]["occluded_px"] = c

@@ -1174,6 +1174,7 @@ class LayerCompositor:
 
     fill_l3 = "hide"  # --warp-fill-l3: the arch lowers under the fill
     take_interior = None  # --warp-interior-source take (interior_take.TakeInterior)
+    teeth_fit = None  # --warp-teeth-fit take (interior_take.TeethFit)
 
     def __init__(
         self,
@@ -2662,6 +2663,10 @@ class LayerCompositor:
             L["L2"] = (L["L2"][0] * sh2, L["L2"][1])
             for key in ("L3", "L4"):
                 L[key] = (L[key][0] * sh, L[key][1])
+        if self.teeth_fit is not None:  # after the lips' shadows: the arch as it will be seen
+            from .interior_take import seal_edge
+
+            L["L4"] = (self.teeth_fit.apply(i, L["L4"][0], L["L4"][1], self.interior_ap(Po)), seal_edge(L["L4"][1]))
         # L5: the warped lips only, outer lip .. target inner contour; a darker inner rim; non-lip pixels at the inner
         # edge (a stretched take tooth / cavity the warp left) are see-through, deeper ones filled from the lip around
         reg = warped[sl].astype(np.float32)
@@ -2697,6 +2702,10 @@ class LayerCompositor:
             lipc = cv2.GaussianBlur(rgb5 * src[..., None], (0, 0), sg) / np.maximum(cv2.GaussianBlur(src, (0, 0), sg), 1e-3)[..., None]
             ew = np.clip((3.0 - dout) / 1.5, 0, 1)[..., None]
             rgb5 = rgb5 * (1 - ew) + lipc * ew
+            if self.teeth_fit is not None:
+                from .interior_take import corner_guard
+
+                rgb5, _ = corner_guard(rgb5, outer, opening, io, lipc)
         rim = np.exp(-dout / max(0.8, self.rim[1] * io)) * outer
         rgb5 = rgb5 * (1 - self.rim[0] * rim)[..., None]
         if self.wet > 0:  # the lip's wet inner edge -- a faint 1-2 px lift where it turns over the teeth, only on

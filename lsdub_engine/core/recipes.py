@@ -136,6 +136,7 @@ LAYER_ONLY = (
     "--warp-cavity",
     "--warp-fill-l3",
     "--warp-interior-source",
+    "--warp-teeth-fit",
     "--warp-tongue",
     "--warp-cover",
     "--warp-lower-",

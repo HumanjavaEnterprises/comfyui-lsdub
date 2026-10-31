@@ -141,6 +141,17 @@ def restore(outs, takes, occ, grow=3, feather=1.5):
     return cov
 
 
+def plate(frames, occ, grow=3, radius=5):
+    """the frames with the occluder painted out from the pixels around it, for the warp to work on (--occluder-plate). New list."""
+    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * grow + 3, 2 * grow + 3))
+    out = list(frames)
+    for i in range(min(len(frames), len(occ))):
+        m = (occ[i] > 0).astype(np.uint8)
+        if m.any():
+            out[i] = cv2.inpaint(frames[i], cv2.dilate(m, k), radius, cv2.INPAINT_TELEA)
+    return out
+
+
 def review(F, M, phrases, fps, out):
     H, W = F[0].shape[:2]
     cols = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255)]
