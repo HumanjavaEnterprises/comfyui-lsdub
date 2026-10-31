@@ -289,7 +289,7 @@ def make_character_sing():
     wf = WF('LSDub 4: Make Your Character Sing')
     wf.note('## LSDub 4: Make Your Character Sing\n**Does:** a song + a character image -> a video of the character singing it: vocal split, lead vocal, alignment, an LTX-2.5 performance as long as the song, a lip kit from it, the dub, Verify (the sync score) and the saved video with the song.\n\n**Needs:** a big GPU (or backend = comfy_cloud), the generator models and the Mel-Band RoFormer vocal checkpoint in models/audio_separation (README).\n\n**Runs on:** ' + RUNTIMES[4] + '\n\n**Change:** *Load Audio* (your song), *Load Image* (your character), *LSDub Performance* prompt, *LSDub Lyrics*, and clear *LSDub Align* transcript_json (it holds the demo song\'s words).')
     wf.add('project', 'LSDubProject', (0, 0), name='lsdub-character-sing', mode='run', preset='none', song_offset=0.0,
-           backend='local')
+           backend='local', mouth_stack='layers_interior')
     wf.add('load_song', 'LoadAudio', (0, 500), audio=DEMO + 'alr_song_15s.wav')
     wf.add('split', 'LSDubVocalSplit', (400, 500), model='MelBandRoformer_kim_vocals.ckpt').link('load_song', 0, 'split', 'audio')
     wf.add('lead', 'LSDubLeadVocal', (800, 500)).link('split', 'vocals', 'lead', 'vocals')

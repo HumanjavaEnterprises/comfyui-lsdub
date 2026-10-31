@@ -171,3 +171,13 @@ def test_restore_order_keeps_a_silent_gap_silent():
     assert [w["w"] for w in W] == ["a", "b"]
     assert W[1]["start"] - W[0]["end"] == pytest.approx(0.6)
     assert W[0]["start"] == 1.0 and W[1]["end"] == pytest.approx(2.2)
+
+
+def test_restore_order_keeps_the_silence_where_it_was():
+    from lsdub_engine.core.lyric_align import restore_order
+
+    W = [_w("x", 2, 0.0, 1.0), _w("y", 1, 1.5, 1.6)]  # silence in [1.0, 1.5]
+    assert restore_order(W) == 2
+    assert [w["w"] for w in W] == ["y", "x"]
+    assert (W[0]["start"], W[0]["end"]) == (0.0, pytest.approx(1.0)) and (W[1]["start"], W[1]["end"]) == (1.5, pytest.approx(1.6))
+    assert not any(w["start"] < 1.5 and w["end"] > 1.0 for w in W)

@@ -138,7 +138,8 @@ def test_project_widgets_in_ui_order(pack):
         names = [k for p in ordered if p.io_type in WIDGET
                  for k in ((p.id, 'control_after_generate') if has_control(p) else (p.id,)) if k != 'mouth_stack']
         vals = dict(zip(names, n['widgets_values']))
-        assert len(names) == len(n['widgets_values']), (f, n['widgets_values'])
+        extra = n['widgets_values'][len(names):]                                         # an appended optional a workflow may set
+        assert len(extra) <= 1 and all(x in schemas(pack)['LSDubProject'].inputs[-1].kw['options'] for x in extra), (f, n['widgets_values'])
         assert vals['seed'] == 0 and vals['control_after_generate'] == 'fixed', (f, vals)
         assert vals['backend'] == 'local' and vals['force_shots'] == '', (f, vals)
 

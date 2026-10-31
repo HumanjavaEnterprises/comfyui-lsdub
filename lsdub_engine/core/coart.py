@@ -905,25 +905,131 @@ def advance_frames(fr_t, advance_s, fps):
     return fr_t if k <= 0 or not fr_t else fr_t[min(k, len(fr_t) - 1) :] + fr_t[-1:] * min(k, len(fr_t) - 1)
 
 
-def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
+# ------------------------------------------------------------------------------------- phrase sync to the vocal --
+SYNC_SPAN = (-0.12, 0.16)  # s: how far a shot may move as a whole (earlier is positive, as --coart-advance-ms)
+SYNC_PHRASE = 0.08  # s: how far one phrase may sit from its shot
+SYNC_GAP = 0.1  # s: an aligned gap this long separates phrases
+SYNC_FLOOR_DB = 40.0  # dB under the shot's loudest frame: the level below which the vocal reads as silence
+SYNC_MIN_FRAMES = 6  # a phrase with fewer frames than this has no reading of its own: it takes the shot's offset
+SYNC_MARGIN = 0.05  # a phrase leaves the shot's offset only for this much more score (z-scored covariance)
+
+
+def sync_grid(fps):
+    """the offsets tried, s: whole track frames, no finer than 20 ms, nearest zero first (a tie stays put)."""
+    step = max(int(np.ceil(0.02 * fps - 1e-9)), 1) / fps
+    k = np.arange(int(SYNC_SPAN[0] / step - 1e-9), int(SYNC_SPAN[1] / step + 1e-9) + 1)
+    return sorted((float(x) * step for x in k), key=abs)
+
+
+def phrase_bounds(align, t0, t1, gap=SYNC_GAP):
+    """the clip cut into phrases: [t0, midpoints of the aligned gaps of at least `gap` s, t1], song seconds."""
+    W = [w for w in (align or {}).get("words", ()) if w["end"] > t0 and w["start"] < t1]
+    mid = [0.5 * (a["end"] + b["start"]) for a, b in zip(W, W[1:]) if b["start"] - a["end"] >= gap]
+    return [t0, *[m for m in mid if t0 < m < t1], t1]
+
+
+def _span_of(B, t):
+    return min(max(int(np.searchsorted(B, t, side="right")) - 1, 0), len(B) - 2)
+
+
+def pick_offsets(curves, db, tc, B):
+    """curves {offset s: the planned opening with the whole shot moved by it}, db: the vocal per frame, clipped at its silence
+    floor, tc: frame times, B: phrase_bounds -> (shot offset, one offset per phrase). The shot offset reads the whole clip's
+    correlation; each phrase then reads the same score on its own frames, within SYNC_PHRASE of the shot, and leaves the shot's
+    offset only for SYNC_MARGIN more."""
+    db = np.asarray(db, float)
+    z = lambda x: (x - x.mean()) / max(x.std(), 1e-9)
+    zd, Z = z(db), {k: z(np.asarray(c, float)) for k, c in curves.items()}
+    shot = max(Z, key=lambda k: float(np.mean(Z[k] * zd)))
+    picks = []
+    for i in range(len(B) - 1):
+        m = (tc >= B[i]) & (tc < B[i + 1])
+        score = lambda k: float(np.mean(Z[k][m] * zd[m]))
+        best = max((k for k in Z if abs(k - shot) <= SYNC_PHRASE + 1e-9), key=score) if m.sum() >= SYNC_MIN_FRAMES else shot
+        picks.append(best if score(best) - score(shot) >= SYNC_MARGIN else shot)
+    return shot, picks
+
+
+def offset_align(align, B, picks):
+    """the alignment with each word earlier by its phrase's offset (a word belongs to the phrase holding its middle)."""
+    out = dict(align, words=[])
+    for w in align["words"]:
+        d = picks[_span_of(B, 0.5 * (w["start"] + w["end"]))]
+        out["words"].append(
+            dict(
+                w,
+                start=w["start"] - d,
+                end=w["end"] - d,
+                phones=[dict(p, start=p["start"] - d, end=p["end"] - d) for p in w.get("phones", ())],
+            )
+        )
+    return out
+
+
+def offset_frames(fr_t, dk):
+    """the track read dk[k] frames later at frame k (either sign; clamped to the track); the frames past dk stay as they are."""
+    last = len(fr_t) - 1
+    return [fr_t[min(max(k + int(d), 0), last)] for k, d in enumerate(dk)] + fr_t[len(dk) :]
+
+
+def _clip_lead(align, T, t0, n, fps):
+    """(lead, match, shift): the lead the track was BUILT with and what it adds to the planner's own anticipation of 0.06 s."""
+    if align is None:
+        return None, None, 0.0
+    lead, match = detect_lead(align, T["frames"], t0, min(n, len(T["frames"])), fps)
+    return (None, match, 0.0) if match < 0.9 else (lead, match, lead - 0.06)
+
+
+def phrase_sync(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
+    """--coart-sync-vocal: per-phrase offsets of the plan against the vocal, read from the audio alone: the clip planned at each
+    offset, scored against the vocal's level (pick_offsets). -> (fr_t moved, sync for plan_clip), or (fr_t, None) with no
+    words, no vocal or a silent one (the plan then stays as it was)."""
+    from ..audits.lipsync_check import vocal_rms
+
+    n = len(Fs)
+    T = json.load(open(a.track))
+    fps = float(T.get("fps", 25))
+    t0 = float(T.get("t0", fr_t[0].get("t", 0.0)))
+    align = load_align(T.get("align"), a.track)
+    advance = whole_frames(float(getattr(a, "coart_advance_ms", 0.0) or 0.0) / 1000.0, fps)
+    t0a, t1 = t0 + advance, t0 + advance + n / fps
+    B = phrase_bounds(align, t0a, t1)
+    W = [w for w in (align or {}).get("words", ()) if w["end"] > t0a and w["start"] < t1]
+    db = vocal_rms(a.coart_sync_vocal, t0, n, fps)[:n]
+    if not W or len(db) < n or not np.isfinite(db).all() or db.max() - db.min() < 1.0:
+        print("coart sync: no words or no vocal level on this clip; the plan stays as it is")
+        return fr_t, None
+    db = np.clip(db, db.max() - SYNC_FLOOR_DB, None)
+    lead = _clip_lead(align, T, t0, n, fps)
+    whole = lambda d: dict(lead=lead, bounds=[t0a, t1], picks=[d], dt=[d] * n)
+    moved = lambda dt: offset_frames(fr_t, np.round(np.asarray(dt) * fps).astype(int))
+    curves = {}
+    for d in sync_grid(fps):
+        sy = whole(d)
+        curves[d] = plan_clip(a, moved(sy["dt"]), Fs, model, bands, pp_track, F, S3raw, sync=sy, quiet=True)[0][:, 0]
+    tc = t0 + np.arange(n) / fps
+    shot, picks = pick_offsets(curves, db, tc + advance, B)
+    dt = [picks[_span_of(B, t)] for t in tc + advance]
+    print(f"coart sync: shot {1000 * shot:+.0f} ms, phrases {[round(1000 * p) for p in picks]} ms against {a.coart_sync_vocal}")
+    return moved(dt), dict(lead=lead, bounds=B, picks=picks, dt=dt, shot=shot)
+
+
+def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None, sync=None, quiet=False):
     """mouth_warp's entry (--warp-target coart): the track's alignment and lead, the jaw split on the model (the take's
-    own share measured on S3raw, its raw track), the optional dynamics source (--coart-dyn), the plan;
+    own share measured on S3raw, its raw track), the optional dynamics source (--coart-dyn), the plan; sync: phrase_sync's
+    offsets (fr_t already moved by them); quiet: no log line and no file (phrase_sync's trial plans).
     -> (Ft canonical px n x 2, closure frames for the residual's keep-close). Writes <warp-json stem>_coart.json."""
     n = len(Fs)
     T = json.load(open(a.track))
     fps = float(T.get("fps", 25))
     t0 = float(T.get("t0", fr_t[0].get("t", 0.0)))
     align = load_align(T.get("align"), a.track)
-    lead, match, shift = None, None, 0.0
     advance = whole_frames(
         float(getattr(a, "coart_advance_ms", 0.0) or 0.0) / 1000.0, fps
     )  # plan as if each frame showed the song this much later
-    if align is not None:
-        lead, match = detect_lead(align, T["frames"], t0, min(n, len(T["frames"])), fps)  # the lead the track was BUILT with
-        if match < 0.9:
-            lead = None
-        else:
-            shift = lead - 0.06  # the timing had: the 0.06 s lead is the planner's own anticipation
+    lead, match, shift = sync["lead"] if sync else _clip_lead(align, T, t0, n, fps)  # the lead the track was BUILT with
+    if sync and align is not None:
+        align = offset_align(align, sync["bounds"], sync["picks"])
     s, s_take = jaw_split(
         model,
         getattr(a, "coart_jaw_share", "auto"),
@@ -935,7 +1041,7 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
     held = held_frames(S3raw[:n]) if S3raw is not None else None
     dyn = None
     if getattr(a, "coart_dyn", None) and float(getattr(a, "coart_dyn_mix", 0.0) or 0.0) > 0:
-        dyn = load_dyn(a.coart_dyn, t0 + advance, n, fps)
+        dyn = load_dyn(a.coart_dyn, t0 + advance + (np.asarray(sync["dt"]) if sync else 0.0), n, fps)
         if dyn is None:
             print(f"coart: --coart-dyn {a.coart_dyn} unreadable or does not cover this clip; no dynamics mix")
     x, pp, info = plan(u, fr_t, fps, t0 + advance, None, bands, a, align, shift, Fu, held, dyn)
@@ -946,6 +1052,8 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
     d0 = float(getattr(a, "warp_deadband", 0.04))
     caps_px = {k: float(rng["g_lo"] + x[k, 0] * gs) for k in info["closures"]}
     Ft = press_closures(Ft, Fs, info["closures"], caps_px, scale, d0, d0 + float(getattr(a, "warp_ramp", 0.08)), 0.15 * gs)
+    if quiet:
+        return Ft, pp
     info["closure_press_px"] = {int(k): round(float(caps_px[k] - Ft[k, 0]), 2) for k in info["closures"] if caps_px[k] - Ft[k, 0] > 0.01}
     info.update(
         align="alignment" if align is not None else "track viseme runs",
@@ -958,6 +1066,8 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None):
         dyn_source=getattr(a, "coart_dyn", None),
         Ft=np.round(Ft, 3).tolist(),
     )
+    if sync:
+        info.update(sync_shot_s=sync["shot"], sync_phrases_s=sync["picks"], sync_bounds=sync["bounds"], sync_dt=sync["dt"])
     rr = info["range_ratio_plan"]
     print(
         f"coart plan: {info['n_segments']} segments ({info['align']}, lead {lead}), dom {info['dom_ms']:.0f} ms, undershoot "

@@ -789,7 +789,8 @@ def restore_order(words):
     """words sorted by start, each with its lyric position `idx`. A phrase split for a retry aligns its fragments apart,
     so a fragment can land before the one the lyrics put ahead of it, and sorting by time then swaps the words. A run of
     words out of lyric order keeps the time span it covers and its gaps of silence; its words take the sung time in lyric
-    order, each at its share, phones scaled with it. In place. -> how many words moved. Words in order are not touched."""
+    order, each at its share of a voiced stretch, phones scaled with it; a silence inside the run stays where it was. In place.
+    -> how many words moved. Words in order are not touched."""
     order = sorted(range(len(words)), key=lambda i: words[i]["idx"])
     rank = [0] * len(words)
     for r, i in enumerate(order):
@@ -802,18 +803,25 @@ def restore_order(words):
             top = max(top, rank[j])
         if j > i:
             run = words[i : j + 1]
-            lo, hi = min(w["start"] for w in run), max(w["end"] for w in run)
-            gaps = [max(0.0, y["start"] - x["end"]) for x, y in zip(run, run[1:])] + [0.0]  # silence in the run stays silent
+            spans = []  # the run's voiced stretches, each with how many words it held: a silence inside the run stays where it is
+            for w in sorted(run, key=lambda w: w["start"]):
+                if spans and w["start"] <= spans[-1][1]:
+                    spans[-1] = [spans[-1][0], max(spans[-1][1], w["end"]), spans[-1][2] + 1]
+                else:
+                    spans.append([w["start"], w["end"], 1])
             run.sort(key=lambda w: w["idx"])
-            total = sum(max(1e-3, w["end"] - w["start"]) for w in run)
-            f = max(0.0, hi - lo - sum(gaps)) / total
-            t = lo
-            for w, g in zip(run, gaps):
-                s0, d0 = w["start"], max(1e-3, w["end"] - w["start"])
-                for p in w["phones"]:
-                    p["start"], p["end"] = t + (p["start"] - s0) * f, t + (p["end"] - s0) * f
-                w["start"], w["end"] = t, t + d0 * f
-                t += d0 * f + g
+            k = 0
+            for lo, hi, c in spans:
+                part = run[k : k + c]
+                k += c
+                f = (hi - lo) / sum(max(1e-3, w["end"] - w["start"]) for w in part)
+                t = lo
+                for w in part:
+                    s0, d0 = w["start"], max(1e-3, w["end"] - w["start"])
+                    for p in w["phones"]:
+                        p["start"], p["end"] = t + (p["start"] - s0) * f, t + (p["end"] - s0) * f
+                    w["start"], w["end"] = t, t + d0 * f
+                    t += d0 * f
             words[i : j + 1] = run
             moved += len(run)
         i = j + 1

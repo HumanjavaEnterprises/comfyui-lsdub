@@ -203,6 +203,13 @@ def lab_match(src, ref, w):
 
 
 @functools.lru_cache(maxsize=1)
+def _not_negative(x):
+    v = float(x)
+    if v < 0:
+        raise argparse.ArgumentTypeError(f"{x} is earlier than nothing: this flag moves the plan earlier only")
+    return v
+
+
 def _parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipe", help="a named recipe (recipes.py): its flags go in at this point, later flags override them")
@@ -866,11 +873,18 @@ def _parser():
     )
     ap.add_argument(
         "--coart-advance-ms",
-        type=float,
+        type=_not_negative,
         default=0.0,
         help="warp (coart): ms; the whole mouth plan runs this much earlier against the audio: phones, closures, tongue and "
-        "teeth shapes and --coart-dyn together, snapped to whole frames of the track (0 = off). Keeps the plan's shape and only "
+        "teeth shapes and --coart-dyn together, rounded to whole frames of the track, half to even (0 = off, no negatives). Keeps the plan's shape and only "
         "moves it in time",
+    )
+    ap.add_argument(
+        "--coart-sync-vocal",
+        default=None,
+        help="warp (coart): the vocal stem; each aligned phrase moves against it by an offset read from the audio alone (the "
+        "clip planned at each offset, scored against the vocal's level): phones, closures, tongue and teeth shapes and "
+        "--coart-dyn together, in whole frames of the track. Off when absent; adds to --coart-advance-ms",
     )
     # (opt-in; audits/frame_gate.py = the checker, core/frame_gate.py = the maker): the per-frame gate ---
     ap.add_argument(

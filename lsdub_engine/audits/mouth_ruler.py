@@ -16,6 +16,8 @@ not the take's lips. In every "A -> B" the left side is the take.
               boil            |y[t-1] - 2 y[t] + y[t+1]| of luma, each neighbour shifted onto the mouth centre, in the lip
                               ring / inner lip / skin ring, on hold frames: the opening moves < 0.006 mouth width per frame.
                               boil_loose is the same at < 0.03, because a strict hold can be only a few frames long
+                              boil_all is the same on every tracked frame: it does not change with which frames a render
+                              happens to hold, so it compares two renders where the hold keys' medians can fall between modes
             a take with no render reports the take column only (a clip nobody has dubbed yet).
   stages    Laplacian variance of the mouth box per pipeline stage, each stage tracked on its own:
               lap_own   at the stage's own pixels
@@ -242,6 +244,30 @@ def boil_stats(F, T, W_, O, hold):
     return dict(n=len(q), lip=_r(np.nanmedian(q[:, 0])), cav=_r(np.nanmedian(q[:, 1])), ring=_r(np.nanmedian(q[:, 2])))
 
 
+def hold_frames(T, W_, O, hold=None):
+    """the frames boil_stats reads at this hold (HOLD_LOOSE by default)."""
+    hold = HOLD_LOOSE if hold is None else hold
+    return {
+        i
+        for i in range(1, len(O) - 1)
+        if np.isfinite(T[i - 1 : i + 2]).all() and abs(O[i + 1] - O[i]) <= hold * W_[i] and abs(O[i] - O[i - 1]) <= hold * W_[i]
+    }
+
+
+def boil_common(clips, hold=None):
+    """boil on the frames held in EVERY render: clips = [(F, T), ...] of one take, compared on the same frames.
+    -> dict(n, cav=[one per clip], lip=[one per clip])."""
+    meas = []
+    for F, T in clips:
+        S = [frame_stats(F[i], T[i]) for i in range(len(F))]
+        meas.append((F, T, np.array([s["w"] for s in S], float), np.array([s["ap"] for s in S], float)))
+    keep = sorted(set.intersection(*(hold_frames(T, W_, O, hold) for _, T, W_, O in meas)))
+    if not keep:
+        return dict(n=0, cav=[None] * len(clips), lip=[None] * len(clips))
+    q = [np.array([boil(F[i - 1], F[i], F[i + 1], T[i - 1], T[i], T[i + 1]) for i in keep]) for F, T, _, _ in meas]
+    return dict(n=len(keep), cav=[_r(np.nanmedian(x[:, 1])) for x in q], lip=[_r(np.nanmedian(x[:, 0])) for x in q])
+
+
 def _r(v, k=3):
     return None if v is None or not np.isfinite(v) else round(float(v), k)
 
@@ -257,6 +283,7 @@ def video_stats(F, T):
     r["ap_p95"] = _r(np.nanpercentile(O, 95)) if np.isfinite(O).any() else None
     r["boil"] = boil_stats(F, T, W_, O, HOLD)
     r["boil_loose"] = boil_stats(F, T, W_, O, HOLD_LOOSE)
+    r["boil_all"] = boil_stats(F, T, W_, O, np.inf)
     return r
 
 

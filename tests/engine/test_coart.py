@@ -7,6 +7,7 @@ shape); the jaw share 1 is the earlier jaw reference; and --warp-target v9 (the 
 
 import argparse, os, sys
 import numpy as np
+import pytest
 
 from lsdub_engine.core import coart, mouth_warp as mw
 
@@ -370,3 +371,128 @@ def test_plan_and_track_move_by_the_same_whole_frames():
     assert coart.whole_frames(0.06, 50) == 0.06
     fr = [dict(vis=str(i)) for i in range(6)]
     assert coart.advance_frames(fr, 0.1, 25)[0]["vis"] == "2"
+
+
+def test_sync_grid_is_whole_frames_at_least_20_ms_with_zero_first():
+    g25, g50 = coart.sync_grid(25), coart.sync_grid(50)
+    assert g25[0] == 0.0 and g50[0] == 0.0
+    assert sorted(round(x, 3) for x in g25) == [-0.12, -0.08, -0.04, 0.0, 0.04, 0.08, 0.12, 0.16]
+    assert len(g50) == 15 and min(g50) == pytest.approx(-0.12) and max(g50) == pytest.approx(0.16)
+
+
+def _w(w, a, b):
+    return dict(w=w, start=a, end=b, phones=[dict(p="AA", start=a, end=b)])
+
+
+def test_phrase_bounds_cut_at_aligned_gaps_inside_the_clip():
+    al = dict(words=[_w("a", 0.0, 0.4), _w("b", 0.45, 0.9), _w("c", 1.2, 1.6), _w("d", 9.0, 9.5)])
+    assert coart.phrase_bounds(al, 0.0, 2.0) == [0.0, 1.05, 2.0]
+    assert coart.phrase_bounds(dict(words=[]), 0.0, 2.0) == [0.0, 2.0]
+
+
+def test_pick_offsets_finds_each_phrases_own_offset():
+    fps = 25
+    tc = np.arange(100) / fps
+    rng = np.random.default_rng(3)
+    db = np.convolve(rng.normal(size=100), np.ones(5) / 5, "same")
+    want = np.where(tc < 2.0, 0.08, 0.0)
+    curves = {d: np.interp(tc + (want - d), tc, db) for d in coart.sync_grid(fps)}
+    shot, picks = coart.pick_offsets(curves, db, tc, [0.0, 2.0, 4.0])
+    assert picks == [pytest.approx(0.08), pytest.approx(0.0)]
+    assert all(abs(p - shot) <= coart.SYNC_PHRASE + 1e-9 for p in picks)
+
+
+def test_a_phrase_too_short_to_read_takes_the_shot():
+    tc = np.arange(50) / 25
+    db = np.sin(tc * 9.0)
+    curves = {0.0: np.sin(tc * 9.0 - 2), 0.04: db.copy()}
+    shot, picks = coart.pick_offsets(curves, db, tc, [0.0, 0.1, 2.0])
+    assert shot == 0.04 and picks == [0.04, 0.04]
+
+
+def test_a_tie_stays_at_zero():
+    tc = np.arange(50) / 25
+    db = np.sin(tc * 9.0)
+    assert coart.pick_offsets({0.0: db, 0.04: db, -0.04: db}, db, tc, [0.0, 2.0])[0] == 0.0
+
+
+def test_offset_align_moves_each_word_by_its_phrase_earlier():
+    al = dict(x=1, words=[_w("a", 0.1, 0.4), _w("b", 1.2, 1.6)])
+    got = coart.offset_align(al, [0.0, 0.8, 2.0], [0.08, 0.0])
+    assert got["x"] == 1 and got["words"][0]["start"] == pytest.approx(0.02) and got["words"][0]["phones"][0]["end"] == pytest.approx(0.32)
+    assert got["words"][1]["start"] == 1.2 and al["words"][0]["start"] == 0.1
+
+
+def test_offset_frames_reads_either_way_and_clamps():
+    fr = [dict(vis=str(i)) for i in range(6)]
+    assert [f["vis"] for f in coart.offset_frames(fr, [2, 2, 2, 2, 2])] == ["2", "3", "4", "5", "5", "5"]
+    assert [f["vis"] for f in coart.offset_frames(fr, [-1, -1, 0])] == ["0", "0", "2", "3", "4", "5"]
+
+
+def test_load_dyn_takes_one_time_per_frame(tmp_path):
+    p = tmp_path / "d.csv"
+    p.write_text("time_s,geo_gap_cm,geo_width_cm\n" + "".join(f"{i / 25},{i},{2 * i}\n" for i in range(100)))
+    one = coart.load_dyn(str(p), 0.4, 10, 25)
+    per = coart.load_dyn(str(p), 0.4 + np.full(10, 0.04), 10, 25)
+    assert one is not None and per[3, 0] == pytest.approx(one[3, 0] + 1)
+
+
+def test_sync_flag_defaults_off():
+    from lsdub_engine.core import mouth_paint as MP
+
+    assert MP._parser().parse_args(["--video", "-", "--track", "-", "--out", "-"]).coart_sync_vocal is None
+
+
+def test_moved_target_reads_the_offsets_beside_the_warp_json(tmp_path):
+    import json
+
+    from lsdub_engine.core import sing as S
+
+    d = tmp_path / "d.csv"
+    d.write_text("time_s,geo_gap_cm\n" + "".join(f"{i / 50},{i}\n" for i in range(100)))
+    wj = str(tmp_path / "w.json")
+    base = S.moved_target(str(d), 4, 0.2, 25, wj, 2)
+    assert np.allclose(base, S.dyn_target(str(d), 4, 0.2, 25))
+    (tmp_path / "w_coart.json").write_text(json.dumps(dict(sync_dt=[0.04] * 4 + [0.0] * 4)))
+    got = S.moved_target(str(d), 4, 0.2, 25, wj, 2)
+    assert np.allclose(got - base, [2, 2, 0, 0])
+
+
+def test_a_negative_advance_is_refused():
+    from lsdub_engine.core import mouth_paint as MP
+
+    with pytest.raises(SystemExit):
+        MP._parser().parse_args(["--video", "-", "--track", "-", "--out", "-", "--coart-advance-ms", "-40"])
+
+
+def test_advance_rounds_half_to_even():
+    assert coart.whole_frames(0.06, 25) == 0.08 and coart.whole_frames(0.02, 25) == 0.0
+
+
+def test_sing_reads_the_plan_on_whole_frames():
+    from lsdub_engine.core import sing as S
+
+    assert S.plan_t0(1.0, ["--coart-advance-ms", "100"], 25) == 1.0 + 2 / 25
+
+
+def test_plan_clip_plans_on_whole_frames(monkeypatch, tmp_path):
+    import json
+
+    track = tmp_path / "t.json"
+    track.write_text(json.dumps(dict(fps=25, t0=1.0, frames=[])))
+    seen = {}
+
+    class Stop(Exception):
+        pass
+
+    def plan(u, fr, fps, t0, *a):
+        seen["t0"] = t0
+        raise Stop
+
+    monkeypatch.setattr(coart, "plan", plan)
+    monkeypatch.setattr(coart, "jaw_split", lambda *a, **k: (0.9, 0.9))
+    monkeypatch.setattr(coart, "norm", lambda x, r: x)
+    a = argparse.Namespace(track=str(track), coart_advance_ms=100.0)
+    with pytest.raises(Stop):
+        coart.plan_clip(a, [dict(t=1.0)], np.zeros((4, 2)), argparse.Namespace(rng={}), None)
+    assert seen["t0"] == 1.0 + 2 / 25

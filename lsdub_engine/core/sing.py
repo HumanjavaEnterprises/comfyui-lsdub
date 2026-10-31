@@ -62,9 +62,24 @@ def pick_extremes(egap_hi, target, m):
     return out
 
 
-def dyn_target(dyn_csv, n, t0, fps):
+def dyn_target(dyn_csv, n, t0, fps, dt=0.0):
     R = list(csv.DictReader(open(dyn_csv)))
-    return np.interp(np.arange(n) / fps, np.array([float(r["time_s"]) for r in R]) - t0, np.array([float(r["geo_gap_cm"]) for r in R]))
+    return np.interp(np.arange(n) / fps + dt, np.array([float(r["time_s"]) for r in R]) - t0, np.array([float(r["geo_gap_cm"]) for r in R]))
+
+
+def plan_t0(t0, paint_args, rate):
+    """where --coart-advance-ms puts the plan, on the track's whole frames as the paint moves it."""
+    from .coart import whole_frames
+
+    return t0 + whole_frames(paint_api.advance_s(paint_args), rate)
+
+
+def moved_target(dyn_csv, n, t0, fps, warp_json, m=1):
+    """dyn_target as the paint behind warp_json left it: --coart-sync-vocal logs each frame's offset beside its --warp-json, at
+    the track's rate (m x fps), and the gate reads the same moved curve. No log: dyn_target."""
+    log = os.path.splitext(warp_json)[0] + "_coart.json"
+    dt = (json.load(open(log)).get("sync_dt") if os.path.exists(log) else None) or None
+    return dyn_target(dyn_csv, n, t0, fps, 0.0 if dt is None else np.resize(np.asarray(dt, float)[::m], n))
 
 
 # ---------------------------------------------------------------------------------------------------- singer
@@ -179,12 +194,12 @@ def run(
             *(("--occluder-mask", occ) if os.path.exists(occ) else ()),
         ],
     )
-    from .coart import whole_frames
-
-    target = dyn_target(
-        dyn, n, t0 + whole_frames(paint_api.advance_s(paint_args), fps * m), fps
-    )  # the plan moved: the gate reads the same curve
-    pick = (lambda wj, n_, m_: pick_extremes([f["egap"] for f in json.load(open(wj))["frames"]], target, m_)) if m > 1 else None
+    t_plan = plan_t0(t0, paint_args, fps * m)  # the plan moved: the gate reads the same curve
+    pick = (
+        (lambda wj, n_, m_: pick_extremes([f["egap"] for f in json.load(open(wj))["frames"]], moved_target(dyn, n, t_plan, fps, wj, m), m_))
+        if m > 1
+        else None
+    )
     R = MED.run(
         take,
         trk,
@@ -214,10 +229,11 @@ def run(
     # 5. the measured gate on the delivered pixels
     t_ = time.perf_counter()
     sing_json = os.path.join(work, "crop_painted_warp.json")
+    target = moved_target(dyn, n, t_plan, fps, sing_json, m)
     info.update(gate(out, R, target, vocal, align, t0, fps, work=work, warp_json=sing_json), warp_json=sing_json)
     tm["gate"], t_ = round(time.perf_counter() - t_, 3), time.perf_counter()
     if auto:
-        info.update(auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, info))
+        info.update(auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, info, t_plan=t_plan))
         tm["native"] = round(time.perf_counter() - t_, 3)
     info["timings"] = tm
     info["medium"] = {k: R[k] for k in ("face_h_px", "zoom", "crop_px", "outside_max_preencode", "not_pasted", "picked")}
@@ -238,7 +254,7 @@ def run(
     return info
 
 
-def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info):
+def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info, t_plan=None):
     """Per-shot auto-selection: also run the native warp (lsdub paint on the full take at the frame rate, the pre-sing
     recipe) and keep whichever scores the higher MEASURED corr (lag 0); open-in-silence breaks a tie (within 0.02).
     Both are kept: <out>_sing.mp4 and <out>_native.mp4; <out> is the winner."""
@@ -275,6 +291,7 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
     )
     shutil.copyfile(out, sng)
     nat_json = os.path.join(work, "native_warp.json")
+    target = target if t_plan is None else moved_target(dyn, n, t_plan, fps, nat_json)  # its own paint, its own offsets
     g_n = gate(nat, R, target, vocal, align, t0, fps, work=os.path.join(work, "native_gate"), warp_json=nat_json)
 
     def key(g):

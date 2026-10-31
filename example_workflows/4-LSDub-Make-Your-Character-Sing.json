@@ -35,7 +35,7 @@
    ],
    "size": [
     340,
-    320
+    346
    ],
    "flags": {},
    "order": 1,
@@ -74,7 +74,8 @@
     0,
     "fixed",
     "",
-    "local"
+    "local",
+    "layers_interior"
    ],
    "color": "#335",
    "title": "LSDub Project"

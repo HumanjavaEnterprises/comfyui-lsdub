@@ -1014,7 +1014,10 @@ class WarpClip:
         if g("warp_target", "v9") == "coart":
             from . import coart
 
-            Ft, pp = coart.plan_clip(a, fr_t, Fs, model, bands, pp, F, S3raw)
+            sync = None
+            if g("coart_sync_vocal", None):  # the track moves with the plan, so everything that reads it below moves too
+                fr_t, sync = coart.phrase_sync(a, fr_t, Fs, model, bands, pp, F, S3raw)
+            Ft, pp = coart.plan_clip(a, fr_t, Fs, model, bands, pp, F, S3raw, sync=sync)
         elif g("warp_target", "v9") == "own":  # the null build: the plan IS the take's mouth
             Ft = Fs.copy()
         else:

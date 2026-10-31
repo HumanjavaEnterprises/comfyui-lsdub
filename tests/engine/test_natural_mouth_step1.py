@@ -149,7 +149,7 @@ def test_interior_state_round_trips_and_clears():
     T = IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]))
     T.log[3], T.gain[3], T.sank[3] = dict(sank=0.4), 0.9, 0.4
     st = T.state(3)
-    T.put(3, (None, None, None))
+    T.put(3, T.EMPTY)
     assert 3 not in T.log and 3 not in T.gain and 3 not in T.sank
     T.put(3, st)
     assert T.state(3) == st
@@ -271,3 +271,192 @@ def test_plate_removes_the_object_and_restore_puts_it_back():
     outs = [p[0].copy()]
     OC.restore(outs, [f], occ, 1)
     assert outs[0][30, 30, 0] < 30
+
+
+def test_the_cap_reads_the_core_as_the_curve_does(monkeypatch):
+    """pink only on the rim of the opening: the core has none, so a low take curve asks for no sink at all."""
+    monkeypatch.setattr(IT, "SOFT", 0.0)
+    F = [frame((90, 90, 90)) for _ in range(8)]
+    for f in F:
+        cv2.ellipse(f, (100, 100), (40, 20), 0, 0, 360, (60, 60, 170), 5)
+    S = np.array([face() for _ in range(8)])
+    feat = np.tile([40.0, 100.0], (8, 1))
+    T = IT.TakeInterior(MouthBank(0, feat, np.zeros((8, 3, 2)), np.zeros((8, 3)), S[:, :, :2]), F, S, feat, np.array([10.0, 10.0]))
+    assert T.frame_interior(0)[0] < 0.02  # the rim is left out of the take's reading ...
+    T.curve[:] = 0.1
+    T.paint(0, S[0][ll.LIP_IN][:, :2], (0, 0, 200, 200), 0.4, np.zeros((200, 200), np.float32))
+    assert T.log[0]["pink"] < 0.08 and T.log[0]["sank"] == 0  # ... and from the fill's, so nothing sinks
+
+
+def test_the_take_share_is_read_inside_the_rim():
+    F = [frame((90, 90, 90)) for _ in range(8)]
+    for f in F:
+        cv2.ellipse(f, (100, 100), (40, 20), 0, 0, 360, (60, 60, 170), 3)
+    S = np.array([face() for _ in range(8)])
+    feat = np.tile([40.0, 100.0], (8, 1))
+    T = IT.TakeInterior(MouthBank(0, feat, np.zeros((8, 3, 2)), np.zeros((8, 3)), S[:, :, :2]), F, S, feat, np.array([10.0, 10.0]))
+    m = IT.poly(S[0][ll.LIP_IN][:, :2], (200, 200))
+    assert IT.inner(m).sum() < m.sum()
+    lab = cv2.cvtColor(F[0], cv2.COLOR_BGR2LAB).astype(np.float32)
+    assert IT.pink(lab)[m].mean() > 0.05 and T.frame_interior(0)[0] == pytest.approx(float(IT.pink(lab)[IT.inner(m)].mean()))
+
+
+def test_the_bisection_is_what_the_cap_runs(monkeypatch):
+    F, S, Fe, bank = clip()
+    T = IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]))
+    T.curve[:] = 0.2
+    seen = []
+    real = IT.least_sink
+    monkeypatch.setattr(IT, "least_sink", lambda *a: seen.append(real(*a)) or seen[-1])
+    T.paint(0, S[0][ll.LIP_IN][:, :2], (0, 0, 200, 200), 0.4, np.zeros((200, 200), np.float32))
+    assert seen and T.log[0]["sank"] == round(seen[0], 3)
+
+
+def _fit():
+    return IT.TeethFit.__new__(IT.TeethFit)
+
+
+def test_teeth_fit_state_round_trips():
+    t = _fit()
+    t.gain, t.log = {3: 1.1}, {3: dict(gain=1.1)}
+    st = t.state(3)
+    t.put(3, t.EMPTY)
+    assert t.state(3) == t.EMPTY
+    t.put(3, st)
+    assert t.gain[3] == 1.1 and t.log[3] == dict(gain=1.1)
+
+
+def test_a_rejected_gate_candidate_leaves_no_teeth_fit_state():
+    import types
+    from lsdub_engine.core import frame_gate as FG
+
+    t = _fit()
+    t.gain, t.log = {2: 1.1}, {2: dict(gain=1.1)}
+    c = types.SimpleNamespace(comp=types.SimpleNamespace(take_interior=None, teeth_fit=t))
+    held = FG.interior_hold(c, [2])
+    assert 2 not in t.gain  # cleared: a candidate that paints none leaves none
+    t.gain[2], t.log[2] = 1.3, dict(gain=1.3)
+    got = FG.interior_release(c, held)
+    assert t.gain[2] == 1.1
+    FG.interior_keep(c, got)
+    assert t.gain[2] == 1.3
+
+
+class _Spy:
+    """a stand-in for the state holders: try_run and repair_window must clear them before a candidate and put them back after."""
+
+    EMPTY = (None,)
+
+    def __init__(self, frames):
+        self.v = {f: "kept" for f in frames}
+        self.during = []
+
+    def state(self, i):
+        return (self.v.get(i),)
+
+    def put(self, i, st):
+        self.v.pop(i, None) if st[0] is None else self.v.__setitem__(i, st[0])
+
+    def paint(self, i):
+        self.during.append(self.v.get(i))
+        self.v[i] = "cand"
+
+
+def _render_clip(spy):
+    import types
+
+    def render_frame(t, ov, fold=False):
+        spy.paint(t)
+        return "o", "m", dict(fold_det=1.0), np.zeros(2)
+
+    return types.SimpleNamespace(
+        comp=types.SimpleNamespace(take_interior=spy),
+        render_frame=render_frame,
+        gate_ov={},
+        outs={},
+        masks={},
+        P_out={},
+        log={},
+        n=9,
+    )
+
+
+def _ck():
+    import types
+
+    return types.SimpleNamespace(
+        update=lambda *a, **k: None,
+        metrics=lambda: dict(),
+        verdict=lambda M, ref: dict(frames=[dict(verdict="PASS", sev=0.0)] * 9),
+    )
+
+
+def test_try_run_and_commit_run_carry_the_state(monkeypatch):
+    from lsdub_engine.core import frame_gate as FG
+
+    monkeypatch.setattr(FG, "snapshot", lambda ck, run: None)
+    monkeypatch.setattr(FG, "plan_entry", lambda *a, **k: {})
+    spy = _Spy([2, 3])
+    c, ck = _render_clip(spy), _ck()
+    r = FG.try_run(c, ck, [2, 3], {2: ({}, {}), 3: ({}, {})}, {})
+    assert spy.during == [None, None]  # the candidate started clean
+    assert spy.v == {2: "kept", 3: "kept"}  # rejected until committed
+    FG.commit_run(c, ck, r, "x", 0)
+    assert spy.v == {2: "cand", 3: "cand"}
+
+
+def test_repair_window_carries_the_state(monkeypatch):
+    import types
+    from lsdub_engine.core import frame_gate as FG
+
+    frames = [3, 4]
+    spy = _Spy(frames)
+    c, ck = _render_clip(spy), _ck()
+    c.P_out = {f: np.zeros(2) for f in range(9)}
+    c.patched = lambda *a: __import__("contextlib").nullcontext()
+    c.pl = types.SimpleNamespace(rigid3=lambda f, C: C)
+    c.S = np.zeros((9, 2))
+    C = np.zeros((9, 478, 3))
+    for k, v in dict(
+        closures=lambda clip: set(),
+        window_tracks=lambda clip: dict(C=C),
+        interp_params=lambda clip, fr, x, y, tr, deg: {f: dict(Cres=np.zeros((len(FG.mw.CTRL), 3))) for f in fr},
+        snapshot=lambda ck, fr: None,
+        restore=lambda ck, s: None,
+        model_shape=lambda clip, X: np.zeros((1, len(FG.mw.CTRL), 3)),
+        fold_guard=lambda *a, **k: 0,
+        residual_for=lambda *a, **k: 0,
+        plan_entry=lambda *a, **k: {},
+        structure_ok=lambda *a, **k: True,
+    ).items():
+        monkeypatch.setattr(FG, k, v)
+    e = iter([1.0, 0.5, 0.5, 0.5, 0.5, 0.5])
+    monkeypatch.setattr(FG, "slosh_energy", lambda *a: next(e))
+    out = FG.repair_window(
+        c, ck, dict(frames=(2, 5)), {}, dict(frames=[dict(verdict="PASS", sev=0.0)] * 9), {"slosh": 0}, 0, [], ctx={}, cands=()
+    )
+    assert out is not None
+    assert spy.during == [None, None, None, None]  # each try (deg 1, 2) started clean
+    assert spy.v == {3: "cand", 4: "cand"}  # the kept try's state stayed
+
+
+def test_boil_all_and_common_read_the_same_frames_across_renders(monkeypatch):
+    n = 12
+    T = np.zeros((n, 478, 2))
+    T[:, 61], T[:, 291] = [50, 100], [150, 100]
+    monkeypatch.setattr(MR, "frame_stats", lambda f, t: dict(w=100.0, ap=float(f[0, 0, 0])))
+    monkeypatch.setattr(MR, "boil", lambda a, b, c, pa, pb, pc: (float(b[0, 0, 1]), float(b[0, 0, 1]), 0.0))
+
+    def clip_(aps, val):
+        F = [np.zeros((4, 4, 3), np.uint8) for _ in range(n)]
+        for i, f in enumerate(F):
+            f[0, 0, 0], f[0, 0, 1] = aps[i], val
+        return F, T
+
+    a = clip_([0] * 6 + [50] * 6, 5)  # held early
+    b = clip_([0] * 3 + [50] * 3 + [0] * 6, 7)  # held elsewhere as well
+    got = MR.boil_common([a, b])
+    assert got["n"] == len({1, 2, 3, 4, 7, 8, 9, 10} & {1, 4, 7, 8, 9, 10})
+    assert got["cav"] == [5.0, 7.0] and got["lip"] == [5.0, 7.0]
+    assert MR.hold_frames(T, np.full(n, 100.0), np.r_[np.zeros(6), np.full(6, 50.0)]) == {1, 2, 3, 4, 7, 8, 9, 10}
+    assert MR.boil_common([a, clip_([0, 50] * 6, 1)])["n"] == 0

@@ -12,7 +12,7 @@ from scipy.ndimage import gaussian_filter1d
 from . import lip_layers as ll
 
 LIP_IN, LIP_OUT = ll.LIP_IN, ll.LIP_OUT
-PINK_ROOM = 0.85  # the fill's pink stops this far under the take's core share: the delivered core must stay under the take's
+PINK_ROOM = 0.85  # the fill's core pink stops at this share of the take's core share at that aperture
 CORE = 7  # the take's pink share is read this many px inside its contour (kernel side): the rim is lip, not interior
 RELEASE = 0.8  # the pink sink's share kept per frame after the last frame that needed it
 SANK_MIN = 0.005  # a sink below this is off
@@ -56,6 +56,12 @@ def least_sink(lab, pm, base, vis, over, area, tgt):
         mid = 0.5 * (lo + hi)
         lo, hi = (lo, mid) if held(mid) else (mid, hi)
     return hi
+
+
+def inner(m):
+    """the opening clear of the lip's own rim, as the ruler's pink_core; the whole opening when too little is left."""
+    core = cv2.erode(m.astype(np.uint8), np.ones((CORE, CORE), np.uint8)) > 0
+    return core if core.sum() > 30 else m
 
 
 def teeth(lab):
@@ -109,6 +115,8 @@ class TakeInterior:
             ring[:, c] = np.interp(idx, idx[good], ring[good, c]) if good.any() else 0.0
         self.ring = gaussian_filter1d(ring, 2.0, axis=0, mode="nearest")
         self.log, self.gain, self.sank = {}, {}, {}
+
+    EMPTY = (None, None, None)
 
     def state(self, i):
         """what paint(i) left behind: a gate candidate's copy, to keep it only if the candidate is kept."""
@@ -169,8 +177,7 @@ class TakeInterior:
             return 0.0, np.nan
         lab = cv2.cvtColor(self.frames[i][y0:y1, x0:x1], cv2.COLOR_BGR2LAB).astype(np.float32)
         rest = m & ~teeth(lab)
-        core = cv2.erode(m.astype(np.uint8), np.ones((CORE, CORE), np.uint8)) > 0  # clear of the lip's own rim, as the ruler's pink_core
-        share = float(pink(lab)[core if core.sum() > 30 else m].mean())
+        share = float(pink(lab)[inner(m)].mean())
         return share, float(np.median(lab[..., 0][rest])) if rest.sum() >= 8 else np.nan
 
     def target(self, ap, curve=None):
@@ -233,17 +240,19 @@ class TakeInterior:
             lab,
         )
         vis = opening & (over_a < 0.5)
+        core = inner(opening)  # the pink cap reads the opening as the take's curve was read: clear of the rim
         if vis.sum() >= 8:  # never lighter than the take's interior at this aperture
             g = float(np.clip(self.target(ap_out, self.lcurve) / max(1.0, float(np.median(lab[..., 0][vis]))), 0.3, 1.0))
             g = 0.75 * self.gain.get(i - 1, g) + 0.25 * g  # no flicker from the median of one frame
             self.gain[i] = g
             lab[..., 0] *= g
-        over, area = 0, max(1, int(opening.sum()))
-        if over_rgb is not None and (opening & ~vis).any():
+        seen = core & vis
+        over, area = 0, max(1, int(core.sum()))
+        if over_rgb is not None and (core & ~vis).any():
             ol = cv2.cvtColor(np.clip(over_rgb, 0, 255).astype(np.uint8), cv2.COLOR_BGR2LAB).astype(np.float32)
-            over = int(pink(ol)[opening & ~vis].sum())
-        got = (float(pink(lab)[vis].sum()) + over) / area
-        tgt = PINK_ROOM * self.target(ap_out)  # the ruler's contour reaches past the plan: the lip rim it catches is counted here
+            over = int(pink(ol)[core & ~vis].sum())
+        got = (float(pink(lab)[seen].sum()) + over) / area
+        tgt = PINK_ROOM * self.target(ap_out)  # both are core shares
         need, tail = 0.0, RELEASE * self.sank.get(i - 1, 0.0)
         if got > tgt or tail >= SANK_MIN:  # never pinker than the take at this aperture: the excess sinks into the cavity's colour
             pk = pink(lab)
@@ -251,13 +260,13 @@ class TakeInterior:
             nonp = ~pk & opening
             base = (np.median(lab[nonp], 0) if nonp.sum() > 8 else np.array([50.0, 138.0, 134.0])).astype(np.float32)
             if got > tgt:
-                need = least_sink(lab, pm, base, vis, over, area, tgt)
+                need = least_sink(lab, pm, base, seen, over, area, tgt)
         k = max(need, tail)  # the cap holds from the first frame it is needed; letting go is what is eased
         k = 0.0 if k < SANK_MIN else k
         if k > 0:
             lab = lab * (1 - pm * k) + base * pm * k
         self.sank[i] = k
-        held = (float(pink(lab)[vis].sum()) + over) / area
+        held = (float(pink(lab)[seen].sum()) + over) / area
         self.log[int(i)] = dict(donor=j, pink=round(got, 4), held=round(held, 4), target=round(tgt, 4), sank=round(k, 3))
         bgr = cv2.cvtColor(np.clip(lab + 0.5, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR).astype(np.float32)
         a = cv2.GaussianBlur(cv2.dilate(opening.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(np.float32), (0, 0), 0.6)
@@ -338,6 +347,19 @@ class TeethFit:
         g = np.isfinite(c)
         self.mid, self.curve = mid[g], c[g]
         self.gain, self.log = {}, {}
+
+    EMPTY = (None, None)
+
+    def state(self, i):
+        """what apply(i) left behind: a gate candidate's copy, as TakeInterior.state."""
+        return self.log.get(int(i)), self.gain.get(i)
+
+    def put(self, i, st):
+        for d, k, v in zip((self.log, self.gain), (int(i), i), st):
+            if v is None:
+                d.pop(k, None)
+            else:
+                d[k] = v
 
     def apply(self, i, rgb, a, ap):
         """the arch (BGR float, alpha) -> BGR, lifted to the take at aperture ap; a smoothed gain, so no flicker."""

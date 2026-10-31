@@ -118,38 +118,35 @@ def restore(ck, snap):
 
 
 def interior_of(clip):
-    return getattr(getattr(clip, "comp", None), "take_interior", None)
+    """what paints per frame and carries state from frame to frame: the take interior, the teeth fit."""
+    comp = getattr(clip, "comp", None)
+    return [T for T in (getattr(comp, "take_interior", None), getattr(comp, "teeth_fit", None)) if T is not None]
 
 
 def interior_hold(clip, frames):
-    """before a candidate renders `frames`: the take interior's state of the kept render, cleared so a candidate that paints
-    no interior leaves none. -> what interior_release wants."""
-    T = interior_of(clip)
-    if T is None:
-        return None
-    saved = {f: T.state(f) for f in frames}
-    for f in frames:
-        T.put(f, (None, None, None))
+    """before a candidate renders `frames`: their state in the kept render, cleared so a candidate that paints none leaves none.
+    -> what interior_release wants."""
+    saved = [(T, {f: T.state(f) for f in frames}) for T in interior_of(clip)]
+    for T, _ in saved:
+        for f in frames:
+            T.put(f, T.EMPTY)
     return saved
 
 
 def interior_release(clip, saved):
-    """after a candidate rendered: the interior's state goes back to the kept render. -> the candidate's, per frame, for
-    interior_keep. Only a kept candidate's tail and log stay."""
-    T = interior_of(clip)
-    if T is None or saved is None:
-        return {}
-    got = {f: T.state(f) for f in saved}
-    for f, st in saved.items():
-        T.put(f, st)
+    """after a candidate rendered: the state goes back to the kept render. -> the candidate's, per frame, for interior_keep.
+    Only a kept candidate's tail and log stay."""
+    got = [(T, {f: T.state(f) for f in st}) for T, st in saved or ()]
+    for T, st in saved or ():
+        for f, x in st.items():
+            T.put(f, x)
     return got
 
 
 def interior_keep(clip, got):
-    T = interior_of(clip)
-    if T is not None:
-        for f, st in got.items():
-            T.put(f, st)
+    for T, st in got or ():
+        for f, x in st.items():
+            T.put(f, x)
 
 
 def score(V, idx):
@@ -490,7 +487,7 @@ def try_run(clip, ck, run, ovs, ref):
 
 
 def commit_run(clip, ck, r, how, rnd):
-    interior_keep(clip, r.get("interior", {}))
+    interior_keep(clip, r.get("interior"))
     for t, (ov, extra) in r.get("ovs", {}).items():
         clip.gate_ov[t] = ov
     for t, x in r["res"].items():

@@ -52,11 +52,16 @@ def _advance(tw):
     return ['--coart-advance-ms', str(ms)] if ms else []
 
 
-def _paint_flags(project, kit, tw, vocalisations):
+def _phrases(tw, vocal):
+    """the Tweaks' sync_phrases as paint flags: the planner reads the phrase offsets off this vocal."""
+    return ['--coart-sync-vocal', vocal] if vocal and (getattr(tw, 'flags', None) or {}).get('sync_phrases') else []
+
+
+def _paint_flags(project, kit, tw, vocalisations, vocal=None):
     """the shot's flags for sing. --vocalisations is a user-level flag: settings can change it."""
     recipe, face = _stack(project, kit.identity)
     return paint_api.flags(recipe, lib=kit.dir, mode_mods=SING_EXTRA, face_overrides=face,
-                           user_overrides=['--vocalisations', vocalisations, *_advance(tw), *paint_api.split_settings(tw.settings)])
+                           user_overrides=['--vocalisations', vocalisations, *_advance(tw), *_phrases(tw, vocal), *paint_api.split_settings(tw.settings)])
 
 
 class LSDubBuildLipKit(io.ComfyNode):
@@ -180,12 +185,15 @@ class LSDubTweaks(io.ComfyNode):
                 io.Float.Input('sync_advance_ms', default=0.0, min=0.0, max=200.0, step=10.0, optional=True,
                                tooltip='Moves the whole mouth plan earlier against the sound, ms, snapped to whole frames. It keeps the mouth\'s shapes and only '
                                        'changes when they land. 0 = off.'),
+                io.Boolean.Input('sync_phrases', default=False, optional=True,
+                                 tooltip='Lets each sung phrase land a little earlier or later, read from the vocal alone. It keeps the mouth\'s shapes '
+                                         'and only changes when they land. Needs a layers mouth_stack.'),
             ],
             outputs=[T.LSDubTweaks.Output(display_name='tweaks', tooltip='The mouth controls.')],
         )
 
     @classmethod
-    def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv='', sync_advance_ms=0.0):
+    def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv='', sync_advance_ms=0.0, sync_phrases=False):
         try:
             paint_api.split_settings(settings)
         except ValueError as e:
@@ -196,6 +204,8 @@ class LSDubTweaks(io.ComfyNode):
                      jaw_csv=jaw_csv, jaw_csv_hash=file_hash(jaw_csv) if jaw_csv else '')
         if sync_advance_ms:  # absent at 0: a tweaks hash, and every shot behind it, stays what it was
             flags['sync_advance_ms'] = float(sync_advance_ms)
+        if sync_phrases:  # the same: absent when off
+            flags['sync_phrases'] = True
         return io.NodeOutput(T.Tweaks(flags=flags, settings=settings.strip(), hash=text_hash(json.dumps(flags, sort_keys=True) + settings)))
 
 
@@ -437,7 +447,7 @@ class LSDubDub(io.ComfyNode):
         occ, note = cls._mask_for(masks, s, tw, s['f1'] - s['f0'] + 1)
         if occ: shutil.copyfile(occ, os.path.join(work, 'occ.npz'))
         f = tw.flags
-        pa = _paint_flags(project, kit, tw, vocalisations)
+        pa = _paint_flags(project, kit, tw, vocalisations, song.lead or song.mix)
         warned = _paint_warnings(pa)
         info = SING.run(take, align.align, song.lead or song.mix, s['start'] - project.song_offset,
                         st.path('sung.mp4'), work, pa, char=s['target'] if cast else None, db=cast.db if cast else None,

@@ -32,7 +32,7 @@ def test_widget_order(pack):
     names = [k for p in ordered if p.io_type in WIDGET for k in ((p.id, 'fixed') if has_control(p) else (p.id,))]
     assert names == ['name', 'root', 'mode', 'fps', 'song_offset', 'preset', 'seed', 'fixed', 'force_shots', 'backend', 'mouth_stack']
     p = ordered[-1]
-    assert p.kw['options'] == ['plain', 'layers'] and p.kw['default'] == 'plain' and p.optional
+    assert p.kw['options'] == ['plain', 'layers', 'layers_interior'] and p.kw['default'] == 'plain' and p.optional
 
 
 def test_project_key_snapshot(pack):
@@ -199,3 +199,35 @@ def test_sync_advance_at_zero_keeps_the_tweaks_hash(pack):
     base = (0.06, 0.06, 512.0, True, True, True, '')
     assert N.execute(*base).args[0].hash == N.execute(*base, '', 0.0).args[0].hash
     assert N.execute(*base).args[0].hash != N.execute(*base, '', 60.0).args[0].hash
+
+
+def test_layers_interior_reaches_the_take_interior_and_not_the_teeth_fit(pack):
+    a = pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers_interior'), _kit('a'), _tw(''), 'skip')
+    assert a[a.index('--warp-interior-source') + 1] == 'take' and '--warp-target' in a
+    assert '--warp-teeth-fit' not in a
+    assert '--warp-interior-source' not in pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers'), _kit('a'), _tw(''), 'skip')
+
+
+def test_sync_phrases_reaches_the_paint_flags_with_the_vocal(pack):
+    tw = types.SimpleNamespace(settings='', flags=dict(sync_phrases=True))
+    a = pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers'), _kit('a'), tw, 'skip', '/v.wav')
+    assert a[a.index('--coart-sync-vocal') + 1] == '/v.wav'
+    tw = types.SimpleNamespace(settings='', flags={})
+    assert '--coart-sync-vocal' not in pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers'), _kit('a'), tw, 'skip', '/v.wav')
+
+
+def test_sync_phrases_off_keeps_the_tweaks_hash(pack):
+    N = pack.nodes_mouth.LSDubTweaks
+    base = (0.06, 0.06, 512.0, True, True, True, '')
+    assert N.execute(*base).args[0].hash == N.execute(*base, '', 0.0, False).args[0].hash
+    assert N.execute(*base).args[0].hash != N.execute(*base, '', 0.0, True).args[0].hash
+
+
+def test_workflow_four_uses_the_interior_stack_and_old_workflows_keep_plain():
+    import glob
+    import json
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for f in sorted(glob.glob(os.path.join(root, 'example_workflows', '*.json'))):
+        n = next(x for x in json.load(open(f))['nodes'] if x['type'] == 'LSDubProject')
+        assert ('layers_interior' in n['widgets_values']) == os.path.basename(f).startswith('4-')
