@@ -35,7 +35,8 @@ CLASSES: PERF (sung, singer medium or closer, mouth visible >= 50%): scored, a m
   flicker   1 - clip(pops / 3)
   sharpness clip(face Laplacian variance / the film's median); with --sharpness-mode plate, closeness to the plate instead:
             1 - clip(|log(face / the plate's median)| / log 2), so over-sharp loses as blur does. The plate is --compare
-  boil      1 - clip(boil_loose / 12): luma second difference of the lips on hold frames (mouth_ruler). Weight 0: reported
+  boil      1 - clip(boil_loose / 12): luma second difference of the lips on hold frames (mouth_ruler). Weight 0: reported.
+            Clean takes read about 3 to 7, so 12 is roughly twice a clean take
 
   lsdub scorecard --video film.mp4 --cuts cut.json --vocal lead_dry.wav --offset 12 --align align.json
                   [--script SCRIPT.md] [--cast cast.json] [--compare old.mp4 --compare-cast old_cast.json]
@@ -575,6 +576,8 @@ def main(argv=None):
     ap.add_argument("--sharpness-mode", choices=SHARPNESS_MODES, default="floor", help="plate = closeness to --compare's sharpness")
     ap.add_argument("--out", required=True, help="output prefix: <out>.md/.json/.csv/_sheet.jpg")
     a = ap.parse_args(argv)
+    if a.sharpness_mode == "plate" and not a.compare:
+        ap.error("--sharpness-mode plate reads the plate from --compare")
     cuts = json.load(open(a.cuts))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     rows, thumbs = score(

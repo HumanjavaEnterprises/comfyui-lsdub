@@ -230,3 +230,29 @@ def test_boil_of_a_faceless_clip_is_none(tmp_path):
         w.write(np.zeros((128, 128, 3), np.uint8))
     w.release()
     assert SC.boil_of(str(tmp_path / "c.mp4"), 0, 6) is None
+
+
+def test_kept_tracking_with_too_few_pairs_reads_zero():
+    x = np.arange(10.0)
+    assert Q.tracking(x, x, 25.0, keep=np.zeros(10, bool)) == (0.0, 0.0, 0.0)
+
+
+def test_scorecard_plate_mode_needs_a_plate():
+    with pytest.raises(SystemExit):
+        SC.main(["--video", "v", "--cuts", "c", "--vocal", "w", "--out", "o", "--sharpness-mode", "plate"])
+
+
+GOLDEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden", "fixtures", "demo_crop.npz")
+
+
+@pytest.mark.skipif(not os.environ.get("LIPS_FACE_MODEL") or not os.path.exists(GOLDEN), reason="needs the face model and the golden crop")
+def test_shot_row_tracks_the_golden_crop(tmp_path):
+    F = np.load(GOLDEN)["frames"]
+    p = str(tmp_path / "take.mp4")
+    w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*"mp4v"), 25.0, F.shape[2:0:-1])
+    for f in F:
+        w.write(f)
+    w.release()
+    r = R.shot_row(p, p, [("take", p, 0, None, None)], str(tmp_path / "work"))
+    assert 0 < r["pink_frac"][0] == r["pink_frac"][1] and r["teeth_L"][0] == r["teeth_L"][1]
+    assert r["notes"] == [] and r["stages"][0]["tracked"] == len(F)

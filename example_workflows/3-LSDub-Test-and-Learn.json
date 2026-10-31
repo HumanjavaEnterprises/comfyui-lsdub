@@ -35,7 +35,7 @@
    ],
    "size": [
     340,
-    320
+    346
    ],
    "flags": {},
    "order": 1,
@@ -71,7 +71,8 @@
     0,
     "fixed",
     "",
-    "local"
+    "local",
+    "plain"
    ],
    "color": "#335",
    "title": "LSDub Project"
@@ -801,7 +802,7 @@
    ],
    "size": [
     340,
-    216
+    268
    ],
    "flags": {},
    "order": 17,
@@ -830,6 +831,16 @@
     {
      "name": "render",
      "type": "LSDUB_RENDER",
+     "link": null
+    },
+    {
+     "name": "scorecard",
+     "type": "LSDUB_REPORT",
+     "link": null
+    },
+    {
+     "name": "ruler",
+     "type": "LSDUB_REPORT",
      "link": null
     }
    ],
@@ -1163,7 +1174,7 @@
     500,
     764,
     1800,
-    322
+    348
    ],
    "color": "#88A",
    "font_size": 28,

@@ -9,7 +9,7 @@
 - LSDub Mouth Tweaks `settings` can now change `vocalisations`. Quoting rule: whitespace separates, single or double quotes group a value, backslashes stay as typed (so `C:\\Users\\me\\a.csv` works). An apostrophe goes inside double quotes; an unmatched quote stops at the node with a clear message.
 - New node LSDub Mouth Ruler: take against render per dubbed shot, reported only.
 - LSDub Verify shows `N/A` for a shot left as source, leaves vocalisation frames out of the sync score (`vocal_frac` says how many; shots without them read the same) and reports a lower-face identity beside the head one. The sing gate scores the same frames.
-- LSDub Scorecard gains optional `sharpness_mode` (`floor`, `plate`) and a `boil` reading at weight 0. LSDub Fix It gains an optional `scorecard` input and more reasons, among them `vocalisation` and `no kit for target`.
+- LSDub Scorecard gains optional `sharpness_mode` (`floor`, `plate`) and a `boil` reading at weight 0. LSDub Fix It gains optional `scorecard` and `ruler` inputs and more reasons, among them `vocalisation` and `no kit for target`.
 - LSDub Dub names each shot no kit serves (warning, and `no kit for target` in the results) instead of dropping it silently.
 - The Dub logs paint flags that have no effect on a run and records them in the shot's `done.json`. Model unload also closes the shared face landmarkers.
 

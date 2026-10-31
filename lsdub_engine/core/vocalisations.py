@@ -600,7 +600,7 @@ class Vocal:
         return out
 
 
-MIN_SCORED = 8  # fewer kept frames than this are no sample: the whole shot is scored, as with no spans
+MIN_SCORED = 25  # fewer kept frames than this are no sample (one second at 25 fps): the whole shot is scored, as with no spans
 
 
 def scored_frames(warp_json, n):

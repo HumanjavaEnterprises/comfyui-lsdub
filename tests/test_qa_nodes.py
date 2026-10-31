@@ -128,8 +128,8 @@ def test_scorecard_plate_mode_reaches_the_engine_and_the_key(pack, tmp_path, mon
 def test_fixit_schema_and_execute_end_on_scorecard(pack, tmp_path):
     import inspect
     F = pack.nodes_qa.LSDubFixIt
-    assert F.define_schema().inputs[-1].id == 'scorecard'
-    assert list(inspect.signature(F.execute).parameters)[-1] == 'scorecard'
+    assert [i.id for i in F.define_schema().inputs][-2:] == ['scorecard', 'ruler']
+    assert list(inspect.signature(F.execute).parameters)[-2:] == ['scorecard', 'ruler']
     T = pack.lsdub_types
     j = tmp_path / 's.json'
     j.write_text(json.dumps({'cuts': [{'shot': 3, 'score': 40, 'reason': 'static / near-still (diff 0.01) [0.10]'},
@@ -156,6 +156,19 @@ def _reasons(pack):
     assert r['reason'].startswith('vocalisation spans cover 50%')
     out += [r['reason'], 'identity drift (cos 0.70); ', 'no kit for target', 'sync gate failed: measured corr 0.1', 'dub error: x']
     return out
+
+
+def test_fixit_lists_ruler_notes_without_a_redo(pack, tmp_path):
+    R = importlib.import_module(pack.__name__ + '.lsdub_engine.audits.mouth_ruler')
+    T = pack.lsdub_types
+    default = pack.nodes_qa.fix_for('')
+    names = [n for n, _ in R.NOTES] + ['grain lost']
+    assert all(pack.nodes_qa.fix_for(n) != default for n in names)
+    j = tmp_path / 'r.json'
+    j.write_text(json.dumps({'shots': [{'shot': 3, 'notes': names}, {'shot': 4, 'note': 'left as source'}]}))
+    p, _, shots, *_ = _setup(pack, tmp_path)
+    md, force = pack.nodes_qa.LSDubFixIt.execute(p, shots, ruler=T.Report(json=str(j))).args
+    assert force == '' and md.count('mouth ruler:') == len(names) and 'The inner mouth went black' in md and '| 4 |' not in md
 
 
 def test_every_emitted_reason_has_a_fix(pack):

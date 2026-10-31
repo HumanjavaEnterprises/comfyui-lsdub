@@ -69,6 +69,8 @@ def _tracking_kept(ours, target, fps, max_lag, keep, z):
         i = i[keep[i] & keep[i - L]]
         if len(i) >= 3:
             c[L] = float(np.mean(z(ours[i]) * z(target[i - L])))
+    if not c:  # no lag leaves three kept pairs: nothing to read
+        return 0.0, 0.0, 0.0
     L = max(c, key=c.get)
     return c.get(0, 0.0), c[L], L * 1000.0 / fps
 

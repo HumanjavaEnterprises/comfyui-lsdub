@@ -292,9 +292,6 @@ FIXES = [
 ]
 
 
-SCORE_LOW = 55                                                                       # the Scorecard's amber line
-
-
 def fix_for(reason):
     r = (reason or '').lower()
     return next((f for k, f in FIXES if k in r), 'Review the shot by eye (LSDub Sync QA card).')
@@ -316,13 +313,14 @@ class LSDubFixIt(io.ComfyNode):
                 io.Float.Input('min_corr', default=0.5, min=0.0, max=1.0, step=0.05,
                                tooltip='A sung shot measuring below this sync corr is listed.'),
                 T.LSDubReport.Input('scorecard', optional=True, tooltip='A Scorecard report: its low-scoring shots are listed.'),
+                T.LSDubReport.Input('ruler', optional=True, tooltip='A Mouth Ruler report: its notes are listed, with what to try.'),
             ],
             outputs=[io.String.Output(display_name='md', tooltip='Markdown to-do: shot, problem, what to try.'),
                      io.String.Output(display_name='force_shots', tooltip='Paste into LSDub Project > force_shots.')],
         )
 
     @classmethod
-    def execute(cls, project, shots, report=None, sync=None, min_corr=0.5, render=None, scorecard=None):
+    def execute(cls, project, shots, report=None, sync=None, min_corr=0.5, render=None, scorecard=None, ruler=None):
         items = {}
         for s in shots.shots:
             if s.get('verdict') == 'NO' and s.get('voiced') and s.get('target'):
@@ -346,9 +344,14 @@ class LSDubFixIt(io.ComfyNode):
                 if c is not None and str(sid).isdigit() and float(c) < min_corr:
                     items.setdefault(int(sid), []).append((f'sync corr {float(c):.2f} < {min_corr}', fix_for('mouth off the vocal'), True))
         if scorecard is not None and scorecard.json and os.path.exists(scorecard.json):
+            from .lsdub_engine.audits.scorecard import AMBER
             for r in json.load(open(scorecard.json)).get('cuts', []):
-                if r.get('score') is not None and r['score'] < SCORE_LOW and r.get('shot') is not None:
+                if r.get('score') is not None and r['score'] < AMBER and r.get('shot') is not None:
                     items.setdefault(r['shot'], []).append((f"scorecard {r['score']:.0f}: {r.get('reason')}", fix_for(r.get('reason')), False))
+        if ruler is not None and ruler.json and os.path.exists(ruler.json):
+            for r in json.load(open(ruler.json)).get('shots', []):
+                for n in r.get('notes', []):                                                  # reported: no shot joins the redo list for it
+                    items.setdefault(r['shot'], []).append((f'mouth ruler: {n}', fix_for(n), False))
         redo = sorted(k for k, v in items.items() if any(x[2] for x in v))
         L = ['# LSDub fix-it', '', f"Mode {project.mode}. {len(items)} shot(s) to look at; redo: {','.join(map(str, redo)) or 'none'}.", '',
              '| shot | problem | what to try |', '|---|---|---|']
