@@ -88,8 +88,8 @@ SCRIPT = """## 1. decisions
 ### 5.1 Verse 1
 | # | v | s | Lyric | Story beat | Shot | Cam | Motion | Status |
 |---|---|---|---|---|---|---|---|---|
-| 18 | 20.04-21.92 | 8.04 | "Four hundred" | **Red sings** into the mics, pointing | 05C | CU | i2v | keep |
-| 21 | 25.67 | 13.67 | "..." | Battle-rap stance: Sky leans across the podium singing and pointing | 06A | MS | i2v | keep |
+| 18 | 20.04-21.92 | 8.04 | "Four hundred" | **Red sings** into the mics, pointing | 5C | CU | i2v | keep |
+| 21 | 25.67 | 13.67 | "..." | Battle-rap stance: Sky leans across the podium singing and pointing | 6A | MS | i2v | keep |
 | 22 | 26.61 | 14.61 | (cont.) | Sky's studded belt | D07 | insert | i2v | keep |
 | 56 | 85.67 | 73.67 | "..." | Full rave. The duo sing and dance at the decks | S5 | wide | x | keep |
 """
@@ -123,7 +123,7 @@ def _cast_result(f0, f1, who="red_nova", safe=True, px=320.0):
 
 
 def test_plan_maps_song_words_to_clip_frames():
-    cut = {"cut": [{"shot": f"S{i}", "start": 0.0, "dur": 1} for i in range(18)] + [{"shot": "05C", "start": 20.0, "dur": 1.88}]}
+    cut = {"cut": [{"shot": f"S{i}", "start": 0.0, "dur": 1} for i in range(18)] + [{"shot": "5C", "start": 20.0, "dur": 1.88}]}
     cast = {"results": [_cast_result(0, 46)]}
     words = [
         {"w": "four", "start": 8.10, "end": 8.40},
@@ -139,7 +139,7 @@ def test_plan_maps_song_words_to_clip_frames():
 
 
 def test_plan_roles_and_unsafe():
-    cut = {"cut": [{"shot": f"S{i}", "start": 0.0, "dur": 1} for i in range(18)] + [{"shot": "05C", "start": 20.0, "dur": 1.88}]}
+    cut = {"cut": [{"shot": f"S{i}", "start": 0.0, "dur": 1} for i in range(18)] + [{"shot": "5C", "start": 20.0, "dur": 1.88}]}
     cast = {"results": [_cast_result(0, 46, who="sky_lux", safe=False, px=120.0)]}
     words = [{"w": "four", "start": 8.10, "end": 8.40}]
     P = C.plan(cast, cut, words, {18: {"red_nova"}}, preset="landing")
@@ -148,7 +148,7 @@ def test_plan_roles_and_unsafe():
 
 
 def test_hook_is_a_dry_run_listing():
-    cut = {"cut": [{"shot": f"S{i}", "start": 0.0, "dur": 1} for i in range(18)] + [{"shot": "05C", "start": 20.0, "dur": 1.88}]}
+    cut = {"cut": [{"shot": f"S{i}", "start": 0.0, "dur": 1} for i in range(18)] + [{"shot": "5C", "start": 20.0, "dur": 1.88}]}
     P = C.plan({"results": [_cast_result(0, 46)]}, cut, [{"w": "four", "start": 8.10, "end": 8.40}], {18: {"red_nova"}}, preset="landing")
     cmds = C.hook(P, None, "lead.wav", "/w", "align.json")
     assert len(cmds) == 1

@@ -63,9 +63,9 @@ def test_texture_pop_is_a_short_burst_not_a_ramp():
 
 
 def test_blue_ruler_ignores_cool_lit_teeth_but_keeps_a_ghost():
-    """reco14 regression: 11C's open-mouth warp frames have cool-white teeth (BGR ~150,152,142; B - R = 8) where the
+    """regression: a cut's open-mouth warp frames have cool-white teeth (BGR ~150,152,142; B - R = 8) where the
     take showed skin. With the old B - R > 6 margin they counted as a ghost, every open frame was flagged and the
-    maker put the take's mouth back (the shipped 11C corr -0.35). Teeth must not count; a blue-grey ghost / a warped
+    maker put the take's mouth back (a shipped corr of -0.35). Teeth must not count; a blue-grey ghost / a warped
     mic (BGR ~124,118,100; B - R = 24) still must."""
     t = np.full((20, 20, 3), (90, 120, 180), np.uint8)
     m = np.ones((20, 20), bool)
@@ -83,7 +83,7 @@ def test_blue_ruler_ignores_cool_lit_teeth_but_keeps_a_ghost():
 
 
 def test_fix_alt_keeps_a_clean_grown_frame_and_drops_a_desynced_take():
-    """reco14 11C f10-14: a frame flagged only by growth, whose own paint is clean, keeps the render when the alt is
+    """Frames 10-14 of that cut: a frame flagged only by growth, whose own paint is clean, keeps the render when the alt is
     ghosted (not the take), and spreads no ease into its neighbours; a frame whose own paint is bad still gets the take."""
     t = np.full((20, 20, 3), (90, 120, 180), np.uint8)
     m = np.ones((20, 20), bool)

@@ -13,7 +13,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BANNED = re.compile('|'.join(['latent' + 'sync', 'wav2' + 'lip', 'sad' + 'talker', 'muse' + 'talk', 'insight' + 'face',
                               'arc' + 'face', 'ante' + 'lope', 'code' + 'former', 'gfp' + 'gan', '/ho' + 'me/', 'gpu' + 'host',
-                              r'\bmv\d+\b', r'\bv\d+_\d+\b', r'\bQA\d+ cut\b', r'\bs1234\b']), re.I)
+                              r'\bmv\d+\b', r'\bv\d+_\d+\b', r'\bQA\d+ cut\b', r'\bs1234\b', 'host-' + 'studio', r'\breco\d+\b', r'(?-i:\b(?:0\d|1[01])[A-D]\b)']), re.I)
 MACHINE_PATH = re.compile('~' + r'/(?!\.cache/lsdub\b)')
 SKIP_DIRS = {'.git', '__pycache__', '.ruff_cache', '.pytest_cache'}
 # every external process goes through io/ff.py (ffmpeg/ffprobe, the opt-in aligners, a validated interpreter)

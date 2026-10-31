@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""mouth_pin.py — pin the painted lower face to the REAL skin motion of the take (founder 2026-10-15, v11 05C:
+"""mouth_pin.py — pin the painted lower face to the REAL skin motion of the take (founder 2026-10-15:
 "the mouth is swimming behind the locked-in spot on the face").
 
 Why it swims: every paint stage places the mouth from MediaPipe landmarks, and on this take those landmarks miss the

@@ -1234,7 +1234,7 @@ def _parser():
         action="store_true",
         help="print each flag warning in full, those on flags a recipe or the sing SNAP set by itself too (or LSDUB_WARN_VERBOSE=1)",
     )
-    ap.add_argument("--annotate-faces", help="v12: extra keep-out boxes for the card (host-studio lyric_faces.py JSON)")
+    ap.add_argument("--annotate-faces", help="v12: extra keep-out boxes for the card (JSON: see audits/viseme_overlay.py)")
     return ap
 
 

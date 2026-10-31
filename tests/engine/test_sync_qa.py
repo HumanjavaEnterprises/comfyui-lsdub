@@ -18,7 +18,7 @@ def test_tracking_lag_sign_mouth_trails_is_positive():
 
 
 def test_plan_pixels_disagree():
-    assert Q.disagree(0.91, -0.41)  # 11C: the plan synced, the delivered pixels did not
+    assert Q.disagree(0.91, -0.41)  # the plan synced, the delivered pixels did not
     assert Q.disagree(0.9, float("nan")) and Q.disagree(0.9, None)  # pixels unmeasurable -> never trust the plan
     assert not Q.disagree(0.88, 0.80)  # 58: both agree
 

@@ -19,12 +19,21 @@ def test_version_is_clean_and_names_no_commit():
     assert re.fullmatch(r'[0-9a-f]{64}', v['tree_sha256'])
 
 
-def test_tree_hash_matches():
+def _tree(root):
     h = hashlib.sha256()
-    for d, ds, fs in sorted(os.walk(ENG)):
+    for d, ds, fs in sorted(os.walk(root)):
+        ds[:] = sorted(x for x in ds if x != '__pycache__')
         for f in sorted(fs):
             if f != 'VERSION' and '__pycache__' not in d:
                 p = os.path.join(d, f)
-                h.update(os.path.relpath(p, ENG).encode() + b'\0')
+                h.update(os.path.relpath(p, root).encode() + b'\0')
                 h.update(open(p, 'rb').read())
-    assert h.hexdigest() == _version()['tree_sha256']
+    return h.hexdigest()
+
+
+def test_tree_hash_matches():
+    assert _tree(ENG) == _version()['tree_sha256']
+
+
+def test_tests_hash_matches():
+    assert _tree(os.path.join(ROOT, 'tests', 'engine')) == _version()['tests_sha256']

@@ -47,7 +47,7 @@ def _norm(x):
 
 def tracking(ours, target, fps, max_lag=10):
     """-> (corr at 0 lag, best corr, best lag ms; + = ours LATER than the audio, the mouth trails).
-    NOTE (reco14 / round 4): before this fix the returned sign was inverted (+ meant the mouth LEADS); corr unchanged."""
+    NOTE: before this fix the returned sign was inverted (+ meant the mouth LEADS); corr unchanged."""
     z = lambda x: (x - x.mean()) / (x.std() + 1e-9)
     c = {
         L: float(np.mean(z(ours[L:]) * z(target[: len(target) - L]))) if L >= 0 else float(np.mean(z(ours[:L]) * z(target[-L:])))

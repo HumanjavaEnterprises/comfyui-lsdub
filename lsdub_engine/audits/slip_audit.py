@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""slip_audit.py — does the painted mouth stay PINNED to the face, or swim behind it? (founder 2026-10-15, v11 05C:
+"""slip_audit.py — does the painted mouth stay PINNED to the face, or swim behind it? (founder 2026-10-15:
 "the mouth is swimming behind the locked-in spot on the face ... it's mouthing accurately, just positioning")
 
 Shape changes are allowed; POSITION is not. So we measure motion, not shape:
@@ -56,7 +56,7 @@ def landmarks0(frame):
 
 
 def landmarks_first(frames):
-    """Frame-0 landmarks even when frame 0 has no detectable face (e.g. 06C: motion blur / small face on the first
+    """Frame-0 landmarks even when frame 0 has no detectable face (e.g. motion blur / small face on the first
     frame): detect on the first frame that has one, then carry those points back to frame 0 along dense flow."""
     for k, f in enumerate(frames):
         try:

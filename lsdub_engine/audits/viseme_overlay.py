@@ -28,7 +28,7 @@ ticks. Skipped / rested vocalisations show neither. --lyric-check writes the che
 and vocalisation span, video frames + song time), --lyrics-suggested the lyric sheet with '[heard: x]' suggestions.
 FACE RULE (captions never cover a face): per frame the card's box is tested against every face box -- MediaPipe face
 landmarks on the frame (cached in --face-cache), plus the boxes of --faces (a keep-out JSON: {"frames": [[{"b": [x0, y0,
-x1, y1]}, ...]]}, e.g. host-studio's lyric_faces.py) -- each padded like the studio face gate (10 %, 16 % above). A clip
+x1, y1]}, ...]]}, e.g. a face tracker's output) -- each padded like the studio face gate (10 %, 16 % above). A clip
 (one --edl segment, or the whole video) uses the lower-right corner when it is clear on every frame of the clip, else
 the lower-left, else a band appended BELOW the picture for that clip (whole clip, so the card never jumps; the video
 then carries the band throughout, empty for the corner clips). --corner band forces the band. The placement per clip
@@ -588,7 +588,7 @@ def gating(h, sure=0.5, yunet_floor=0.9):
 
 
 def keepout(path, strict=False):
-    """a keep-out JSON (host-studio lyric_faces.py: {"frames": [[{"b": [...], "src": ..., "score": ...}]]}, or a list of
+    """a keep-out JSON ({"frames": [[{"b": [...], "src": ..., "score": ...}]]}, or a list of
     lists of boxes) -> per frame [[x0, y0, x1, y1], ...]: the gating boxes, or every box with strict."""
     z = json.load(open(path))
     fr = z["frames"] if isinstance(z, dict) else z
@@ -694,7 +694,7 @@ def main(argv=None):
         help="what the render did with the vocalisations (as lsdub paint, whose default is skip since v11): "
         "mouth = v9 (mouthed, tagged ad-lib); auto = skip on a marked track, mouth on an unmarked one",
     )
-    ap.add_argument("--faces", help="extra keep-out boxes JSON (e.g. host-studio lyric_faces.py heads.json; its gating boxes)")
+    ap.add_argument("--faces", help="extra keep-out boxes JSON (a face tracker's gating boxes)")
     ap.add_argument("--faces-strict", action="store_true", help="with --faces: every box, also the weak / person-matte ones")
     ap.add_argument("--face-cache", help="cache of the MediaPipe face boxes (default <out>_faces.json)")
     ap.add_argument("--no-mediapipe", action="store_true", help="no MediaPipe face detection: only --faces boxes")
