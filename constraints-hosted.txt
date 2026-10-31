@@ -1,0 +1,13 @@
+# The hosted dependency universe: the pipDependencies of the Comfy Build `lsdub-livetry`, verbatim.
+# Source: lsdub-livetry-build/comfy-build.yaml (the yaml stays the source; regenerate this file from it).
+# build-id: 5118c16a-64fb-4ab5-99a5-9676089a8070
+# syncedRevision: 2026-10-30T16:33:34.48318Z
+# Use: pip install -r requirements.txt -c constraints-hosted.txt
+mediapipe==0.10.21
+numpy<2
+scipy==1.14.1
+contourpy==1.3.0
+matplotlib==3.9.4
+opencv-python-headless==4.10.0.84
+opencv-contrib-python==4.10.0.84
+transformers==5.20.0

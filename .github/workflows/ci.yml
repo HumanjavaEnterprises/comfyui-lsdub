@@ -8,6 +8,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        deps: [floating, constraints]   # floating = the pyproject ranges; constraints = the hosted build's pins
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065   # v5
@@ -19,7 +23,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu   # the DINOv2 load-by-path test
-          pip install -r requirements.txt pytest ruff comfy-cli
+          if [ "${{ matrix.deps }}" = constraints ]; then CONSTRAINT="-c constraints-hosted.txt"; else CONSTRAINT=""; fi
+          pip install -r requirements.txt pytest ruff comfy-cli packaging $CONSTRAINT
+          pip freeze | grep -iE '^(mediapipe|numpy|opencv|scipy|transformers)'
       - name: Ruff (registry rules as errors)
         run: ruff check --select S102,S307,E702,F --target-version py310 .
       - name: Tests (ComfyUI stubbed, CPU)

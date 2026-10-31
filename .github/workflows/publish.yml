@@ -10,12 +10,12 @@ jobs:
     if: github.repository == 'HumanjavaEnterprises/comfyui-lsdub'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5
+      - name: Release notes from the top CHANGELOG section
+        run: |
+          awk '/^## /{n++} n==1' CHANGELOG.md | sed '1s/^## /LSDub /' > "$RUNNER_TEMP/notes.md"
+          test -s "$RUNNER_TEMP/notes.md"
+          { echo 'COMFY_NODE_CHANGELOG<<LSDUB_NOTES_EOF'; cat "$RUNNER_TEMP/notes.md"; echo 'LSDUB_NOTES_EOF'; } >> "$GITHUB_ENV"
       - uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9   # main, 2026-10
-        env:
-          COMFY_NODE_CHANGELOG: |
-            LSDub 0.1.3 (2026-10-30)
-
-            - Speech-to-text falls back to the CPU when the GPU runtime is missing (for example CUDA 12 cuBLAS on a CUDA 13 image), so Align works on hosted GPUs.
         with:
           personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}   # set this secret in the repo settings
           skip_checkout: 'true'
