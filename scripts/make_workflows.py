@@ -4,7 +4,7 @@
 """Build example_workflows/*.json (ComfyUI UI format) from the LSDub node schemas, plus same-name .jpg thumbnails.
 
   python scripts/make_workflows.py            (no ComfyUI needed: the schemas are read with the test stubs)
-  python scripts/make_workflows.py --check    (the committed JSONs against what this script builds; writes nothing)
+  python scripts/make_workflows.py --check    (the committed JSONs against what this script builds, byte for byte; writes nothing)
 
 Workflows 1 to 3 use preset=landing, workflow 4 preset=none; all use backend=local and the demo assets from scripts/fetch_demo.py."""
 import json
@@ -338,7 +338,7 @@ def main():
                           ('3-LSDub-Test-and-Learn', test_and_learn(), 'triage, sync QA and fix-it notes, no dub'),
                           ('4-LSDub-Make-Your-Character-Sing', make_character_sing(), 'a song + a character image -> a singing video')):
         if check:
-            if json.load(open(os.path.join(out, name + '.json'))) != json.loads(json.dumps(wf.json())): stale.append(name)
+            if open(os.path.join(out, name + '.json'), encoding='utf-8').read() != json.dumps(wf.json(), indent=1): stale.append(name)
             continue
         json.dump(wf.json(), open(os.path.join(out, name + '.json'), 'w'), indent=1)
         if os.environ.get('LSDUB_API_OUT'):
