@@ -5,11 +5,9 @@ pack's own dependency ranges (pyproject.toml and requirements.txt agree too)."""
 import os
 import re
 
-import pytest
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONSTRAINTS = os.path.join(ROOT, 'constraints-hosted.txt')
-YAML_DEFAULT = os.path.join(os.path.dirname(ROOT), 'lsdub-livetry-build', 'comfy-build.yaml')
+BUILD_YAML = os.path.join(ROOT, 'comfy-build.yaml')
 
 
 def _lines(text):
@@ -57,10 +55,7 @@ def _pyproject_deps():
 
 
 def test_constraints_match_build_yaml():
-    path = os.environ.get('LSDUB_BUILD_YAML', YAML_DEFAULT)
-    if not os.path.isfile(path):
-        pytest.skip(f'build yaml not present ({path}); set LSDUB_BUILD_YAML to check')
-    with open(path, encoding='utf-8') as f:
+    with open(BUILD_YAML, encoding='utf-8') as f:
         text = f.read()
     assert _constraints() == _yaml_pip(text)
     assert _header('build-id') == re.search(r'^id: (\S+)', text, re.M).group(1)

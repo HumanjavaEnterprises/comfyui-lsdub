@@ -1,0 +1,62 @@
+schema: comfy-build/1
+id: 5118c16a-64fb-4ab5-99a5-9676089a8070
+name: lsdub-livetry
+description: 'LSDub LiveTry: ComfyUI + comfyui-lsdub v0.1.0 + the open-weights models for example workflows 2 and 3 (and the 4 vocal split).'
+syncedRevision: '2026-10-30T16:33:34.48318Z'
+definition:
+  schema: distribution-definition/0
+  baseComfyVersion: 4e024cb1e8423be735b919c585669dc189735c7b
+  models:
+    - filename: MelBandRoformer_kim_vocals.ckpt
+      sha256: 87201f4d31afb5bc79993230fc49446918425574db48c01c405e44f365c7559e
+      sourceUri: https://huggingface.co/KimberleyJSN/melbandroformer/resolve/main/MelBandRoformer.ckpt
+      type: audio_separation
+    - filename: face_detection_yunet_2023mar.onnx
+      sha256: 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
+      sourceUri: https://huggingface.co/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx
+      type: lsdub
+    - filename: face_landmarker.task
+      sha256: 64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff
+      sourceUri: https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+      type: lsdub
+    - filename: config.json
+      sha256: f7ff4cfa73d2f70647dbf6950541ad25d73082d54c2e7e9bded160c7656b2a70
+      sourceUri: https://huggingface.co/facebook/dinov2-base/resolve/f9e44c814b77203eaa57a6bdbbd535f21ede1415/config.json
+      type: lsdub/dinov2/models--facebook--dinov2-base/snapshots/f9e44c814b77203eaa57a6bdbbd535f21ede1415
+    - filename: model.safetensors
+      sha256: d73036b56966966d07975d696bde331762f37297e2f095de8cea0040c3aa0841
+      sourceUri: https://huggingface.co/facebook/dinov2-base/resolve/f9e44c814b77203eaa57a6bdbbd535f21ede1415/model.safetensors
+      type: lsdub/dinov2/models--facebook--dinov2-base/snapshots/f9e44c814b77203eaa57a6bdbbd535f21ede1415
+    - filename: config.json
+      sha256: a9306624f5ec14270a014b647e5c316b6e03a662c369758d1b90697a7b0655b9
+      sourceUri: https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/config.json
+      type: lsdub/whisper/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478
+    - filename: model.bin
+      sha256: 69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1
+      sourceUri: https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/model.bin
+      type: lsdub/whisper/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478
+    - filename: preprocessor_config.json
+      sha256: 7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711
+      sourceUri: https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/preprocessor_config.json
+      type: lsdub/whisper/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478
+    - filename: tokenizer.json
+      sha256: 6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca
+      sourceUri: https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/tokenizer.json
+      type: lsdub/whisper/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478
+    - filename: vocabulary.json
+      sha256: c69260f2ab26d659b7c398f9a2b2b48ed0df16c3b47d7326782fd9cba71690c1
+      sourceUri: https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/vocabulary.json
+      type: lsdub/whisper/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478
+  customNodes:
+    - gitRef: 3c045f4370ffc37279f31dec25e05345340b9d80
+      name: comfyui-lsdub
+      repository: https://github.com/HumanjavaEnterprises/comfyui-lsdub
+  pipDependencies: |+
+    mediapipe==0.10.21
+    numpy<2
+    scipy==1.14.1
+    contourpy==1.3.0
+    matplotlib==3.9.4
+    opencv-python-headless==4.10.0.84
+    opencv-contrib-python==4.10.0.84
+    transformers==5.20.0
