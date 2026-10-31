@@ -2621,7 +2621,7 @@ class LayerCompositor:
                     L["L3"][1] * (1 - np.maximum(cf_a, om)),
                 )  # the arch lowers yield to the fill (corners too: no grey line)
         if self.take_interior is not None:  # the take's own tongue and cavity pixels in the opening
-            it_rgb, it_a = self.take_interior.paint(i, Q, box, self.interior_ap(Po), L["L4"][1])
+            it_rgb, it_a = self.take_interior.paint(i, Q, box, self.interior_ap(Po), L["L4"][1], L["L4"][0])
             L["L2"] = (L["L2"][0] * (1 - it_a[..., None]) + it_rgb * it_a[..., None], L["L2"][1])
             L["L3"] = (L["L3"][0], L["L3"][1] * (1 - it_a))
         if band_log:

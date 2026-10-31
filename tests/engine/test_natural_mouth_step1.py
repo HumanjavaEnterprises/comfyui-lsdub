@@ -107,3 +107,31 @@ def test_reveal_sees_a_wider_mouth():
     same = MR.reveal(T, C, T, C, (200, 200))
     wide = MR.reveal(T, C, W, C, (200, 200))
     assert same["unseen_max"] == pytest.approx(0, abs=0.01) and wide["unseen_mean"] > 0.3 and wide["frames_past_take"] == 4
+
+
+def _pick(gap_take, gap_plan):
+    import types
+
+    t = IT.TakeInterior.__new__(IT.TakeInterior)
+    n = len(gap_take)
+    t.frames, t.ap = [None] * len(gap_plan), np.asarray(gap_take, float) / 100
+    bank = types.SimpleNamespace(F=np.c_[gap_take, np.full(n, 100.0)], pose=np.zeros((n, 3)))
+    return t.pick(bank, np.c_[gap_plan, np.full(len(gap_plan), 100.0)], np.array([10.0, 10.0]), 2.0)
+
+
+def test_interior_donor_is_never_narrower_than_the_plan():
+    take = [8, 12, 20, 30, 40, 50] * 2
+    js = _pick(take, [40] * 12)
+    assert all(take[j] >= 0.85 * 40 for j in js)
+
+
+def test_interior_donor_past_the_takes_widest_uses_the_widest():
+    take = [8, 20, 50, 48] * 2
+    assert all(take[j] >= 45 for j in _pick(take, [80] * 8))
+
+
+def test_interior_donor_holds_through_a_wobble():
+    take = list(range(30, 50)) * 2
+    plan = [40 + 2 * (-1) ** i for i in range(40)]
+    js = _pick(take, plan)
+    assert (js[1:] != js[:-1]).sum() <= 1
