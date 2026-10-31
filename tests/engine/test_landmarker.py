@@ -46,7 +46,7 @@ def test_bad_mode(fake):
 
 
 def test_warns_once_when_mediapipe_came_first(monkeypatch, caplog):
-    monkeypatch.setattr(L, "_warned", False)
+    monkeypatch.setattr(L, "_checked", False)
     monkeypatch.setitem(sys.modules, "mediapipe", object())
     with caplog.at_level(logging.WARNING, "lsdub"):
         L.mp()
