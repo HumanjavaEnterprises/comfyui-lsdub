@@ -2852,7 +2852,7 @@ class LayerCompositor:
             float(smootherstep((op - (0.55 - 0.30 * talk)) / 0.35))
             * (0.10 + 1.10 * talk)
             * (1.0 - 0.45 * float(smootherstep((hmax / max(1.0, io) - 0.20) / 0.10)))
-            * (self.fill_l3 != "restore")
+            * (getattr(self, "fill_l3", "hide") != "restore")
         )  # very wide: tongue over them
         if lw > 0:
             m = up_a > 0.6
