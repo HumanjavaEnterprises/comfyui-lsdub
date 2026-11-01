@@ -57,7 +57,7 @@ def test_keep_scores_the_kept_frames():
 def stub_gate(monkeypatch, tmp_path, op):
     monkeypatch.setattr(MED, "read", lambda v, n=None: ([np.zeros((64, 64, 3), np.uint8)] * len(op), 25.0))
     monkeypatch.setattr(Q, "measured_opening", lambda B, roi, fps: (op, 1.0))
-    monkeypatch.setattr(SN, "snap_metrics", lambda *a: dict(open_in_silence=0.1, rise_ms=None, closure_hit=None, closures=0, onsets=0))
+    monkeypatch.setattr(SN, "snap_metrics", lambda *a, **k: dict(open_in_silence=0.1, rise_ms=None, closure_hit=None, closures=0, onsets=0))
     monkeypatch.setattr(sing, "vocal_clip", lambda *a: "v.wav")
     al = tmp_path / "align.json"
     al.write_text('{"words": []}')
@@ -90,7 +90,7 @@ def measure(monkeypatch, tmp_path, op, tg, **s):
     monkeypatch.setattr(Q, "singer_roi", lambda *a: [0, 64, 0, 64])
     monkeypatch.setattr(Q, "measured_opening", lambda B, roi, fps: (op, 1.0))
     monkeypatch.setattr(SN, "envelope", lambda v, n, fps: tg)
-    monkeypatch.setattr(SN, "snap_metrics", lambda *a: dict(open_in_silence=0.1))
+    monkeypatch.setattr(SN, "snap_metrics", lambda *a, **k: dict(open_in_silence=0.1))
     monkeypatch.setattr(qa.ff, "run", lambda *a, **k: None)
     shot = dict(shot=0, f0=0, f1=len(op) - 1, start=0.0, **s)
     return qa.measure_shot("v", shot, 25.0, 0.0, "v", np.ones(len(op), bool), None, [], lambda f: [], str(tmp_path), Q, SN)

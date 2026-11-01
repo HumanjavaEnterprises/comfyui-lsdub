@@ -623,6 +623,20 @@ def most_closed(S, gap, pose, fit=None):
 IN_PAIRS = [(95, 191), (88, 80), (178, 81), (87, 82), (14, 13), (317, 312), (402, 311), (318, 310), (324, 415)]
 
 
+def lip_seam(P):
+    """outer lip loop (20), corner 78, the upper inner points, corner 308, the lower inner points: lip_frame with the two inner
+    lips apart. On a target the two share the contact line, so the source's gap between them lands on no pixels."""
+    P = np.asarray(P, float)[:, :2]
+    return np.vstack([P[ll.LIP_OUT], P[78], P[[b for _, b in IN_PAIRS]], P[308], P[[a for a, _ in IN_PAIRS]]])
+
+
+def seam_dst(P):
+    """lip_seam's points on a target: both inner lips on lip_frame's contact line."""
+    f = lip_frame(P)
+    k = len(ll.LIP_OUT)
+    return np.vstack([f, f[k + 1 : k + 1 + len(IN_PAIRS)]])
+
+
 def lip_frame(P):
     """outer lip loop (20) + the lips' contact line (corners 78 / 308 + the midpoints of the 9 paired inner points)."""
     P = np.asarray(P, float)[:, :2]
@@ -638,7 +652,7 @@ class EraseLayer:
     own lips or the target lips are (both hulls grown), blended in by the per-frame alpha. A per-frame Lab match on the
     skin band around the region (eased zero-phase at finish) keeps the layer on the frame's light."""
 
-    def __init__(self, ref_img, ref_P, pl, r, ref3, grow=0.22, ring_r=1.9):
+    def __init__(self, ref_img, ref_P, pl, r, ref3, grow=0.22, ring_r=1.9, close=False):
         self.lips_img = ref_img
         self.bald, _ = ll.erase_lips(ref_img, ref_P, grow)
         self.P = np.asarray(ref_P, float)
@@ -654,7 +668,10 @@ class EraseLayer:
         # the mesh: outer lip loop + the lips' CONTACT line (midpoints of the paired upper / lower inner-lip points) + the
         # ring. The inner loop itself is never a vertex set: on a closed mouth its upper and lower points nearly coincide,
         # and those sliver triangles flip under any change of shape (lips sampled from the wrong place)
-        sp = np.vstack([lip_frame(self.P), self.ring])
+        # close: a reference frame that is not shut shows its own gap (teeth in a slit) on a closure, so its inner lips go apart in
+        # the source mesh and onto one line in the target; a reference already shut (under 1.5 px) keeps the contact line
+        self.close = bool(close) and float(np.median([np.linalg.norm(self.P[a] - self.P[b]) for a, b in IN_PAIRS])) > 1.5
+        sp = np.vstack([lip_seam(self.P) if self.close else lip_frame(self.P), self.ring])
         self.tris = Delaunay(sp).simplices
         self.lab, self.items = [], {}
         # the reference ring points in the canonical frame (orthographic lift on the lower-face points' plane)
@@ -664,8 +681,9 @@ class EraseLayer:
     def composite(self, out, i, P_take, P_dst, alpha, kind="closed"):
         H, W = out.shape[:2]
         ring_i = self.pl.rigid(i, self.ring_c)
-        sp = np.vstack([lip_frame(self.P), self.ring])
-        dp = np.vstack([lip_frame(P_dst), ring_i])
+        shut = self.close and kind == "closed"
+        sp = np.vstack([lip_seam(self.P) if self.close else lip_frame(self.P), self.ring])
+        dp = np.vstack([seam_dst(P_dst) if shut else lip_seam(P_dst) if self.close else lip_frame(P_dst), ring_i])
         x0, y0 = np.maximum(0, np.floor(dp.min(0)).astype(int) - 2)
         x1, y1 = np.minimum([W, H], np.ceil(dp.max(0)).astype(int) + 3)
         box = (x0, y0, x1 - x0, y1 - y0)
@@ -1510,7 +1528,16 @@ class WarpClip:
             if opt("warp_interior_source", "model") == "take":
                 from .interior_take import TakeInterior
 
-                comp.take_interior = TakeInterior(self.bank, frames, S, Fe, self.scale, g("warp_pose_w", 2.0), moved=self.sync_frames)
+                comp.take_interior = TakeInterior(
+                    self.bank,
+                    frames,
+                    S,
+                    Fe,
+                    self.scale,
+                    g("warp_pose_w", 2.0),
+                    moved=self.sync_frames,
+                    open_floor=opt("warp_interior_open_floor", 0.0),
+                )
             if opt("warp_teeth_fit", "off") == "take":
                 from .interior_take import TeethFit, clean_atlas
 
@@ -1622,7 +1649,8 @@ class WarpClip:
     def setup_erase(self):
         g, n, frames, S, F, Fe, model, pl = self.g, self.n, self.frames, self.S, self.F, self.Fe, self.model, self.pl
         er = g("warp_erase", "off")
-        al = erase_alpha(F[:, 0], Fe[:, 0], model.rng, g("warp_erase_thr", 0.12), er == "all", F[:, 1], Fe[:, 1])
+        self.er_gap = Fe[:, 0] if not g("warp_erase_close", False) else np.minimum(Fe[:, 0], F[:, 0] + self.dFe_pre_fold[:, 0])
+        al = erase_alpha(F[:, 0], self.er_gap, model.rng, g("warp_erase_thr", 0.12), er == "all", F[:, 1], Fe[:, 1])
         # never paste at a mistracked frame: the take's lip landmarks must sit on lip-coloured pixels
         st_ = [ll.lip_stats(frames[i], S[i][:, :2]) for i in range(n)]
         okst = [x for x in st_ if x is not None]
@@ -1633,7 +1661,9 @@ class WarpClip:
         else:
             fit = np.ones(n)
         r_ = most_closed(S, F[:, 0], self.pose, fit)
-        self.erase = EraseLayer(frames[r_], S[r_][:, :2], pl, r_, self.S3raw[r_], grow=g("warp_erase_grow", 0.22))
+        self.erase = EraseLayer(
+            frames[r_], S[r_][:, :2], pl, r_, self.S3raw[r_], grow=g("warp_erase_grow", 0.22), close=g("warp_erase_close", False)
+        )
         self.er_al, self.er_fit, self.er_ref = al, fit, r_
 
     def erase_one(self, i, out, ov=None, rerender=False):
@@ -1643,7 +1673,7 @@ class WarpClip:
         if al_i <= 0.01:
             return out, None, {}
         g, F = self.g, self.F
-        gap_t = float(F[i, 0] + ov["dFe"][0]) if "dFe" in ov else self.Fe[i, 0]
+        gap_t = float(F[i, 0] + ov["dFe"][0]) if "dFe" in ov else self.er_gap[i]
         P_take = ov.get("S_take", ov.get("S", self.S[i]))[:, :2]
         P_out = ov.get("P_out", self.P_out[i])
         if rerender:

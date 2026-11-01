@@ -94,6 +94,14 @@ def face_roi(roi, shape, k=2.6):
     return [int(max(0, cy - s / 2)), int(min(H, cy + s / 2)), int(max(0, cx - s / 2)), int(min(W, cx + s / 2))]
 
 
+_SHAPE = {}  # the last measured_opening's readings beside its return value
+
+
+def shape_of(frames):
+    """(gap, width) per frame in eye distances, from the measured_opening that read these frames; None if none did."""
+    return (_SHAPE["gap_iod"], _SHAPE["width_iod"]) if _SHAPE.get("frames") is frames else None
+
+
 def measured_opening(frames, roi, fps=25.0):
     """The RENDERED mouth opening, per frame: MediaPipe inner-lip gap (13-14) / face height (10-152) on the ROI crop,
     upscaled 2x. NaN where no face; gaps filled by interpolation. This is what the viewer sees -- the plan (egap) is not."""
@@ -102,6 +110,7 @@ def measured_opening(frames, roi, fps=25.0):
     det = landmarker.get("video", conf=0.2)
     y0, y1, x0, x1 = roi
     op = np.full(len(frames), np.nan)
+    giod, wiod = np.full(len(frames), np.nan), np.full(len(frames), np.nan)
     for i, f in enumerate(frames):
         c = cv2.resize(f[y0:y1, x0:x1], None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
         r = det.detect_for_video(
@@ -111,8 +120,11 @@ def measured_opening(frames, roi, fps=25.0):
             L = r.face_landmarks[0]
             p = lambda j: np.array([L[j].x * c.shape[1], L[j].y * c.shape[0]])
             op[i] = np.linalg.norm(p(13) - p(14)) / (np.linalg.norm(p(10) - p(152)) + 1e-9)
+            iod = np.linalg.norm(p(33) - p(263)) + 1e-9
+            giod[i], wiod[i] = np.linalg.norm(p(13) - p(14)) / iod, np.linalg.norm(p(61) - p(291)) / iod
     det.close()
     ok = ~np.isnan(op)
+    _SHAPE.update(frames=frames, gap_iod=giod, width_iod=wiod)
     return (np.interp(np.arange(len(op)), np.where(ok)[0], op[ok]) if ok.sum() >= 5 else None), float(ok.mean())
 
 
@@ -246,6 +258,7 @@ def render(take, rend, warp_json, dyn, t0, audio, out, track=None, roi=None, hal
         carded = os.path.join(tmp, "card.mp4")
         viseme_overlay.main(
             ["--video", raw, "--track", track, "--out", carded, "--no-mediapipe", "--corner", "lower-right", "--scale", "1.0"]
+            + (["--warp-json", warp_json] if warp_json else [])
         )
         src = carded
     ff.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-c", "copy", "-movflags", "+faststart", out], check=True)

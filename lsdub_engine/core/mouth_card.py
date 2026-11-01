@@ -50,6 +50,8 @@ def annotate_args(a):
         "--lyrics-suggested",
         sg,
     ]
+    if getattr(a, "warp_json", None):
+        argv += ["--warp-json", a.warp_json]
     if getattr(a, "skip_words", None):
         argv += ["--skip-words", a.skip_words]
     if getattr(a, "skip_lyrics", None):

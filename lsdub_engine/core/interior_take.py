@@ -94,10 +94,13 @@ def skin_ring(frame, P):
 
 
 class TakeInterior:
-    def __init__(self, bank, frames, S, Fe, scale, pose_w=2.0, moved=None):
+    def __init__(self, bank, frames, S, Fe, scale, pose_w=2.0, moved=None, open_floor=0.0):
         """moved: frames per frame the plan was moved earlier (--coart-sync-vocal): the donors are picked on the plan as it stood and
-        move with it, so moving the plan does not change which of the take's frames fill it."""
+        move with it, so moving the plan does not change which of the take's frames fill it. open_floor: donors open at least this
+        percentile (0..1) of the take's open frames: a narrow planned mouth is filled from a frame with an interior to show, since a
+        narrow donor's opening is lip rim, which the pink sink turns into a flat slot."""
         self.frames, self.S = frames, S
+        self.open_floor = float(open_floor)
         n = len(frames)
         self.ap = np.array([aperture(np.asarray(S[i])) for i in range(n)])
         self.share, self.dark = np.zeros(n), np.full(n, np.nan)
@@ -158,18 +161,19 @@ class TakeInterior:
         n, gap = len(self.frames), bank.F[:, 0]
         usable = self.ap >= OPEN_MIN
         top = float(gap[usable].max()) if usable.any() else 0.0
+        floor = float(np.percentile(gap[usable], 100 * self.open_floor)) if self.open_floor > 0 and usable.any() else 0.0
         js, prev, since = np.full(n, -1), -1, 0
         speed = np.abs(np.diff(Fe[:, 0], prepend=Fe[0, 0]))
         still = speed < np.percentile(speed, STILL_PCT)  # a change of pixels shows on a held mouth and hides in a moving one
         for i in range(n):
-            fit = usable & (gap >= min(OPEN_FIT * Fe[i, 0], 0.9 * top))
+            fit = usable & (gap >= max(floor, min(OPEN_FIT * Fe[i, 0], 0.9 * top)))
             cost = np.max(np.abs(bank.F - Fe[i]) / scale, axis=1) + pose_w * np.linalg.norm(bank.pose - bank.pose[i], axis=1)
             cost = np.where(fit, cost, np.inf)
             j = int(np.argmin(cost)) if fit.any() else prev
             if (
                 prev >= 0
                 and usable[prev]
-                and gap[prev] >= min(OPEN_KEEP * Fe[i, 0], 0.9 * top)
+                and gap[prev] >= max(floor, min(OPEN_KEEP * Fe[i, 0], 0.9 * top))
                 and (still[i] or since < DWELL or cost[prev] <= cost[j] + HOLD)
             ):
                 j = prev

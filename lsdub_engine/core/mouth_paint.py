@@ -449,6 +449,12 @@ def _parser():
         default=0.12,
         help="warp: target opening (x the take's range) below which a frame is a closure for --warp-erase",
     )
+    ap.add_argument(
+        "--warp-erase-close",
+        action="store_true",
+        help="warp: a closure layer shuts for real: a closure is read on the plan before the fold guard, and the reference frame's "
+        "own gap is taken out of its lips (upper and lower inner lip land on one contact line)",
+    )
     ap.add_argument("--warp-erase-grow", type=float, default=0.22, help="warp: growth of the erased lip region (x the lip hull)")
     ap.add_argument(
         "--warp-lip-lock",
@@ -852,6 +858,13 @@ def _parser():
         "its full range of openings and its share of shut frames, not a compressed middle",
     )
     ap.add_argument(
+        "--coart-gap-anchor",
+        choices=["take", "top"],
+        default="take",
+        help="coart: how the plan's gap meets the take's range. take = the take's distribution (an open-mouthed take lifts the "
+        "narrow classes); top = proportional, 0 stays 0 and the plan's p95 lands on the take's. Width keeps its map",
+    )
+    ap.add_argument(
         "--coart-rest-ms",
         type=float,
         default=120.0,
@@ -928,6 +941,13 @@ def _parser():
         "best = keep the best-scoring candidate when it beats the original (logged UNRESOLVED), none = leave it as round 0",
     )
     # (opt-in): the interior seen only through the warped lips; layer debug stabilisation; the registration ruler ---
+    ap.add_argument(
+        "--warp-interior-open-floor",
+        type=float,
+        default=0.0,
+        help="warp (--warp-interior-source take): donors open at least this percentile (0..1) of the take's open frames, so a narrow "
+        "planned mouth keeps an interior to show. 0 = off",
+    )
     ap.add_argument(
         "--warp-interior-clip",
         action="store_true",

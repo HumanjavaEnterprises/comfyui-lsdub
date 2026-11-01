@@ -8,6 +8,8 @@
                     and slots in at `overrides_at`, so the expanded argv is token for token the preset's flags
   layers_v16_1_interior  layers_v16_1 with the mouth interior filmed from the take (--warp-interior-source take, its pink cap
                     included); teeth fit stays off
+  layers_v16_1_shape  layers_v16_1_interior with the plan's gap anchored at the top (--coart-gap-anchor top) and closures that shut
+                    (--warp-erase-close), and interior donors that stay open (--warp-interior-open-floor)
   layers_v16_1_min  the same minus the flags listed in `inert_under`. A candidate, nothing ships it
   morph             the `lsdub pipeline` path: `paint --mode morph` (the paint default), no warp flags
 
@@ -228,6 +230,21 @@ RECIPES = {
         Recipe("plain"),
         Recipe("layers_v16_1", LAYERS_V16_1, INERT, overrides_at=4),
         Recipe("layers_v16_1_interior", (*LAYERS_V16_1, "--warp-interior-source", "take"), INERT, overrides_at=4),
+        Recipe(
+            "layers_v16_1_shape",
+            (
+                *LAYERS_V16_1,
+                "--warp-interior-source",
+                "take",
+                "--coart-gap-anchor",
+                "top",
+                "--warp-erase-close",
+                "--warp-interior-open-floor",
+                "0.5",
+            ),
+            INERT,
+            overrides_at=4,
+        ),
         Recipe("layers_v16_1_min", without(LAYERS_V16_1, INERT), INERT),
         Recipe("morph"),
     )
@@ -238,6 +255,7 @@ MOUTH_STACKS = {
     "plain": "plain",
     "layers": "layers_v16_1",
     "layers_interior": "layers_v16_1_interior",
+    "layers_shape": "layers_v16_1_shape",
 }  # the pack's mouth_stack option -> the recipe it resolves to
 
 

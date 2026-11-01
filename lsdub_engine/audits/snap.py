@@ -24,6 +24,7 @@ SIL_RMS = 0.02
 CLOSE_FRAC = 0.25
 RISE_WIN = 0.30
 CLOSERS = {"P", "B", "M"}
+CLOSED_IOD = 0.06  # lips shut: the inner gap under this share of the eye distance. Shut lips read 0.05 on the tracker, a slit about 0.09
 
 
 def envelope(wav, n, fps=25.0):
@@ -88,6 +89,29 @@ def closure_hit(op, frames, frac=CLOSE_FRAC):
     x = norm(op)
     hits = [bool(np.min(x[max(0, f - 1) : f + 2]) <= frac) for f in frames]
     return (float(np.mean(hits)) if hits else None), len(hits)
+
+
+def closure_real(gap_iod, frames, thr=CLOSED_IOD):
+    """share of p / b / m phones where the lips are shut in absolute terms: within +-1 frame of the phone's middle the gap, in eye
+    distances, falls under thr. closure_hit reads the shot's own range, so a slit passes it on an open-mouthed shot."""
+    g = np.asarray(gap_iod, float)
+    hits = [bool(np.nanmin(g[max(0, f - 1) : f + 2]) <= thr) for f in frames if np.isfinite(g[max(0, f - 1) : f + 2]).any()]
+    return (float(np.mean(hits)) if hits else None), len(hits)
+
+
+def class_contrast(gap, classes, opens):
+    """how far the delivered height follows the card, class by class. classes: the plan's viseme per frame ("" = out); opens: {class:
+    the card's opening}. -> (slope of gap / the aa median against the card's opening / aa's, r, {class: median gap}); (None, None, {})
+    without an aa or a second class."""
+    g, c = np.asarray(gap, float), np.asarray(classes, object)
+    m = np.isfinite(g) & np.array([x in opens for x in c], bool)
+    aa = m & (c == "aa")
+    if aa.sum() < 3 or len(set(c[m])) < 2 or np.median(g[aa]) <= 0:
+        return None, None, {}
+    x = np.array([opens[v] for v in c[m]], float) / opens["aa"]
+    y = g[m] / np.median(g[aa])
+    med = {v: round(float(np.median(g[m & (c == v)])), 4) for v in sorted(set(c[m]))}
+    return round(float(np.polyfit(x, y, 1)[0]), 3), round(float(np.corrcoef(x, y)[0, 1]), 3), med
 
 
 def open_in_silence(op, env, thr=SIL_RMS):

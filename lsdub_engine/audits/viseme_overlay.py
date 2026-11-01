@@ -544,6 +544,7 @@ class Card:
             if fq_ and (fq_["diff"] or fq_["weak"]):
                 d.rectangle([xa, ty - int(5 * s), xb, ty - int(3 * s)], fill=HEARD if fq_["diff"] else WEAK)
         d.text((xr, ty + th // 2), "1 s", font=self.f_small, fill=DIM, anchor="rm")
+        d.text((W - int(9 * s), int(6 * s)), "PLAN", font=self.f_small, fill=DIM, anchor="rt")  # the card is the plan, not the render
         out = (np.asarray(img.resize((self.W, self.H), Image.LANCZOS)), np.asarray(al.resize((self.W, self.H), Image.LANCZOS)))
         if len(self.cache) > 4000:
             self.cache.clear()
@@ -630,6 +631,15 @@ def probe(path):
     return n, fps, shape
 
 
+def moved_frames(n, fps, warp_json=None):
+    """the track frame the card reads on each of n video frames. A paint that moved its plan (the log beside warp_json: --coart-advance-ms,
+    --coart-sync-vocal) shows on the card what it painted there, not the frame the track holds there."""
+    from ..core.coart import logged_offsets
+
+    dt = logged_offsets(warp_json, n) if warp_json else None
+    return list(range(n)) if dt is None else [i + int(round(float(dt[i]) * fps)) for i in range(n)]
+
+
 def segments_of(a, n):
     """the EDL -> [(label, [TrackView], [track frame per video frame])] covering the video's n frames."""
     if a.edl:
@@ -668,7 +678,7 @@ def segments_of(a, n):
         "",
         getattr(a, "vocal_merge_gap", vz.MERGE_GAP),
     )
-    return [("", [tv], list(range(n)))]
+    return [("", [tv], moved_frames(n, tv.fps, getattr(a, "warp_json", None)))]
 
 
 def main(argv=None):
@@ -704,6 +714,7 @@ def main(argv=None):
         "--cards",
         help="the face's detailed mouth-shape cards dir (lsdub_engine.core.mouth_cards; <kit>/cards) -- draw the face's own shape instead of the generic glyph",
     )
+    ap.add_argument("--warp-json", help="the render's --warp-json: a plan the paint moved shows on the card as it was painted")
     ap.add_argument("--log", help="placement per clip (JSON)")
     ap.add_argument("--crf", type=int, default=16)
     ap.add_argument(

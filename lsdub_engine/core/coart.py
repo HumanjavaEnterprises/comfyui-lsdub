@@ -597,21 +597,31 @@ def qmap_fn(src, ref, anchors=None):
     return f
 
 
-def range_match(X, ref, strength=1.0, weight=None, src_mask=None, anchors=None):
+def range_match(X, ref, strength=1.0, weight=None, src_mask=None, anchors=None, gap_top=False):
     """the planned trajectory's distribution matched to the take's own, per dimension: X (n x 2) -> X + strength x
     weight x (f(X) - X), f = qmap_fn(X[src_mask], ref, anchors) (the planned active frames onto the take's active frames:
-    a rest in a pause keeps its rest shape, weight = 1 - its rest share). -> (X', [mapped?] per dimension)."""
+    a rest in a pause keeps its rest shape, weight = 1 - its rest share). gap_top: the gap's f is proportional instead, 0 -> 0
+    and the plan's p95 -> the take's, so an open-mouthed take does not lift the narrow classes; width keeps its map.
+    -> (X', [mapped?] per dimension)."""
     X = np.asarray(X, float).copy()
     n = len(X)
     wgt = np.ones((n, 2)) if weight is None else np.asarray(weight, float)
     m = np.ones(n, bool) if src_mask is None else np.asarray(src_mask, bool)
     done = []
     for d in range(2):
-        f = qmap_fn(X[m, d], ref[:, d], anchors) if strength > 0 and m.sum() >= 3 else None
+        f = None
+        if strength > 0 and m.sum() >= 3:
+            f = gap_top_fn(X[m, d], ref[:, d]) if gap_top and d == 0 else qmap_fn(X[m, d], ref[:, d], anchors)
         if f is not None:
             X[:, d] = X[:, d] + strength * wgt[:, d] * (f(X[:, d]) - X[:, d])
         done.append(f is not None)
     return X, done
+
+
+def gap_top_fn(x, ref):
+    """0 -> 0, x's p95 -> ref's p95, proportional; None when x has no top to read."""
+    a, b = float(np.percentile(x, 95)), float(np.percentile(ref, 95))
+    return None if a <= 1e-3 else (lambda v: np.asarray(v, float) * b / a)
 
 
 def rest_shape(Uref):
@@ -680,6 +690,7 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     ant = float(getattr(a, "coart_anticipate", 100.0))
     rest_s = float(getattr(a, "coart_rest_ms", 120.0) or 0.0) / 1000.0
     rho = float(getattr(a, "coart_range", 1.0))
+    gap_top = getattr(a, "coart_gap_anchor", "take") == "top"
     mix = float(getattr(a, "coart_dyn_mix", 0.0) or 0.0) if dyn is not None else 0.0
     Ft_u = u if F_take_u is None else np.asarray(F_take_u, float)
     keep = np.ones(n, bool) if held is None else ~np.asarray(held, bool)[:n]
@@ -723,7 +734,9 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     # take's active frames), mixed into the target outside the pauses (the silence rule) and the skipped spans
     Dm = None
     if mix > 0:
-        Dm, okd = range_match(np.asarray(dyn, float), Ft_u[keep & ~pause] if (keep & ~pause).sum() >= 8 else Ft_u[keep], 1.0)
+        Dm, okd = range_match(
+            np.asarray(dyn, float), Ft_u[keep & ~pause] if (keep & ~pause).sum() >= 8 else Ft_u[keep], 1.0, gap_top=gap_top
+        )
         if not all(okd):
             Dm = None
             mix = 0.0
@@ -744,7 +757,7 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
         for d in range(2):
             if hi99[d] - lo1[d] >= 0.05:
                 T0[:, d] = np.clip(T0[:, d], lo1[d] - mg[d], hi99[d] + mg[d])  # (a degenerate take: none)
-    T1, rm_done = range_match(T0, ref, rho, wact, act, RANGE_ANCHORS)
+    T1, rm_done = range_match(T0, ref, rho, wact, act, RANGE_ANCHORS, gap_top)
     # hard closures: the opening at a P / B / M (F / V) segment's core frames <= its target and <= the take's own closure
     # depth (its p5 opening); the track's own closure runs too (its lead / minimum hold: a closure lasts as long as before)
     p5 = float(np.percentile(Ft_u[keep, 0], 5))
@@ -797,7 +810,7 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     nfin = 0
     # the fit eases the peaks: the range is matched again on the fitted plan (monotone, so the timing and the order of
     # every shape stay), then anything carried outside the face's shapes is pinned at its projection and refitted
-    x, _ = range_match(x, ref, rho, wact, act, RANGE_ANCHORS)
+    x, _ = range_match(x, ref, rho, wact, act, RANGE_ANCHORS, gap_top)
     for _ in range(2):
         out = free & ~hull.inside(x)
         if not out.any():
@@ -984,6 +997,21 @@ def logged_offsets(warp_json, n):
     dt = np.asarray(log.get("sync_dt") or [0.0], float)
     dt = dt[(np.arange(n) * len(dt) // max(n, 1))] + float(log.get("advance_s") or 0.0)
     return dt if np.any(dt) else None
+
+
+def logged_classes(warp_json, n):
+    """the plan's viseme class on each of n delivered frames, from the plan log beside --warp-json ("" outside a segment); None without
+    a log. The log counts the paint's frames, which a sing render has more of than it delivers."""
+    segs = [x for x in (_plan_log(warp_json).get("segments") or []) if x.get("frames")]
+    if not segs:
+        return None
+    N = max(int(len(json.load(open(warp_json))["frames"])), 1)
+    out = [""] * n
+    for x in segs:
+        for k in range(x["frames"][0], x["frames"][-1] + 1):
+            if k < N:
+                out[k * n // N] = x["v"]
+    return out
 
 
 def logged_words(words, warp_json):
