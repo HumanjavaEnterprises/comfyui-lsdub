@@ -1905,7 +1905,7 @@ class WarpClip:
             lip_stat=md[:3] if okst else None,
             tone=self.closed_tone() if tone else None,
         )
-        if g("warp_erase_near", False):
+        if g("warp_erase_close", False) and g("warp_erase_near", False):
             d = np.diff(np.r_[0, (al > 0.01).astype(int), 0])
             which, layers = {}, {}
             for a, b in zip(np.flatnonzero(d == 1), np.flatnonzero(d == -1)):

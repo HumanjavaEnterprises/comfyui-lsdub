@@ -253,7 +253,6 @@ def read_sheet(align, x, lyrics=None, overrides="", relisten=None):
         over = sum(max(0.0, min(e, q["t1"]) - max(s, q["t0"])) for q in spans)
         share = over / max(e - s, 1e-3)
         c = dict(i=i, w=w["w"], t0=round(s, 3), t1=round(e, 3), call="LEAD", conf=1.0, reason="", line=lines.get(i, 0))
-        lyric = a.get("lyric")
         sung = a.get("src") in (None, "lyric", "lyric~")
         if not e > s:
             c.update(conf=0.5, reason="no time of its own in the vocal")
