@@ -42,6 +42,7 @@ def test_the_shape_stack_is_the_interior_stack_plus_its_flags():
         "top",
         "--warp-erase-close",
         "--warp-erase-tone",
+        "--warp-erase-near",
         "--warp-interior-open-floor",
         "0.5",
         "--warp-interior-mend",

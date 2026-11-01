@@ -45,6 +45,7 @@ ARPA = {
     "JH": "CH",
     "SH": "CH",
     "ZH": "CH",
+    "SIL": "sil",  # a word the lead sheet passed over
     "S": "SS",
     "Z": "SS",
     "N": "nn",

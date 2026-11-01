@@ -629,9 +629,15 @@ def for_warp(a):
     """mouth_warp.run's hook: a Vocal for --vocalisations skip | rest when the track has vocalisations, else None (then
     the render is exactly the unchanged render)."""
     mode = getattr(a, "vocalisations", "mouth") or "mouth"
-    if mode == "mouth":
-        return None
-    T = json.load(open(a.track))
+    T = None
+    if (
+        mode == "mouth"
+    ):  # what a lead sheet passed over is another voice: it is skipped whatever is done with the singer's own vocalisations
+        T = json.load(open(a.track))
+        A = load_align(T, getattr(a, "vocal_align", None), a.track)
+        if not A or not any(w.get("vocal") == "pass-over" for w in A["words"]):
+            return None
+    T = T or json.load(open(a.track))
     if not T.get("frames"):
         return None
     if mode == "auto":
@@ -671,6 +677,11 @@ def for_warp(a):
             getattr(a, "vocal_merge_gap", MERGE_GAP),
             a.track,
         )
+    if mode == "mouth":
+        keep = [x for x in found["spans"] if "markup:pass-over" in x["reasons"]]
+        fr = set(k for x in keep for k in range(x["f0"], x["f1"] + 1))
+        found = dict(found, spans=keep, frames={k: v for k, v in found["frames"].items() if k in fr})
+        mode = "skip"
     if not found["spans"]:
         print(
             f"vocalisations {mode}: none in the track"

@@ -314,3 +314,13 @@ def test_align_retime_to_vocal_changes_the_key_only_when_on(pack, tmp_path):
     a = A._key(p, song, None, None, '', 'large-v3', '')
     assert a == A._key(p, song, None, None, '', 'large-v3', '', False)
     assert a != A._key(p, song, None, None, '', 'large-v3', '', True)
+
+
+def test_align_lead_sheet_changes_the_key_only_when_on(pack, tmp_path):
+    A = pack.nodes_audio.LSDubAlign
+    p = _proj(pack, tmp_path)
+    song = pack.lsdub_types.Song(mix='m', lead='m', hash='s', hashes={'lead': 'h'})
+    a = A._key(p, song, None, None, '', 'large-v3', '')
+    assert a == A._key(p, song, None, None, '', 'large-v3', '', False, False, 'pass 1 2')  # off: the overrides mean nothing
+    on = A._key(p, song, None, None, '', 'large-v3', '', False, True, '')
+    assert on != a and on != A._key(p, song, None, None, '', 'large-v3', '', False, True, 'pass 1 2')

@@ -467,6 +467,11 @@ def _parser():
         "own gap is taken out of its lips (upper and lower inner lip land on one contact line)",
     )
     ap.add_argument(
+        "--warp-erase-near",
+        action="store_true",
+        help="--warp-erase-close: each closure's reference frame is taken near it in face size and time, not one frame for the whole shot.",
+    )
+    ap.add_argument(
         "--warp-erase-tone",
         action="store_true",
         help="warp (--warp-erase-close): closed lips keep the take's own tone between the upper and lower lip, read on its most closed frames, and "

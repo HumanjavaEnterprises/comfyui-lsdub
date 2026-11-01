@@ -157,6 +157,13 @@ class LSDubAlign(io.ComfyNode):
                 io.Boolean.Input('retime_to_vocal', default=False, optional=True,
                                  tooltip='Read the phone times off the vocal itself after aligning: for held sung notes the aligner '
                                          'spreads across the line. The lyric stays as it is; only times move.'),
+                io.Boolean.Input('lead_sheet', default=False, optional=True,
+                                 tooltip='Read which sung words the singer on screen sings and write the song as a sheet with the rest in '
+                                         'braces (backing stutters, answer lines): lead_sheet.txt and .json beside the alignment, and in '
+                                         'lyric_check. What is passed over keeps the take\'s mouth, drives no alignment or retime and is not '
+                                         'read by Verify.'),
+                io.String.Input('lead_overrides', multiline=True, default='', optional=True,
+                                tooltip='With lead_sheet: your corrections, one per line: pass 10.04 11.93 or lead 10.04 10.49 (seconds).'),
             ],
             outputs=[T.LSDubAlign.Output(display_name='align', tooltip='Word timings + the song viseme track.'),
                      io.String.Output(display_name='lyric_check', tooltip='Markdown: least certain words and the '
@@ -168,23 +175,24 @@ class LSDubAlign(io.ComfyNode):
         return (song.lead or song.mix) if vocal is None else None
 
     @classmethod
-    def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal=False):
+    def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal=False, lead_sheet=False, lead_overrides=''):
         transcript_json = _input_path(transcript_json)
         vh = media.audio_hash(vocal) if vocal is not None else (song.hashes.get('lead') or song.hash or file_hash(cls._vocal(song, None)))
         tj = file_hash(transcript_json) if transcript_json else ''
         return stage_key('LSDubAlign', {'vocal': vh, 'lyrics': lyrics.hash if lyrics else 'transcript', 'pron': text_hash(pronunciations.strip()),
                                         'stt': stt_model, 'transcript': tj, 'v': 3, 'which': 'given' if vocal is not None else
-                                        ('lead' if song.lead else 'mix'), **({'retime': 1} if retime_to_vocal else {})}, [project.cache_key()])
+                                        ('lead' if song.lead else 'mix'), **({'retime': 1} if retime_to_vocal else {}),
+                                        **({'lead_sheet': text_hash(lead_overrides.strip())} if lead_sheet else {})}, [project.cache_key()])
 
     @classmethod
-    def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False):
-        return cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal)
+    def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides=''):
+        return cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal, lead_sheet, lead_overrides)
 
     @classmethod
-    def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False):
-        from .lsdub_engine.core import lyric_align as LA, viseme_track as VT, vocalisations as VO, vocal_retime as VR
+    def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides=''):
+        from .lsdub_engine.core import lead_sheet as LS, lyric_align as LA, viseme_track as VT, vocalisations as VO, vocal_retime as VR
         transcript_json = _input_path(transcript_json)
-        st = project.stage('audio/align', cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal))
+        st = project.stage('audio/align', cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal, lead_sheet, lead_overrides))
         align, vis, vis_skip, md = st.path('align.json'), st.path('visemes.json'), st.path('visemes_skip.json'), st.path('lyric_check.md')
         if not st.is_done():
             voc = media.write_audio(vocal, st.path('vocal.wav')) if vocal is not None else cls._vocal(song, None)
@@ -222,6 +230,12 @@ class LSDubAlign(io.ComfyNode):
             warn = check_match(json.load(open(align)).get('lyric_match_ratio'), lyrics is not None)
             if warn: print(f'[LSDub] {warn}', file=sys.stderr)
             devices.free()
+            if lead_sheet:
+                relisten = None if transcript_json else (lambda a, b: [w['w'] for w in LA.stt(voc, a, b, model=stt_model, device=wd, device_index=wi, download_root=devices.models_dir('whisper'))])
+                A = json.load(open(align))
+                S = LS.read_sheet(A, VR.read_mono(voc), open(lyr, encoding='utf-8').read(), lead_overrides, relisten)
+                LS.write(S, st.path('lead_sheet'))
+                with open(align, 'w') as f: json.dump(LS.honour(A, S), f, indent=1)
             if retime_to_vocal:
                 aligned = VR.retime(json.load(open(align)), voc)
                 with open(align, 'w') as f: json.dump(aligned, f, indent=1)
@@ -229,7 +243,9 @@ class LSDubAlign(io.ComfyNode):
                            '--audio', voc, '--out', vis], quiet=True, name='visemes')
             call(VO.main, ['skip', '--track', vis, '--out', vis_skip, '--lyrics', lyr, '--align', align], quiet=True,
                  name='vocalisations')
-            with open(md, 'w') as f: f.write(lyric_check_md(align, vis_skip, warn))
+            with open(md, 'w') as f:
+                f.write(lyric_check_md(align, vis_skip, warn))
+                if lead_sheet: f.write('\n## Lead sheet\n\n```\n' + open(st.path('lead_sheet.txt'), encoding='utf-8').read() + '```\n')
             st.mark_done(True, vocal=voc, seconds=round(dur, 3))
         return io.NodeOutput(T.Align(align=align, hash=file_hash(align)), open(md).read())
 

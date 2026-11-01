@@ -568,6 +568,11 @@ def closed_frames(n, pp, frames=()):
     return c
 
 
+def spared_shut(a, n, pp):
+    """the frames kept shut through the temporal smoothing: every closure class under --warp-temporal-spare, the PP frames without it."""
+    return closed_frames(n, pp, vars(a).get("coart_closures", ())) if vars(a).get("warp_temporal_spare") else pp
+
+
 def temporal_spare(g, gap, pp):
     """--warp-temporal-spare's weights; None when it is off."""
     return spare_frames(gap, pp, ease=g("warp_temporal_spare_ease", 1.0)) if g("warp_temporal_spare", False) else None
@@ -655,6 +660,60 @@ def most_closed(S, gap, pose, fit=None, width=None):
         if (ok & usual).any():
             ok &= usual
     return int(np.flatnonzero(ok)[np.argmin(g[ok])])
+
+
+NEAR_SCALE = 0.06  # --warp-erase-near: a reference within this share of the closure's face size
+
+
+def near_closed(S, gap, pose, at, fit=None, width=None):
+    """most_closed for one closure at frame `at`: among the frames of about its face size (a push-in's end is another mouth), the shut mouth nearest in time.
+    Falls back on most_closed where no such frame exists."""
+    S = np.asarray(S, float)
+    iod = np.linalg.norm(S[:, 33, :2] - S[:, 263, :2], axis=1)
+    pz = np.linalg.norm(pose - np.median(pose, 0), axis=1)
+    near = np.abs(iod / max(iod[at], 1e-6) - 1) <= NEAR_SCALE
+    ok = near & (pz <= np.percentile(pz, 60))
+    if fit is not None and (ok & (np.asarray(fit) > 0.7)).any():
+        ok &= np.asarray(fit) > 0.7
+    if width is not None:
+        d = np.abs(np.asarray(width, float) - float(np.median(np.asarray(width, float)[near] if near.any() else width)))
+        usual = d <= np.percentile(d, 50)
+        if (ok & usual).any():
+            ok &= usual
+    if not ok.any():
+        return most_closed(S, gap, pose, fit, width)
+    g = np.asarray(gap, float)
+    rng = max(float(np.ptp(g)), 1e-6)
+    return int(np.flatnonzero(ok)[np.argmin((g[ok] - g.min()) / rng + np.abs(np.flatnonzero(ok) - at) / len(g))])
+
+
+class EraseSet:
+    """one EraseLayer per reference: each frame goes to the layer of its closure."""
+
+    def __init__(self, layers, which):
+        self.layers, self.which = layers, which  # {ref: EraseLayer}, {frame: ref}
+
+    def at(self, i):
+        return self.layers[self.which[i]]
+
+    def forget(self, i):
+        self.at(i).forget(i)
+
+    def composite(self, out, i, *a, **k):
+        return self.at(i).composite(out, i, *a, **k)
+
+    def apply_item(self, i, img, s):
+        return self.at(i).apply_item(i, img, s)
+
+    def stat_for(self, i):
+        return self.at(i).stat_for(i)
+
+    def has(self, i):
+        return i in self.which and i in self.at(i).items
+
+    def finish(self, outs):
+        for e in self.layers.values():
+            e.finish(outs)
 
 
 SEAM_SHADE = 0.3  # the shadow along shut lips' contact, as a share of the lips' own light
@@ -826,6 +885,12 @@ class EraseLayer:
         # the reference ring points in the canonical frame (orthographic lift on the lower-face points' plane)
         low = [k for k in range(478) if self.P[k, 1] > self.P[2, 1]]
         self.ring_c = pl.to_lib(r, mm.plane_lift(self.ring, np.asarray(ref3, float)[low]))
+
+    def forget(self, i):
+        self.lab = [x for x in self.lab if x[0] != i]
+
+    def has(self, i):
+        return i in self.items
 
     def composite(self, out, i, P_take, P_dst, alpha, kind="closed"):
         H, W = out.shape[:2]
@@ -1233,7 +1298,7 @@ class WarpClip:
         conf = confidence(dF, scale, a.warp_deadband, a.warp_deadband + g("warp_ramp", 0.08)) if a.warp_deadband >= 0 else np.ones(n)
         conf = gaussian_filter1d(conf, 1.0, mode="nearest")
         dFe = dF * conf[:, None] * a.warp_gain
-        shut = closed_frames(n, pp, vars(a).get("coart_closures", ())) if vars(a).get("warp_temporal_spare") else pp
+        shut = spared_shut(a, n, pp)
         dFe = smooth_residual(dFe, g("warp_temporal", 0.0), shut, temporal_spare(g, Ft[:, 0], shut))  # the field itself, over time
         tw = g("warp_temporal_width", 0.0)  # width (corners -> cheeks): slower
         if tw > g("warp_temporal", 0.0):
@@ -1829,17 +1894,28 @@ class WarpClip:
             fit = np.ones(n)
         tone = g("warp_erase_close", False) and g("warp_erase_tone", False)
         r_ = most_closed(S, F[:, 0], self.pose, fit, F[:, 1] if tone else None)
-        self.erase = EraseLayer(
-            frames[r_],
-            S[r_][:, :2],
+        lay = lambda r: EraseLayer(
+            frames[r],
+            S[r][:, :2],
             pl,
-            r_,
-            self.S3raw[r_],
+            r,
+            self.S3raw[r],
             grow=g("warp_erase_grow", 0.22),
             close=g("warp_erase_close", False),
             lip_stat=md[:3] if okst else None,
             tone=self.closed_tone() if tone else None,
         )
+        if g("warp_erase_near", False):
+            d = np.diff(np.r_[0, (al > 0.01).astype(int), 0])
+            which, layers = {}, {}
+            for a, b in zip(np.flatnonzero(d == 1), np.flatnonzero(d == -1)):
+                r = near_closed(S, F[:, 0], self.pose, (a + b) // 2, fit, F[:, 1] if tone else None)
+                layers.setdefault(r, None)
+                which.update((k, r) for k in range(a, b))
+            self.erase = EraseSet({r: lay(r) for r in layers}, which) if layers else lay(r_)
+            print(f"lip erase: reference near each closure: {sorted(layers)}")
+        else:
+            self.erase = lay(r_)
         self.er_al, self.er_fit, self.er_ref = al, fit, r_
 
     def closed_tone(self):
@@ -1861,7 +1937,7 @@ class WarpClip:
         P_take = ov.get("S_take", ov.get("S", self.S[i]))[:, :2]
         P_out = ov.get("P_out", self.P_out[i])
         if rerender:
-            self.erase.lab = [x for x in self.erase.lab if x[0] != i]
+            self.erase.forget(i)
         closed = al_kind(F[i, 0], gap_t, self.model.rng, g("warp_erase_thr", 0.12))
         if closed and g("warp_erase_close", False):
             P_out = self.shut_target(i, P_out, ov)

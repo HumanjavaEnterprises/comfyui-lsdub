@@ -240,6 +240,7 @@ RECIPES = {
                 "top",
                 "--warp-erase-close",
                 "--warp-erase-tone",
+                "--warp-erase-near",
                 "--warp-interior-open-floor",
                 "0.5",
                 "--warp-interior-mend",

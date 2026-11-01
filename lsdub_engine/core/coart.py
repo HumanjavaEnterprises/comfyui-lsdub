@@ -78,6 +78,7 @@ SING_BIAS = 0.2  # auto jaw share: the take's own share moved this far toward 1
 LOWER_LIP = [146, 91, 181, 84, 17, 314, 405, 321, 375, 95, 88, 178, 87, 14, 317, 402, 318, 324]
 SHAPE_P = 1.5  # dominance decay exponent: 2^-(tau / half)^p
 RISE = float(np.log2(10.0) ** (1.0 / SHAPE_P))  # tau / h at 10 % dominance: the rise width = RISE x h
+RAMP_PEAK = 0.8  # --coart-closure-ramp: the share of the take's open height a vowel between two close closures still reaches
 RAMP_MAX_S = (
     0.15  # --coart-closure-ramp: a slow take's closing time would flatten the vowels between fast closures (shot env .62 to .43 at .3 s)
 )
@@ -897,11 +898,19 @@ def closure_ramp(caps, n, top, f_in, f_out):
     if not caps:
         return dict(caps)
     span = max(1e-6, top - min(caps.values()))
-    vo, vi = span / max(1.0, f_out), span / max(1.0, f_in)
+    vo, vi = np.full(n, span / max(1.0, f_out)), np.full(n, span / max(1.0, f_in))
+    ks = sorted(caps)
+    for p, q in zip(
+        ks, ks[1:]
+    ):  # closures closer than the ramp: the vowel between still reaches RAMP_PEAK of the height, the lips move faster for it
+        if q - p > 1:
+            need = (RAMP_PEAK * top - max(caps[p], caps[q])) / ((q - p) / 2.0)
+            vo[p + 1 : q + 1] = np.maximum(vo[p + 1 : q + 1], need)
+            vi[p:q] = np.maximum(vi[p:q], need)
     for k in range(1, n):
-        b[k] = min(b[k], b[k - 1] + vo)
+        b[k] = min(b[k], b[k - 1] + vo[k])
     for k in range(n - 2, -1, -1):
-        b[k] = min(b[k], b[k + 1] + vi)
+        b[k] = min(b[k], b[k + 1] + vi[k])
     return {k: (caps[k] if k in caps else float(b[k])) for k in range(n) if k in caps or b[k] < top}
 
 

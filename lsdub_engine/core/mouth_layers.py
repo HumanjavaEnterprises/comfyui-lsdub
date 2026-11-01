@@ -1135,6 +1135,13 @@ def ellipsoid_layer(c, L, box, colour, light=(0.0, -0.55, -0.83), groove=0.08, s
     return np.clip(rgb, 0, 255).astype(np.float32), al
 
 
+def mended_enclosure(enc, interior, Q, shape, io):
+    """--warp-interior-mend: the enclosure with its slivers closed; as it was without the flag."""
+    if interior is None or not interior.mend:
+        return enc
+    return close_slivers(enc, tl.poly_mask(Q, shape, 0.0), io)
+
+
 def close_slivers(enc, opening, io, side=0.16):
     """--warp-interior-mend: a small corner of the opening the warped lips do not reach stays inside the mouth; shown as the warped face it
     is a pale notch at the lip's corner. A large stretch stays out, as the lip clip wants: the opening really is not enclosed there."""
@@ -2549,8 +2556,7 @@ class LayerCompositor:
         if self.interior_clip and self.lip_ab is not None:
             # the interior is seen only THROUGH the warped lips (enclosed); elsewhere the warped face shows (L6)
             enc = self.enclosed(warped[sl], Q, Qo, io)
-            if self.take_interior is not None and self.take_interior.mend:
-                enc = close_slivers(enc, tl.poly_mask(Q, (h, w), 0.0), io)
+            enc = mended_enclosure(enc, self.take_interior, Q, (h, w), io)
             a0_ = float(a2.sum())
             a2 = a2 * enc
             clip_frac = round(1.0 - float(a2.sum()) / a0_, 4) if a0_ > 1e-3 else 0.0

@@ -48,6 +48,14 @@ def pink(lab):
     return (L > 25) & (L <= 75) & (lab[..., 1] - 128.0 > 14)
 
 
+def sink_colour(lab, nonp, mend=False):
+    """what excess pink fades to: the opening's usual colour; mended, as dark as its dark part, so a sunk tongue does not go grey."""
+    base = (np.median(lab[nonp], 0) if nonp.sum() > 8 else np.array([50.0, 138.0, 134.0])).astype(np.float32)
+    if mend and nonp.sum() > 8:
+        base[0] = min(base[0], float(np.percentile(lab[nonp][:, 0], SINK_DARK)))
+    return base
+
+
 def least_sink(lab, pm, base, vis, over, area, tgt):
     """the smallest blend toward `base` that brings the pink share to tgt, by bisection: the share falls off a cliff against the
     blend, so stepping up overshoots far under the target. 1.0 when even that does not hold it."""
@@ -282,9 +290,7 @@ class TakeInterior:
             pk = pink(lab)
             pm = cv2.GaussianBlur(pk.astype(np.float32), (0, 0), 1.0)[..., None]
             nonp = ~pk & opening
-            base = (np.median(lab[nonp], 0) if nonp.sum() > 8 else np.array([50.0, 138.0, 134.0])).astype(np.float32)
-            if self.mend and nonp.sum() > 8:
-                base[0] = min(base[0], float(np.percentile(lab[nonp][:, 0], SINK_DARK)))
+            base = sink_colour(lab, nonp, self.mend)
             if got > tgt:
                 need = least_sink(lab, pm, base, seen, over, area, tgt)
         k = max(need, tail)  # the cap holds from the first frame it is needed; letting go is what is eased
