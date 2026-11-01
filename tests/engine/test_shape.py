@@ -724,3 +724,11 @@ def test_tone_lips_lands_the_two_lips_on_the_takes_tone_and_keeps_their_mean():
     assert t0 is not None and abs(t0[0]) < 1
     out = MW.tone_lips(img, P, np.array([-30.0, 0.0, 0.0]))
     assert MW.lip_tone(out, P)[0] == pytest.approx(-30.0, abs=3.0)
+
+
+def test_most_closed_passes_over_a_smile():
+    gap = np.array([30.0, 20.0, 18.0, 2.0, 25.0, 22.0])
+    w = np.array([100.0, 101.0, 99.0, 170.0, 100.0, 102.0])
+    S, pose = None, np.zeros((6, 3))
+    assert MW.most_closed(S, gap, pose) == 3
+    assert MW.most_closed(S, gap, pose, width=w) == 1

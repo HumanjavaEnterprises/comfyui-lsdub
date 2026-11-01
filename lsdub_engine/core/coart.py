@@ -78,6 +78,9 @@ SING_BIAS = 0.2  # auto jaw share: the take's own share moved this far toward 1
 LOWER_LIP = [146, 91, 181, 84, 17, 314, 405, 321, 375, 95, 88, 178, 87, 14, 317, 402, 318, 324]
 SHAPE_P = 1.5  # dominance decay exponent: 2^-(tau / half)^p
 RISE = float(np.log2(10.0) ** (1.0 / SHAPE_P))  # tau / h at 10 % dominance: the rise width = RISE x h
+RAMP_MAX_S = (
+    0.15  # --coart-closure-ramp: a slow take's closing time would flatten the vowels between fast closures (shot env .62 to .43 at .3 s)
+)
 VMAX_FLOOR = 0.35  # the speed limit is never below this (take units / frame: shut -> open in 3)
 PRIOR_FLOOR = ((0.08, 0.03), (0.15, 0.06))  # the prior's take velocity / acceleration p95 floors (opening, width), /frame
 REST_OPEN_MAX = 0.15  # the rest mouth's opening is at most this (the library's resting opening, take units)
@@ -781,11 +784,8 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
                 pp[k] |= tvis[i] == "PP"
         i = j + 1
     ramp_k = float(vars(a).get("coart_closure_ramp", 0.0) or 0.0)  # (outside the golden recipes' read list)
-    lim = (
-        closure_ramp(caps, n, float(np.percentile(ref[:, 0], 95)), ramp_k * t_fall * fps, ramp_k * t_rise * fps)
-        if ramp_k > 0 and caps
-        else caps
-    )
+    r_in, r_out = ramp_k * min(t_fall, RAMP_MAX_S) * fps, ramp_k * min(t_rise, RAMP_MAX_S) * fps
+    lim = closure_ramp(caps, n, float(np.percentile(ref[:, 0], 95)), r_in, r_out) if ramp_k > 0 and caps else caps
     w = np.ones(n)
     sk = np.array([bool(fr_t[min(i, len(fr_t) - 1)].get("skip")) for i in range(n)]) & (skip_kind == "free")
     w[sk] = 0.3
@@ -832,7 +832,7 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     for k, c in lim.items():
         x[k, 0] = min(x[k, 0], c)
     if ramp_k > 0 and caps:
-        x[:, 1] = ramp_width(x[:, 1], caps, ramp_k * t_fall * fps, ramp_k * t_rise * fps)
+        x[:, 1] = ramp_width(x[:, 1], caps, r_in, r_out)
     rng_ratio = lambda X: [
         float(np.ptp(np.percentile(X[:, d], [5, 95])) / max(1e-6, np.ptp(np.percentile(Ft_u[keep, d], [5, 95])))) for d in range(2)
     ]

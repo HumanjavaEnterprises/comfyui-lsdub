@@ -640,14 +640,20 @@ def erase_alpha(gap, egap, rng, thr=0.12, reductions=False, width=None, ewidth=N
     return a
 
 
-def most_closed(S, gap, pose, fit=None):
+def most_closed(S, gap, pose, fit=None, width=None):
     """the take's most-closed frame among its well-tracked (fit > 0.7), near-median-pose (deviation <= its 40th
-    percentile) frames: a turned head's foreshortened thin lips would be laid onto a frontal mouth."""
+    percentile) frames: a turned head's foreshortened thin lips would be laid onto a frontal mouth. width: only frames of the shot's usual
+    mouth width: a smile is closed too, and its cheeks and folds would be laid over a singing face."""
     pz = np.linalg.norm(pose - np.median(pose, 0), axis=1)
     g = np.asarray(gap, float)
     ok = pz <= np.percentile(pz, 40)
     if fit is not None and (ok & (np.asarray(fit) > 0.7)).any():
         ok &= np.asarray(fit) > 0.7
+    if width is not None:
+        d = np.abs(np.asarray(width, float) - float(np.median(width)))
+        usual = d <= np.percentile(d, 50)
+        if (ok & usual).any():
+            ok &= usual
     return int(np.flatnonzero(ok)[np.argmin(g[ok])])
 
 
@@ -1821,7 +1827,8 @@ class WarpClip:
             al = al * smootherstep((fit - 0.6) / 0.2)
         else:
             fit = np.ones(n)
-        r_ = most_closed(S, F[:, 0], self.pose, fit)
+        tone = g("warp_erase_close", False) and g("warp_erase_tone", False)
+        r_ = most_closed(S, F[:, 0], self.pose, fit, F[:, 1] if tone else None)
         self.erase = EraseLayer(
             frames[r_],
             S[r_][:, :2],
@@ -1831,7 +1838,7 @@ class WarpClip:
             grow=g("warp_erase_grow", 0.22),
             close=g("warp_erase_close", False),
             lip_stat=md[:3] if okst else None,
-            tone=self.closed_tone() if g("warp_erase_close", False) and g("warp_erase_tone", False) else None,
+            tone=self.closed_tone() if tone else None,
         )
         self.er_al, self.er_fit, self.er_ref = al, fit, r_
 

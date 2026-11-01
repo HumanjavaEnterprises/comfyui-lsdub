@@ -469,7 +469,8 @@ def _parser():
     ap.add_argument(
         "--warp-erase-tone",
         action="store_true",
-        help="warp (--warp-erase-close): closed lips keep the take's own tone between the upper and lower lip, read on its most closed frames",
+        help="warp (--warp-erase-close): closed lips keep the take's own tone between the upper and lower lip, read on its most closed frames, and "
+        "their reference frame has the shot's usual mouth width (a smile is closed too, and its folds would land on a singing face)",
     )
     ap.add_argument("--warp-erase-grow", type=float, default=0.22, help="warp: growth of the erased lip region (x the lip hull)")
     ap.add_argument(
@@ -919,7 +920,7 @@ def _parser():
         "--coart-closure-ramp",
         type=_not_negative,
         default=0.0,
-        help="warp (coart): the mouth reaches a closure and leaves it over this share of the take's own closing and opening times, the "
+        help="warp (coart): the mouth reaches a closure and leaves it over this share of the take's own closing and opening times, at most 150 ms, the "
         "width with it (0 = off: the planned opening is cut to the closure on its frame)",
     )
     # (opt-in; audits/frame_gate.py = the checker, core/frame_gate.py = the maker): the per-frame gate ---

@@ -350,6 +350,8 @@ class TrackView:
 
 # ------------------------------------------------------------------------------------------------- the card --
 class Card:
+    tag = "PLAN"
+
     def __init__(self, scale=1.0, line2=False, cards=None):
         self.l2 = LINE2 if line2 else 0  # the second word line (word facts)
         # the FACE's own detailed mouth shapes (lsdub_engine.core.mouth_cards) instead of the generic glyph
@@ -546,7 +548,7 @@ class Card:
             if fq_ and (fq_["diff"] or fq_["weak"]):
                 d.rectangle([xa, ty - int(5 * s), xb, ty - int(3 * s)], fill=HEARD if fq_["diff"] else WEAK)
         d.text((xr, ty + th // 2), "1 s", font=self.f_small, fill=DIM, anchor="rm")
-        d.text((W - int(9 * s), int(6 * s)), "PLAN", font=self.f_small, fill=DIM, anchor="rt")  # the card is the plan, not the render
+        d.text((W - int(9 * s), int(6 * s)), self.tag, font=self.f_small, fill=DIM, anchor="rt")  # the card is the plan, not the render
         out = (np.asarray(img.resize((self.W, self.H), Image.LANCZOS)), np.asarray(al.resize((self.W, self.H), Image.LANCZOS)))
         if len(self.cache) > 4000:
             self.cache.clear()
