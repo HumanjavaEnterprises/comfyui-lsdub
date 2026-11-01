@@ -13,6 +13,7 @@ PROBES = {
     ("format_tags=comment", "default=nw=1:nk=1"),
     ("format=duration", "csv=p=0"),
     ("stream=index", "csv=p=0"),
+    ("stream=nb_read_packets", "csv=p=0"),  # watermark._frames
     ("entries", "csv=p=0"),  # sync_strip._probe: `entries` is a parameter, its callers are pinned below
 }
 STRIP_ENTRIES = {
