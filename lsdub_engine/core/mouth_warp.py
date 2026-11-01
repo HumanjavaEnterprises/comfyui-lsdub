@@ -558,6 +558,11 @@ def spare_frames(gap, pp, prom=0.15):
     return np.clip(2.5 * gaussian_filter1d(a, 1.0, mode="nearest"), 0.0, 1.0)
 
 
+def temporal_spare(g, gap, pp):
+    """--warp-temporal-spare's weights; None when it is off."""
+    return spare_frames(gap, pp) if g("warp_temporal_spare", False) else None
+
+
 def smooth_residual(dF, sigma, keep_close=None, spare=None):
     """zero-phase gaussian (frames) of the per-frame residual. The control displacement is linear in it (J dF, canonical
     head frame), so this smooths the WARP FIELD itself over time, not the landmarks. keep_close (bool per frame): those
@@ -1150,8 +1155,7 @@ class WarpClip:
         conf = confidence(dF, scale, a.warp_deadband, a.warp_deadband + g("warp_ramp", 0.08)) if a.warp_deadband >= 0 else np.ones(n)
         conf = gaussian_filter1d(conf, 1.0, mode="nearest")
         dFe = dF * conf[:, None] * a.warp_gain
-        spare = spare_frames(Ft[:, 0], pp) if g("warp_temporal_spare", False) else None
-        dFe = smooth_residual(dFe, g("warp_temporal", 0.0), pp, spare)  # the field itself, over time
+        dFe = smooth_residual(dFe, g("warp_temporal", 0.0), pp, temporal_spare(g, Ft[:, 0], pp))  # the field itself, over time
         tw = g("warp_temporal_width", 0.0)  # width (corners -> cheeks): slower
         if tw > g("warp_temporal", 0.0):
             dFe[:, 1] = (

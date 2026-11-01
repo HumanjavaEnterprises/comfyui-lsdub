@@ -184,6 +184,16 @@ def test_own_lips_are_left_alone_and_a_ref_too_shut_to_seam_does_not_shut():
     assert F.items[0][1].shape[2] == 3
 
 
+def test_a_near_shut_target_still_lands_both_lips_on_one_line(monkeypatch):
+    E, img = eraser()
+    got = []
+    real = MW.mm.pwa
+    monkeypatch.setattr(MW.mm, "pwa", lambda s, sp, dp, t, b: (got.append(np.array(dp)), real(s, sp, dp, t, b))[1])
+    E.composite(img.copy(), 0, E.P, face(5), 1.0, "closed")
+    n, k = len(MW.ll.LIP_OUT), len(MW.IN_PAIRS)
+    assert np.allclose(got[0][n + 1 : n + 1 + k], got[0][n + 2 + k : n + 2 + 2 * k])
+
+
 def test_no_collapsed_triangle_reaches_the_warp(monkeypatch):
     E, img = eraser()
     seen = []
@@ -267,12 +277,21 @@ def test_a_closure_the_fold_guard_stopped_short_lands_where_the_plan_said(monkey
 def test_the_shut_lips_carry_no_dark_of_the_reference_at_their_corners():
     E, img = eraser()
     img = img.copy()
-    cv2.circle(img, (145, 200), 6, (5, 5, 5), -1)  # a dark smile corner on the lips, past the seam's own corner
-    cv2.circle(img, (255, 200), 6, (5, 5, 5), -1)
+    cv2.circle(img, (147, 188), 2, (5, 5, 5), -1)  # a dark smile corner on the lips, past the seam's own corner
+    cv2.circle(img, (253, 188), 2, (5, 5, 5), -1)
     clean = MW.clean_lips(img, E.P)
     L = lambda x: cv2.cvtColor(x, cv2.COLOR_BGR2LAB)[..., 0]
-    assert L(img)[200, 145] < 30 and L(clean)[200, 145] > 60 and L(clean)[200, 255] > 60
+    assert L(img)[188, 147] < 30 and L(clean)[188, 147] > 60 and L(clean)[188, 253] > 60
     assert np.array_equal(clean[20:60], img[20:60])  # the skin is left alone
+
+
+def test_the_shut_layer_carries_a_contact_line():
+    E, img = eraser()
+    Pd = face(0)
+    E.composite(img.copy(), 0, E.P, Pd, 1.0, "closed")
+    (x0, y0, w, h), layer, _ = E.items[0]
+    col = layer[170 - y0 : 231 - y0, 200 - x0, 1]
+    assert abs(int(np.argmin(col)) + 170 - 200) <= 2  # the seam is the column's darkest pixel
 
 
 def test_the_shut_contact_is_one_soft_line():
@@ -414,6 +433,32 @@ def test_offsets_read_true_time_on_a_file_a_few_frames_short(tmp_path):
     assert len(coart.logged_offsets(str(w), 100, 25.0)) == 100
 
 
+def test_verify_reports_the_corners():
+    gap = np.r_[np.full(10, 0.5), np.full(3, 0.01), np.full(10, 0.5)]
+    w = [{"phones": [{"p": "M", "start": 0.42, "end": 0.48}]}]
+    r = qa.shape_readings((gap, np.ones(len(gap)), np.full(len(gap), 0.6)), None, w, 0.0, 25.0, SN)
+    assert r["closure_corner"] == 0.6
+    assert "closure_corner" not in qa.shape_readings((gap, np.ones(len(gap))), None, w, 0.0, 25.0, SN)
+
+
+def test_measured_opening_reads_the_corners(monkeypatch):
+    from lsdub_engine.audits import sync_qa as Q
+
+    lm = [types.SimpleNamespace(x=0.3 + 0.001 * k, y=0.2 + 0.001 * k) for k in range(478)]
+
+    class Det:
+        detect_for_video = staticmethod(lambda *a: types.SimpleNamespace(face_landmarks=[lm]))
+        close = staticmethod(lambda: None)
+
+    monkeypatch.setattr(
+        Q.landmarker, "mp", lambda: types.SimpleNamespace(Image=lambda **k: None, ImageFormat=types.SimpleNamespace(SRGB=0))
+    )
+    monkeypatch.setattr(Q.landmarker, "get", lambda *a, **k: Det)
+    F = [np.full((32, 32, 3), 120, np.uint8)] * 2
+    Q.measured_opening(F, [0, 32, 0, 32])
+    assert np.isfinite(Q.shape_of(F)[2]).all()
+
+
 def test_the_shape_readings_do_not_hold_the_frames(monkeypatch):
     import gc
     import weakref
@@ -433,7 +478,8 @@ def test_the_shape_readings_do_not_hold_the_frames(monkeypatch):
     monkeypatch.setattr(Q.landmarker, "get", lambda *a, **k: Det)
     F = Frames(np.zeros((8, 8, 3), np.uint8) for _ in range(3))
     Q.measured_opening(F, [0, 8, 0, 8])
-    assert Q.shape_of(F) is not None
+    r = Q.shape_of(F)
+    assert r is not None and len(r) == 3
     assert Q.shape_of(F) is None  # read once; the readings go with the read
     Q.measured_opening(F, [0, 8, 0, 8])
     r = weakref.ref(F)
@@ -561,6 +607,12 @@ def test_spare_marks_the_plans_moves_and_closures_not_its_jitter():
     tops = [int(x) for x in np.arange(120) if gap[x] == gap[max(0, x - 6) : x + 7].max() and 6 < x < 113]
     assert all(a[k] > 0.5 for k in tops) and a[60] > 0.5
     assert np.mean(a < 0.05) > 0.5  # most of the clip still smooths; a flat wobble is not a peak
+
+
+def test_the_flag_turns_the_sparing_on():
+    gap, pp = 10 * np.sin(np.arange(60) / 4.0), np.zeros(60, bool)
+    assert MW.temporal_spare(lambda k, d=None: d, gap, pp) is None
+    assert MW.temporal_spare(lambda k, d=None: {"warp_temporal_spare": True}.get(k, d), gap, pp).max() > 0.5
 
 
 def test_a_spared_peak_keeps_its_height_and_width_smooths_whole():
