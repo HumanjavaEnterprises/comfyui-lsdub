@@ -41,12 +41,15 @@ SNAP = dict(
 
 def snap_paint(paint_args, m):
     """SNAP's paint flags. A --warp-temporal in the caller's flags, in output frames, holds here at the internal rate (x m); it
-    never goes under SNAP's own. Named by nobody: SNAP's flags unchanged."""
+    never goes under SNAP's own. --warp-temporal-width, in output frames too, the same. Named by nobody: SNAP's flags unchanged."""
     p = list(SNAP["paint"])
     t = paint_api.temporal(paint_args)
     if t is not None:
         i = p.index("--warp-temporal") + 1
         p[i] = str(max(float(p[i]), float(t) * m))
+    w = paint_api.temporal(paint_args, "--warp-temporal-width")
+    if w is not None:
+        p += ["--warp-temporal-width", str(float(w) * m)]
     return p
 
 
@@ -368,7 +371,7 @@ def gate(video, R, target, vocal, align, t0, fps, roi_pad=1.0, work=None, warp_j
     from .coart import logged_offsets, logged_words
 
     words = logged_words(json.load(open(align))["words"], warp_json)
-    sn = SN.snap_metrics(op, vocal_clip(vocal, t0, len(target) / fps, work), words, t0, fps, dt=logged_offsets(warp_json, len(op)))
+    sn = SN.snap_metrics(op, vocal_clip(vocal, t0, len(target) / fps, work), words, t0, fps, dt=logged_offsets(warp_json, len(op), fps))
     np.save(os.path.join(work, "measured_open.npy"), op)
     ok = c1 >= GATE_CORR and (sn["open_in_silence"] is None or sn["open_in_silence"] <= GATE_SILENCE)
     return dict(

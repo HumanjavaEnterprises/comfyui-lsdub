@@ -94,12 +94,29 @@ def face_roi(roi, shape, k=2.6):
     return [int(max(0, cy - s / 2)), int(min(H, cy + s / 2)), int(max(0, cx - s / 2)), int(min(W, cx + s / 2))]
 
 
-_SHAPE = {}  # the last measured_opening's readings beside its return value
+_SHAPE = {}  # the last measured_opening's readings beside its return value, until read; it never holds the frames
 
 
 def shape_of(frames):
-    """(gap, width) per frame in eye distances, from the measured_opening that read these frames; None if none did."""
-    return (_SHAPE["gap_iod"], _SHAPE["width_iod"]) if _SHAPE.get("frames") is frames else None
+    """(gap, width in eye distances, corner darkness) per frame, from the measured_opening that read these frames; None if none did."""
+    mine = _SHAPE.get("frames") == (id(frames), len(frames))
+    r = (_SHAPE["gap_iod"], _SHAPE["width_iod"], _SHAPE["corner"]) if mine else None
+    _SHAPE.clear()
+    return r
+
+
+def corner_dark(crop, p):
+    """the darkest the lips' contact gets through its outer third on each side, against the lips' own light (0 = as light as the lips,
+    1 = black). p: landmark index -> (x, y) on crop. The tracker's gap reads the middle of the mouth; this reads the corners, on pixels."""
+    L = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)[..., 0].astype(np.float32)
+    at = lambda q: L[int(np.clip(q[1], 0, L.shape[0] - 1)), int(np.clip(q[0], 0, L.shape[1] - 1))]
+    lips = float(np.median([at((p(0) + p(13)) / 2), at((p(14) + p(17)) / 2), at((p(40) + p(81)) / 2), at((p(270) + p(311)) / 2)]))
+    side = []
+    for a in (61, 291):
+        c, m = p(a), (p(13) + p(14)) / 2
+        line = [c + t * (m - c) for t in np.linspace(0.1, 1 / 3, 9)]
+        side.append(float(np.mean([min(at(q + [0, d]) for d in (-3, -2, -1, 0, 1, 2, 3)) for q in line])))
+    return float(np.clip(1 - min(side) / max(lips, 1.0), 0.0, 1.0))
 
 
 def measured_opening(frames, roi, fps=25.0):
@@ -110,7 +127,7 @@ def measured_opening(frames, roi, fps=25.0):
     det = landmarker.get("video", conf=0.2)
     y0, y1, x0, x1 = roi
     op = np.full(len(frames), np.nan)
-    giod, wiod = np.full(len(frames), np.nan), np.full(len(frames), np.nan)
+    giod, wiod, corner = np.full(len(frames), np.nan), np.full(len(frames), np.nan), np.full(len(frames), np.nan)
     for i, f in enumerate(frames):
         c = cv2.resize(f[y0:y1, x0:x1], None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
         r = det.detect_for_video(
@@ -122,9 +139,10 @@ def measured_opening(frames, roi, fps=25.0):
             op[i] = np.linalg.norm(p(13) - p(14)) / (np.linalg.norm(p(10) - p(152)) + 1e-9)
             iod = np.linalg.norm(p(33) - p(263)) + 1e-9
             giod[i], wiod[i] = np.linalg.norm(p(13) - p(14)) / iod, np.linalg.norm(p(61) - p(291)) / iod
+            corner[i] = corner_dark(c, p)
     det.close()
     ok = ~np.isnan(op)
-    _SHAPE.update(frames=frames, gap_iod=giod, width_iod=wiod)
+    _SHAPE.update(frames=(id(frames), len(frames)), gap_iod=giod, width_iod=wiod, corner=corner)
     return (np.interp(np.arange(len(op)), np.where(ok)[0], op[ok]) if ok.sum() >= 5 else None), float(ok.mean())
 
 
@@ -140,6 +158,12 @@ def auto_roi(A, B):
     hh = hw / 1.4  # 1.4:1 box (560 x 400 tiles)
     H, W = A[0].shape[:2]
     return [int(max(0, cy - hh)), int(min(H, cy + hh)), int(max(0, cx - hw)), int(min(W, cx + hw))]
+
+
+def card_argv(video, track, out, warp_json=None):
+    """the mouth card of a QA video: it reads the plan as the paint moved it."""
+    argv = ["--video", video, "--track", track, "--out", out, "--no-mediapipe", "--corner", "lower-right", "--scale", "1.0"]
+    return argv + (["--warp-json", warp_json] if warp_json else [])
 
 
 def render(take, rend, warp_json, dyn, t0, audio, out, track=None, roi=None, half=False):
@@ -256,10 +280,7 @@ def render(take, rend, warp_json, dyn, t0, audio, out, track=None, roi=None, hal
         from . import viseme_overlay
 
         carded = os.path.join(tmp, "card.mp4")
-        viseme_overlay.main(
-            ["--video", raw, "--track", track, "--out", carded, "--no-mediapipe", "--corner", "lower-right", "--scale", "1.0"]
-            + (["--warp-json", warp_json] if warp_json else [])
-        )
+        viseme_overlay.main(card_argv(raw, track, carded, warp_json))
         src = carded
     ff.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-c", "copy", "-movflags", "+faststart", out], check=True)
     if half:

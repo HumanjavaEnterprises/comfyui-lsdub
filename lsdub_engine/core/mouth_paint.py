@@ -308,6 +308,11 @@ def _parser():
         help="warp: one interior donor per opening segment (r2) or per frame with stickiness + cross-fade (frame, r1-like)",
     )
     ap.add_argument(
+        "--warp-temporal-spare",
+        action="store_true",
+        help="--warp-temporal smooths what moves between the plan's closures and held heights, and leaves those their full gap (the width smooths whole)",
+    )
+    ap.add_argument(
         "--warp-temporal-width",
         type=float,
         default=0.0,

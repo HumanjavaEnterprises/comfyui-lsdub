@@ -51,6 +51,7 @@ from ..io import ff
 import json
 import numpy as np, cv2
 from scipy.ndimage import gaussian_filter1d
+from scipy.signal import find_peaks
 
 from . import mouth_paint as mp_
 from . import mouth_morph as mm
@@ -544,16 +545,31 @@ def soft_sources(idx, sigma, floor=0.05):
     return out
 
 
-def smooth_residual(dF, sigma, keep_close=None):
+def spare_frames(gap, pp, prom=0.15):
+    """--warp-temporal-spare, per frame 0..1: the share of the full gap residual a frame keeps through the temporal smoothing. The plan's
+    closures and the tops and bottoms of its moves (prominence over prom of its p5..p95 span), eased over a frame each way: a class that
+    holds for a few frames still reaches its height, what moves between them is what gets smoothed."""
+    g = np.asarray(gap, float)
+    p = prom * max(1e-6, float(np.ptp(np.percentile(g, [5, 95]))))
+    a = np.zeros(len(g))
+    a[find_peaks(g, prominence=p)[0]] = 1.0
+    a[find_peaks(-g, prominence=p)[0]] = 1.0
+    a[np.asarray(pp, bool)] = 1.0
+    return np.clip(2.5 * gaussian_filter1d(a, 1.0, mode="nearest"), 0.0, 1.0)
+
+
+def smooth_residual(dF, sigma, keep_close=None, spare=None):
     """zero-phase gaussian (frames) of the per-frame residual. The control displacement is linear in it (J dF, canonical
     head frame), so this smooths the WARP FIELD itself over time, not the landmarks. keep_close (bool per frame): those
-    frames keep the full depth of a closing (PP)."""
+    frames keep the full depth of a closing (PP). spare (0..1 per frame): that share of the gap's own residual stays, width smooths whole."""
     if sigma <= 0:
         return np.array(dF, float)
     r = gaussian_filter1d(np.asarray(dF, float), sigma, axis=0, mode="nearest")
     if keep_close is not None and np.any(keep_close):
         k = np.asarray(keep_close, bool)
         r[k, 0] = np.minimum(r[k, 0], np.asarray(dF)[k, 0])
+    if spare is not None:
+        r[:, 0] += np.asarray(spare) * (np.asarray(dF, float)[:, 0] - r[:, 0])
     return r
 
 
@@ -620,6 +636,7 @@ def most_closed(S, gap, pose, fit=None):
     return int(np.flatnonzero(ok)[np.argmin(g[ok])])
 
 
+SEAM_SHADE = 0.3  # the shadow along shut lips' contact, as a share of the lips' own light
 IN_PAIRS = [(95, 191), (88, 80), (178, 81), (87, 82), (14, 13), (317, 312), (402, 311), (318, 310), (324, 415)]
 
 
@@ -637,6 +654,47 @@ def lip_seam(P):
             P[[a for a, _ in IN_PAIRS]],
         ]
     )
+
+
+def clean_lips(img, P):
+    """the lips of a reference frame that is not shut, for a closure: its gap, the rim around it and any dark in its corners painted over
+    from the lips themselves, so nothing of the mouth's inside lands on the contact line."""
+    P = np.asarray(P, float)[:, :2]
+    lw = float(np.linalg.norm(P[61] - P[291]))
+    k = len(ll.LIP_OUT)
+    s = lip_seam(P)
+    lip = np.zeros(img.shape[:2], np.uint8)
+    cv2.fillPoly(lip, [s[:k].astype(np.int32)], 255)
+    gap = np.zeros(img.shape[:2], np.uint8)
+    cv2.fillPoly(gap, [np.vstack([s[k : k + 11], s[k + 11 :][::-1]]).astype(np.int32)], 255)
+    r = max(2, int(round(lw * 0.02)))
+    gap = cv2.dilate(gap, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
+    L = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)[..., 0].astype(np.float32)
+    rest = (lip > 0) & (gap == 0)
+    bad = gap > 0
+    if rest.any():  # the dark of a smile's corners: near the seam only, the upper lip's own shade stays
+        r = max(3, int(round(lw * 0.05)))
+        near = cv2.dilate(gap, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))) > 0
+        bad = bad | (near & (lip > 0) & (L < 0.72 * float(np.median(L[rest]))))
+    fill = cv2.inpaint(img, bad.astype(np.uint8) * 255, max(3, int(round(lw * 0.015))), cv2.INPAINT_TELEA)
+    soft = cv2.GaussianBlur(fill, (0, 0), max(1.0, lw * 0.03))  # the fill's streaks would stretch across the shut lips
+    a = cv2.GaussianBlur(bad.astype(np.float32), (0, 0), max(1.0, lw * 0.01))[..., None]
+    return np.clip(a * soft + (1 - a) * fill + 0.5, 0, 255).astype(np.uint8)
+
+
+def seam_shade(lips, line, lw):
+    """the shut lips' contact on a target: the seam softened where the two lips meet, one thin shadow along it."""
+    h, w = lips.shape[:2]
+    q = (np.asarray(line, float) * 8).astype(np.int32)[:, None]
+    wide = np.zeros((h, w), np.uint8)
+    cv2.polylines(wide, [q], False, 255, max(2, int(round(lw * 0.03))), cv2.LINE_AA, 3)
+    wide = cv2.GaussianBlur(wide, (0, 0), max(1.0, lw * 0.008)).astype(np.float32)[..., None] / 255
+    x = lips.astype(np.float32)
+    x = wide * cv2.GaussianBlur(x, (0, 0), max(1.0, lw * 0.012)) + (1 - wide) * x
+    thin = np.zeros((h, w), np.uint8)
+    cv2.polylines(thin, [q], False, 255, 1, cv2.LINE_AA, 3)
+    thin = cv2.GaussianBlur(thin.astype(np.float32), (0, 0), max(1.0, lw * 0.01))
+    return x * (1 - SEAM_SHADE * thin[..., None] / max(1.0, float(thin.max())))
 
 
 def seam_dst(P):
@@ -680,6 +738,7 @@ class EraseLayer:
         # close: a reference frame that is not shut shows its own gap (teeth in a slit) on a closure, so its inner lips go apart in
         # the source mesh and onto one line in the target; a reference already shut (under 1.5 px) keeps the contact line
         self.close = bool(close) and float(np.median([np.linalg.norm(self.P[a] - self.P[b]) for a, b in IN_PAIRS])) > 1.5
+        self.lips_shut = clean_lips(ref_img, self.P) if self.close else None
         sp = np.vstack([lip_seam(self.P) if self.close else lip_frame(self.P), self.ring])
         self.tris = Delaunay(sp).simplices
         self.lab, self.items = [], {}
@@ -710,9 +769,10 @@ class EraseLayer:
         rel = lambda Q: np.asarray(Q, float)[ll.LIP_OUT] - [x0, y0]
         shp = (box[3], box[2])
         if kind == "closed":
-            lips, okl = mm.pwa(self.lips_img, sp, dp, tris, box)
+            lips, okl = mm.pwa(self.lips_shut if shut else self.lips_img, sp, dp, tris, box)
             if shut:
                 lips = cv2.inpaint(np.clip(lips, 0, 255).astype(np.uint8), (okl < 0.5).astype(np.uint8) * 255, 3, cv2.INPAINT_TELEA)
+                lips = seam_shade(lips, lip_frame(P_dst)[len(ll.LIP_OUT) :] - [x0, y0], lw)
             fg = mp_.hull_mask(rel(P_dst), shp, 0.04, max(3, lw * 0.06))
         else:  # 'own': the warp output's own lips (and interior) at the target shape stay on top
             lips = out[y0:y1, x0:x1]
@@ -1090,7 +1150,8 @@ class WarpClip:
         conf = confidence(dF, scale, a.warp_deadband, a.warp_deadband + g("warp_ramp", 0.08)) if a.warp_deadband >= 0 else np.ones(n)
         conf = gaussian_filter1d(conf, 1.0, mode="nearest")
         dFe = dF * conf[:, None] * a.warp_gain
-        dFe = smooth_residual(dFe, g("warp_temporal", 0.0), pp)  # the field itself, over time
+        spare = spare_frames(Ft[:, 0], pp) if g("warp_temporal_spare", False) else None
+        dFe = smooth_residual(dFe, g("warp_temporal", 0.0), pp, spare)  # the field itself, over time
         tw = g("warp_temporal_width", 0.0)  # width (corners -> cheeks): slower
         if tw > g("warp_temporal", 0.0):
             dFe[:, 1] = (
@@ -1544,18 +1605,7 @@ class WarpClip:
         if comp is not None:
             comp.fill_l3 = opt("warp_fill_l3", "hide")
             if opt("warp_interior_source", "model") == "take":
-                from .interior_take import TakeInterior
-
-                comp.take_interior = TakeInterior(
-                    self.bank,
-                    frames,
-                    S,
-                    Fe,
-                    self.scale,
-                    g("warp_pose_w", 2.0),
-                    moved=self.sync_frames,
-                    open_floor=opt("warp_interior_open_floor", 0.0),
-                )
+                comp.take_interior = self.take_interior(frames, S, Fe, opt)
             if opt("warp_teeth_fit", "off") == "take":
                 from .interior_take import TeethFit, clean_atlas
 
@@ -1663,6 +1713,21 @@ class WarpClip:
             comp.clamps[i] = comp.clamps.pop()
         return out, tm, lg
 
+    def take_interior(self, frames, S, Fe, opt):
+        """--warp-interior-source take: the interior filled from the take's own frames."""
+        from .interior_take import TakeInterior
+
+        return TakeInterior(
+            self.bank,
+            frames,
+            S,
+            Fe,
+            self.scale,
+            self.g("warp_pose_w", 2.0),
+            moved=self.sync_frames,
+            open_floor=opt("warp_interior_open_floor", 0.0),
+        )
+
     # --------------------------------------------------------------------------------------------- erase layer --
     def setup_erase(self):
         g, n, frames, S, F, Fe, model, pl = self.g, self.n, self.frames, self.S, self.F, self.Fe, self.model, self.pl
@@ -1692,13 +1757,16 @@ class WarpClip:
             return out, None, {}
         g, F = self.g, self.F
         gap_t = float(F[i, 0] + ov["dFe"][0]) if "dFe" in ov else self.er_gap[i]
+        if g("warp_erase_close", False):  # a repair's dFe comes through the fold guard; the closure it repairs is the plan's before it
+            gap_t = min(gap_t, float(self.er_gap[i]))
         P_take = ov.get("S_take", ov.get("S", self.S[i]))[:, :2]
         P_out = ov.get("P_out", self.P_out[i])
         if rerender:
             self.erase.lab = [x for x in self.erase.lab if x[0] != i]
-        out, em = self.erase.composite(
-            out, i, P_take, P_out, al_i, "closed" if al_kind(F[i, 0], gap_t, self.model.rng, g("warp_erase_thr", 0.12)) else "own"
-        )
+        closed = al_kind(F[i, 0], gap_t, self.model.rng, g("warp_erase_thr", 0.12))
+        if closed and g("warp_erase_close", False):
+            P_out = self.shut_target(i, P_out, ov)
+        out, em = self.erase.composite(out, i, P_take, P_out, al_i, "closed" if closed else "own")
         return (
             out,
             em,
@@ -1706,6 +1774,16 @@ class WarpClip:
         )
 
     # ------------------------------------------------------------------------------------------------ lip lock --
+    def shut_target(self, i, P_out, ov):
+        """where a closure's lips go: the warped frame's, with the gap the fold guard held back from the warp given back. The layer is
+        its own mesh; the guard's limit is the warp's."""
+        short = float(self.dFe_pre_fold[i, 0] - ov.get("dFe", self.dFe[i])[0])
+        if short >= 0:
+            return P_out
+        P = np.array(P_out, float)
+        P[CTRL] += (self.model.delta(np.array([short, 0.0])) @ self.rot[i].T)[:, :2]
+        return P
+
     def setup_lock(self):
         g, n = self.g, self.n
         lk = ll.LipLock(ll.parse_lip_ref(self.a.warp_lip_lock), g("warp_lip_lock_sigma", 4.0), g("warp_lip_lock_l", 0.0))

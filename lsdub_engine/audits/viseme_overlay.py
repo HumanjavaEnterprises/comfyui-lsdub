@@ -636,7 +636,7 @@ def moved_frames(n, fps, warp_json=None):
     --coart-sync-vocal) shows on the card what it painted there, not the frame the track holds there."""
     from ..core.coart import logged_offsets
 
-    dt = logged_offsets(warp_json, n) if warp_json else None
+    dt = logged_offsets(warp_json, n, fps) if warp_json else None
     return list(range(n)) if dt is None else [i + int(round(float(dt[i]) * fps)) for i in range(n)]
 
 
@@ -663,7 +663,9 @@ def segments_of(a, n):
                 )
                 for p in paths
             ]
-            out.append((s.get("label", ""), tvs, list(fr)))
+            wj = s.get("warp_json", getattr(a, "warp_json", None))
+            step = moved_frames(len(fr), tvs[0].fps, wj) if tvs and wj else None
+            out.append((s.get("label", ""), tvs, [f + step[i] - i for i, f in enumerate(fr)] if step else list(fr)))
         tot = sum(len(f) for _, _, f in out)
         if tot != n:
             print(f"annotate: the EDL covers {tot} frames, the video has {n}", file=sys.stderr)

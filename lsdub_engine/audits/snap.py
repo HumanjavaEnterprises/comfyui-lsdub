@@ -24,7 +24,7 @@ SIL_RMS = 0.02
 CLOSE_FRAC = 0.25
 RISE_WIN = 0.30
 CLOSERS = {"P", "B", "M"}
-CLOSED_IOD = 0.06  # lips shut: the inner gap under this share of the eye distance. Shut lips read 0.05 on the tracker, a slit about 0.09
+CLOSED_IOD = 0.05  # lips shut: the inner gap under this share of the eye distance. Really shut lips read .003-.031 on the tracker, a dark open mouth .060-.065, a slit about 0.09
 
 
 def envelope(wav, n, fps=25.0):
@@ -97,6 +97,19 @@ def closure_real(gap_iod, frames, thr=CLOSED_IOD):
     g = np.asarray(gap_iod, float)
     hits = [bool(np.nanmin(g[max(0, f - 1) : f + 2]) <= thr) for f in frames if np.isfinite(g[max(0, f - 1) : f + 2]).any()]
     return (float(np.mean(hits)) if hits else None), len(hits)
+
+
+def closure_corner(gap_iod, corner, frames):
+    """how dark the corners of the lips read at their closures: per p / b / m phone, corner darkness on the most shut frame within +-1,
+    the worst of the shot. None without a closure. A shut middle with dark corners passes closure_real; this one sees them."""
+    g, c = np.asarray(gap_iod, float), np.asarray(corner, float)
+    v = []
+    for f in frames:
+        a, b = max(0, f - 1), f + 2
+        if np.isfinite(g[a:b]).any():
+            v.append(float(c[a:b][int(np.nanargmin(g[a:b]))]))
+    v = [x for x in v if np.isfinite(x)]
+    return round(max(v), 3) if v else None
 
 
 def class_contrast(gap, classes, opens):

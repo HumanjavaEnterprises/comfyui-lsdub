@@ -393,10 +393,13 @@ def shape_readings(shape, warp_json, words, t0, fps, SN):
     from ..core.coart import logged_classes
     from .viseme_overlay import GLYPH
 
-    gap, width = shape
+    gap, width, *corner = shape
     out = {"width_range": round(float(np.nanpercentile(width, 95) - np.nanpercentile(width, 5)), 4)}
-    out["closure_real"], out["closure_real_n"] = SN.closure_real(gap, SN.closures(words, t0, len(gap), fps))
-    cl = logged_classes(warp_json, len(gap))
+    fr = SN.closures(words, t0, len(gap), fps)
+    out["closure_real"], out["closure_real_n"] = SN.closure_real(gap, fr)
+    if corner:
+        out["closure_corner"] = SN.closure_corner(gap, corner[0], fr)
+    cl = logged_classes(warp_json, len(gap), fps)
     if cl:
         opens = {k: v["oi"] for k, v in GLYPH.items() if k not in ("sil",)}
         out["height_contrast"], out["height_r"], out["class_gap"] = SN.class_contrast(gap, cl, opens)
@@ -418,7 +421,7 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
     if roi is not None and F:
         op, cover = Q.measured_opening(F, roi, fps)
         if op is not None:
-            moved = logged_offsets(s.get("warp_json"), len(op))  # the plan the dub moved: the same reading moved with it
+            moved = logged_offsets(s.get("warp_json"), len(op), fps)  # the plan the dub moved: the same reading moved with it
             if align:
                 dyn = os.path.join(work, f"dyn_{s['shot']:04d}.csv")
                 steps.call(
@@ -633,6 +636,7 @@ def write_verify(meta, rows, out):
         "width_range",
         "closure_real",
         "closure_real_n",
+        "closure_corner",
         "height_contrast",
         "reason",
     ]

@@ -75,6 +75,29 @@ def _probe(path):
     return int(s["width"]), int(s["height"]), float(n) / float(d)
 
 
+def _frames(path):
+    """the video stream's frames, counted."""
+    out = ff.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-count_packets",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=nb_read_packets",
+            "-of",
+            "csv=p=0",
+            path,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return int(out.strip().split(",")[0])
+
+
 def apply(src, dst, key=KEY, strength=3.0, crf=14):
     """Watermark every frame of src -> dst (audio copied, metadata tag added)."""
     w, h, fps = _probe(src)
@@ -112,7 +135,8 @@ def apply(src, dst, key=KEY, strength=3.0, crf=14):
             "yuv420p",
             "-metadata",
             f"comment={TAG}",
-            "-shortest",
+            "-t",  # every video frame, however short the audio; audio past the last frame stops with it
+            f"{(_frames(src) + 0.5) / fps:.6f}",
             dst,
         ],
         stdin=ff.PIPE,

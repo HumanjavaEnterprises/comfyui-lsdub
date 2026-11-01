@@ -990,27 +990,41 @@ def _plan_log(warp_json):
     return json.load(open(p)) if p and os.path.exists(p) else {}
 
 
-def logged_offsets(warp_json, n):
+def logged_offsets(warp_json, n, fps=None):
     """s earlier each of n delivered frames was planned, from the plan log beside a paint's --warp-json (--coart-advance-ms and
     --coart-sync-vocal together), or None when nothing moved: a reader of the alignment or the vocal reads at t + this."""
     log = _plan_log(warp_json)
     dt = np.asarray(log.get("sync_dt") or [0.0], float)
-    dt = dt[(np.arange(n) * len(dt) // max(n, 1))] + float(log.get("advance_s") or 0.0)
+    dt = dt[np.minimum((np.arange(n) * frames_per_delivered(log, len(dt), n, fps)).astype(int), len(dt) - 1)] + float(
+        log.get("advance_s") or 0.0
+    )
     return dt if np.any(dt) else None
 
 
-def logged_classes(warp_json, n):
+def frames_per_delivered(log, N, n, fps=None):
+    """the paint's frames behind one of n delivered frames, from N painted. A sing paint runs at a whole multiple of the delivered rate;
+    the log's fps says which, and a log without one reads the nearest whole ratio, so a file a few frames short keeps its time."""
+    if fps and log.get("plan_fps"):
+        return float(log["plan_fps"]) / float(fps)
+    return float(max(1, round(N / max(n, 1))))
+
+
+def logged_classes(warp_json, n, fps=None):
     """the plan's viseme class on each of n delivered frames, from the plan log beside --warp-json ("" outside a segment); None without
-    a log. The log counts the paint's frames, which a sing render has more of than it delivers."""
-    segs = [x for x in (_plan_log(warp_json).get("segments") or []) if x.get("frames")]
+    a log. The log counts the paint's frames, which a sing render has more of than it delivers: a frame reads its own time, however
+    many frames the file kept."""
+    log = _plan_log(warp_json)
+    segs = [x for x in (log.get("segments") or []) if x.get("frames")]
     if not segs:
         return None
     N = max(int(len(json.load(open(warp_json))["frames"])), 1)
+    m = frames_per_delivered(log, N, n, fps)
     out = [""] * n
     for x in segs:
         for k in range(x["frames"][0], x["frames"][-1] + 1):
-            if k < N:
-                out[k * n // N] = x["v"]
+            i = int(k / m)
+            if k < N and i < n:
+                out[i] = x["v"]
     return out
 
 
@@ -1112,6 +1126,7 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None, sync
         lead_match=match,
         lead_shift=shift,
         advance_s=advance,
+        plan_fps=fps,
         jaw_share=s,
         jaw_share_take=s_take,
         dyn_source=getattr(a, "coart_dyn", None),

@@ -102,7 +102,8 @@ def test_snap_paint_holds_the_callers_warp_temporal_at_the_internal_rate():
     from lsdub_engine.core import sing as S
 
     assert S.snap_paint(["--lib", "kit"], 2) == S.SNAP["paint"]  # nobody names it: the flags as they were
-    assert S.snap_paint(["--warp-temporal-width", "3"], 2) == S.SNAP["paint"]  # another flag
+    assert S.snap_paint(["--warp-temporal-width", "3"], 2) == [*S.SNAP["paint"], "--warp-temporal-width", "6.0"]  # in output frames too
+    assert S.snap_paint(["--warp-sigma", "3"], 2) == S.SNAP["paint"]  # another flag
     p = S.snap_paint(["--warp-temporal", "1.5"], 2)
     assert p[p.index("--warp-temporal") + 1] == "3.0"
     assert S.SNAP["paint"][S.SNAP["paint"].index("--warp-temporal") + 1] == "0.6"  # SNAP itself is left alone
