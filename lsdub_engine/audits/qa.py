@@ -355,6 +355,11 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
     cap.release()
     act, env = vad(vocal, n, fps, offset)
     words = json.load(open(align))["words"] if align else []
+    vocal_words = None
+    if align:
+        from ..core.vocal_retime import retime
+
+        vocal_words = retime(json.load(open(align)), vocal)["words"]
     faces = C.Faces()
     emb = (emb or C.Embedder(model or C.MODEL)) if before else None
     rows = []
@@ -363,6 +368,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
             continue
         r = {k: s.get(k) for k in ("shot", "f0", "f1", "start", "end", "verdict", "target", "px1080")}
         r.update(measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q, SN))
+        r.update(vocal_reading(words, vocal_words, s, offset))
         if before:
             b = measure_shot(before, s, fps, offset, vocal, act, align, words, faces, os.path.join(work, "before"), Q, SN)
             r["before"] = {k: b.get(k) for k in ("corr", "mouth_range", "open_in_silence", "mouth_visible")}
@@ -404,6 +410,16 @@ def shape_readings(shape, warp_json, words, t0, fps, SN):
         opens = {k: v["oi"] for k, v in GLYPH.items() if k not in ("sil",)}
         out["height_contrast"], out["height_r"], out["class_gap"] = SN.class_contrast(gap, cl, opens)
     return out
+
+
+def vocal_reading(words, vocal_words, s, offset):
+    """the plan's word times against the vocal itself on this shot: reported, moving no band. The plan's own words, as the dub moved them."""
+    if not vocal_words or not s.get("warp_json"):
+        return {}
+    from ..core.coart import logged_words
+    from ..core.vocal_retime import word_offsets
+
+    return word_offsets(logged_words(words, s["warp_json"]), vocal_words, s["start"] - offset, s["end"] - offset)
 
 
 def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q, SN):
@@ -601,7 +617,8 @@ def _shape_cell(r):
         return ""
     h = "-" if r.get("height_contrast") is None else f"{r['height_contrast']:.2f}"
     c = "-" if r.get("closure_real") is None else f"{round(r['closure_real'] * r['closure_real_n'])}/{r['closure_real_n']}"
-    return f"{h}, shut {c}, w {r['width_range']:.2f}"
+    k = "" if r.get("closure_corner") is None else f", corner {r['closure_corner']:.2f}"
+    return f"{h}, shut {c}, w {r['width_range']:.2f}{k}"
 
 
 def write_verify(meta, rows, out):
@@ -638,6 +655,10 @@ def write_verify(meta, rows, out):
         "closure_real_n",
         "closure_corner",
         "height_contrast",
+        "vocal_off_ms",
+        "vocal_off_n",
+        "vocal_words",
+        "vocal_worst",
         "reason",
     ]
     with open(out + ".csv", "w", newline="") as f:
@@ -654,16 +675,19 @@ def write_verify(meta, rows, out):
         "number says the render followed its plan, and cannot see a wrong alignment. `audio` reads it against the vocal's "
         "loudness with no alignment, best lag in ms (+ = the mouth trails): reported, it moves no band.",
         "`shape` is reported and moves no band: height contrast (1 = the delivered heights follow the card's, 0 = every class the same "
-        "height), then p / b / m phones with the lips really shut (gap under a share of the eye distance), then the width travel.",
+        "height), then p / b / m phones with the lips really shut (gap under a share of the eye distance), then the width travel, then "
+        "the darkest reading at the lips' corners on closures (no calibrated threshold: compare to the take's).",
+        "`vocal` is reported and moves no band: the plan's word starts against where the vocal itself has those words (voiceless stretches "
+        "and level dips, no aligner, no speech-to-text): median offset in ms, words past 100 ms of those in the shot, the worst word.",
         "",
-        "| shot | t (s) | band | score | Δ vs before | class | sync corr | audio | shape | travel | silence | mouth | identity | reason |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| shot | t (s) | band | score | Δ vs before | class | sync corr | audio | shape | vocal | travel | silence | mouth | identity | reason |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in order:
         L.append(
             f"| {r['shot']} | {r['start']:.2f}-{r['end']:.2f} | **{r['band']}** | {'-' if r['score'] is None else (format(r['score'], '.0f'))} | "
             f"{'' if r.get('delta') is None else (format(r['delta'], '+.0f'))} | {r['class']} | {'' if r.get('corr') is None else (format(r['corr'], '+.2f'))} | "
-            f"{_audio_cell(r)} | {_shape_cell(r)} | {r.get('mouth_range', '')} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
+            f"{_audio_cell(r)} | {_shape_cell(r)} | {_vocal_cell(r)} | {r.get('mouth_range', '')} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
             f"{r['mouth_visible']:.0%} | {'' if r.get('identity_cos') is None else r['identity_cos']} | {r['reason']} |"
         )
     open(out + ".md", "w").write("\n".join(L) + "\n")
@@ -676,6 +700,10 @@ def write_verify(meta, rows, out):
         ],
         lambda r: f"{r['band']} {'' if r['score'] is None else int(r['score'])}",
     )
+
+
+def _vocal_cell(r):
+    return "" if r.get("vocal_off_ms") is None else f"{r['vocal_off_ms']} ms, {r['vocal_off_n']}/{r['vocal_words']}, {r['vocal_worst']}"
 
 
 def sheet(video, shots, path, colour, label, cols=8, tw=256):

@@ -563,3 +563,23 @@ def test_qa_reads_the_curve_where_the_plan_moved_it():
     R = [dict(time_s=i / 25, geo_gap_cm=i) for i in range(100)]
     base = qa.dyn_curve(R, 4, 0.4, 25, None)
     assert qa.dyn_curve(R, 4, 0.4, 25, np.full(4, 0.08)) == pytest.approx(base + 2)
+
+
+def test_closure_ramp_bounds_the_frames_around_a_closure_at_the_takes_speed():
+    from lsdub_engine.core import coart as C
+
+    lim = C.closure_ramp({10: 0.0, 11: 0.0}, 30, 1.0, 5.0, 10.0)
+    assert lim[10] == 0.0 and lim[11] == 0.0
+    assert lim[9] == pytest.approx(0.2) and lim[8] == pytest.approx(0.4) and lim[6] == pytest.approx(0.8)
+    assert lim[12] == pytest.approx(0.1) and lim[20] == pytest.approx(0.9)
+    assert 4 not in lim and 22 not in lim  # past the take's top: free
+    assert C.closure_ramp({}, 9, 1.0, 5.0, 5.0) == {}
+
+
+def test_ramp_width_eases_onto_the_closure_and_leaves_the_rest():
+    from lsdub_engine.core import coart as C
+
+    x = np.full(30, 1.0)
+    x[10:12] = -1.0
+    y = C.ramp_width(x, {10: 0.0, 11: 0.0}, 4.0, 4.0)
+    assert y[10] == -1.0 and y[11] == -1.0 and y[9] < -0.7 and -1.0 < y[8] < y[7] < 1.0 and y[6] == 1.0 and y[12] < -0.7 and y[16] == 1.0

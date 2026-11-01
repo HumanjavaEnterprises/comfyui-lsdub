@@ -780,6 +780,12 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
                 caps[k] = min(caps.get(k, np.inf), c)
                 pp[k] |= tvis[i] == "PP"
         i = j + 1
+    ramp_k = float(vars(a).get("coart_closure_ramp", 0.0) or 0.0)  # (outside the golden recipes' read list)
+    lim = (
+        closure_ramp(caps, n, float(np.percentile(ref[:, 0], 95)), ramp_k * t_fall * fps, ramp_k * t_rise * fps)
+        if ramp_k > 0 and caps
+        else caps
+    )
     w = np.ones(n)
     sk = np.array([bool(fr_t[min(i, len(fr_t) - 1)].get("skip")) for i in range(n)]) & (skip_kind == "free")
     w[sk] = 0.3
@@ -800,11 +806,11 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
         Bm[capd, 1] = np.clip(Bm[capd, 1], hull.V[:, 1].min(), hull.V[:, 1].max())
     lam, pri = [], []
     for d in range(2):
-        cd = caps if d == 0 else None
+        cd = lim if d == 0 else None
         l, st = prior_lambda(lambda L, d=d, cd=cd: smooth_fit(Bm[:, d], w, L, cd, vmax[d]), take[:, d], prior, PRIOR_FLOOR[d])
         lam.append(l)
         pri.append(st)
-    fit = lambda BB, ww: np.stack([smooth_fit(BB[:, d], ww, lam[d], caps if d == 0 else None, vmax[d]) for d in range(2)], 1)
+    fit = lambda BB, ww: np.stack([smooth_fit(BB[:, d], ww, lam[d], lim if d == 0 else None, vmax[d]) for d in range(2)], 1)
     x = fit(Bm, w)
     nproj = int(outB.sum())
     nfin = 0
@@ -820,11 +826,13 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
         B2[out] = hull.project(x[out])
         w2 = w.copy()
         w2[out] = 20.0
-        x = np.stack([smooth_fit(B2[:, d], w2, 0.05 * lam[d], caps if d == 0 else None, vmax[d]) for d in range(2)], 1)
+        x = np.stack([smooth_fit(B2[:, d], w2, 0.05 * lam[d], lim if d == 0 else None, vmax[d]) for d in range(2)], 1)
     if hull.ok:
         x[capd, 1] = np.clip(x[capd, 1], hull.V[:, 1].min(), hull.V[:, 1].max())
-    for k, c in caps.items():
+    for k, c in lim.items():
         x[k, 0] = min(x[k, 0], c)
+    if ramp_k > 0 and caps:
+        x[:, 1] = ramp_width(x[:, 1], caps, ramp_k * t_fall * fps, ramp_k * t_rise * fps)
     rng_ratio = lambda X: [
         float(np.ptp(np.percentile(X[:, d], [5, 95])) / max(1e-6, np.ptp(np.percentile(Ft_u[keep, d], [5, 95])))) for d in range(2)
     ]
@@ -877,6 +885,45 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
 
 class _Args:
     pass
+
+
+def closure_ramp(caps, n, top, f_in, f_out):
+    """--coart-closure-ramp: a closure the plan falls into from a wide open vowel within a frame or two reads as a slam, whatever the take
+    does. caps {frame: opening}, top: the take's open height, f_in / f_out: frames from there to shut, going in and coming out. -> the caps
+    with the frames around them bounded too: the opening stays under a line from each closure at that speed."""
+    b = np.full(n, np.inf)
+    for k, c in caps.items():
+        b[k] = c
+    if not caps:
+        return dict(caps)
+    span = max(1e-6, top - min(caps.values()))
+    vo, vi = span / max(1.0, f_out), span / max(1.0, f_in)
+    for k in range(1, n):
+        b[k] = min(b[k], b[k - 1] + vo)
+    for k in range(n - 2, -1, -1):
+        b[k] = min(b[k], b[k + 1] + vi)
+    return {k: (caps[k] if k in caps else float(b[k])) for k in range(n) if k in caps or b[k] < top}
+
+
+def ramp_width(x, caps, f_in, f_out):
+    """the width eased onto each closure's over the same frames as closure_ramp: lips that stay wide shut in one frame move as far."""
+    x = np.asarray(x, float).copy()
+    ks = sorted(caps)
+    runs = [[ks[0], ks[0]]]
+    for k in ks[1:]:
+        if k == runs[-1][1] + 1:
+            runs[-1][1] = k
+        else:
+            runs.append([k, k])
+    y = x.copy()
+    for a, b in runs:
+        for f, edge, off in ((f_in, a, -1), (f_out, b, 1)):
+            for d in range(1, int(np.ceil(f))):
+                k = edge + off * d
+                if not 0 <= k < len(x) or k in caps:
+                    break
+                y[k] = x[edge] + (y[k] - x[edge]) * float(smootherstep(d / f))
+    return y
 
 
 def held_frames(S3raw):
@@ -1119,6 +1166,7 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None, sync
     Ft = press_closures(Ft, Fs, info["closures"], caps_px, scale, d0, d0 + float(getattr(a, "warp_ramp", 0.08)), 0.15 * gs)
     if quiet:
         return Ft, pp
+    a.coart_closures = info["closures"]  # (every closure class; pp holds the PP frames: read by --warp-temporal-spare)
     info["closure_press_px"] = {int(k): round(float(caps_px[k] - Ft[k, 0]), 2) for k in info["closures"] if caps_px[k] - Ft[k, 0] > 0.01}
     info.update(
         align="alignment" if align is not None else "track viseme runs",

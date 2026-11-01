@@ -374,9 +374,9 @@ class Card:
             self.card_tiles[vis] = None if im is None else im[:, :, ::-1].copy()  # BGR -> RGB
         return self.card_tiles[vis]
 
-    def render(self, tv, k):
-        """the card for frame k of TrackView tv -> (RGB image, alpha), both (H, W)."""
-        key = (id(tv), k)
+    def render(self, tv, k, label=None):
+        """the card for frame k of TrackView tv -> (RGB image, alpha), both (H, W). label: the frame's name on the card, default f k."""
+        key = (id(tv), k, label)
         if key in self.cache:
             return self.cache[key]
         from PIL import Image, ImageDraw
@@ -427,7 +427,9 @@ class Card:
         x0 = int(114 * s)
         xr = W - int(10 * s)
         prv, cur, nxt = tv.prev_next(k)
-        head = " · ".join(x for x in (tv.label, f"f{k}", tv.note) if x) + (f"  face {tv.face_id}" if tv.face_id is not None else "")
+        head = " · ".join(x for x in (tv.label, label or f"f{k}", tv.note) if x) + (
+            f"  face {tv.face_id}" if tv.face_id is not None else ""
+        )
         d.text((x0, int(8 * s)), head, font=self.f_small, fill=DIM)
         yb = int(60 * s)  # word baseline
         cw = cur if cur else "·"

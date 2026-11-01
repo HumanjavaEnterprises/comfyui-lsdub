@@ -313,6 +313,12 @@ def _parser():
         help="--warp-temporal smooths what moves between the plan's closures and held heights, and leaves those their full gap (the width smooths whole)",
     )
     ap.add_argument(
+        "--warp-temporal-spare-ease",
+        type=float,
+        default=1.0,
+        help="warp (--warp-temporal-spare): frames its sparing eases over each way; sing sets its rate multiple, so the eased time holds",
+    )
+    ap.add_argument(
         "--warp-temporal-width",
         type=float,
         default=0.0,
@@ -459,6 +465,11 @@ def _parser():
         action="store_true",
         help="warp: a closure layer shuts for real: a closure is read on the plan before the fold guard, and the reference frame's "
         "own gap is taken out of its lips (upper and lower inner lip land on one contact line)",
+    )
+    ap.add_argument(
+        "--warp-erase-tone",
+        action="store_true",
+        help="warp (--warp-erase-close): closed lips keep the take's own tone between the upper and lower lip, read on its most closed frames",
     )
     ap.add_argument("--warp-erase-grow", type=float, default=0.22, help="warp: growth of the erased lip region (x the lip hull)")
     ap.add_argument(
@@ -904,6 +915,13 @@ def _parser():
         "clip planned at each offset, scored against the vocal's level): phones, closures, tongue and teeth shapes and "
         "--coart-dyn together, in whole frames of the track. Off when absent; adds to --coart-advance-ms",
     )
+    ap.add_argument(
+        "--coart-closure-ramp",
+        type=_not_negative,
+        default=0.0,
+        help="warp (coart): the mouth reaches a closure and leaves it over this share of the take's own closing and opening times, the "
+        "width with it (0 = off: the planned opening is cut to the closure on its frame)",
+    )
     # (opt-in; audits/frame_gate.py = the checker, core/frame_gate.py = the maker): the per-frame gate ---
     ap.add_argument(
         "--warp-gate",
@@ -952,6 +970,12 @@ def _parser():
         default=0.0,
         help="warp (--warp-interior-source take): donors open at least this percentile (0..1) of the take's open frames, so a narrow "
         "planned mouth keeps an interior to show. 0 = off",
+    )
+    ap.add_argument(
+        "--warp-interior-mend",
+        action="store_true",
+        help="warp (--warp-interior-source take): the fill around a donor's teeth stays in colour on a thin opening, and pink sinks into "
+        "the cavity's dark instead of a flat grey",
     )
     ap.add_argument(
         "--warp-interior-clip",

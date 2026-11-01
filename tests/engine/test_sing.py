@@ -98,6 +98,10 @@ def test_gpu_todo_names_no_machine_and_sing_takes_a_preset():
     assert "--preset" in src
 
 
+def test_snap_paint_eases_the_sparing_over_one_output_frame():
+    assert S.snap_paint(["--warp-temporal-spare"], 2)[-2:] == ["--warp-temporal-spare-ease", "2.0"]
+
+
 def test_snap_paint_holds_the_callers_warp_temporal_at_the_internal_rate():
     from lsdub_engine.core import sing as S
 

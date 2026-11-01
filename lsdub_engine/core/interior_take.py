@@ -22,6 +22,8 @@ OPEN_MIN = 0.06  # a donor below this aperture (x mouth width) shows no interior
 HOLD = 0.50  # keep the running donor while its cost is within this of the best one
 DWELL = 10  # frames a new donor stays, unless it stops being open enough
 STILL_PCT = 60  # the frames below this percentile of the plan's gap speed count as held: the donor does not change on them
+FILL_REACH = 0.02  # --warp-interior-mend: under this share of kept pixels nearby, the fill's reading is noise
+SINK_DARK = 15  # --warp-interior-mend: the percentile of the opening's non-pink lightness the sink aims at
 SOFT = 0.02  # the interior's softening, x the box's side, at least 1 px
 FADE = 5  # frames of cross-fade around a donor switch
 OPEN_KEEP = 0.70  # the running donor may stay down to this share of the planned gap
@@ -94,12 +96,14 @@ def skin_ring(frame, P):
 
 
 class TakeInterior:
-    def __init__(self, bank, frames, S, Fe, scale, pose_w=2.0, moved=None, open_floor=0.0):
+    def __init__(self, bank, frames, S, Fe, scale, pose_w=2.0, moved=None, open_floor=0.0, mend=False):
         """moved: frames per frame the plan was moved earlier (--coart-sync-vocal): the donors are picked on the plan as it stood and
         move with it, so moving the plan does not change which of the take's frames fill it. open_floor: donors open at least this
         percentile (0..1) of the take's open frames: a narrow planned mouth is filled from a frame with an interior to show, since a
-        narrow donor's opening is lip rim, which the pink sink turns into a flat slot."""
+        narrow donor's opening is lip rim, which the pink sink turns into a flat slot. mend: the fill around a donor's teeth never reads
+        where it has no pixels (those read as Lab zero, blue), and the sink takes pink into the cavity's dark, not its median."""
         self.frames, self.S = frames, S
+        self.mend = bool(mend)
         self.open_floor = float(open_floor)
         n = len(frames)
         self.ap = np.array([aperture(np.asarray(S[i])) for i in range(n)])
@@ -127,6 +131,7 @@ class TakeInterior:
 
     EMPTY = (None, None, None)
     open_floor = 0.0
+    mend = False
 
     def state(self, i):
         """what paint(i) left behind: a gate candidate's copy, to keep it only if the candidate is kept."""
@@ -215,7 +220,10 @@ class TakeInterior:
         # teeth pixels and anything the donor's contour does not reach: the interior colour around them
         wt = keep.astype(np.float32)
         sg = max(2.0, 0.08 * np.sqrt(have.sum()))
-        fill = cv2.GaussianBlur(lab * wt[..., None], (0, 0), sg) / np.maximum(cv2.GaussianBlur(wt, (0, 0), sg), 1e-3)[..., None]
+        reach = cv2.GaussianBlur(wt, (0, 0), sg)
+        fill = cv2.GaussianBlur(lab * wt[..., None], (0, 0), sg) / np.maximum(reach, 1e-3)[..., None]
+        if self.mend:
+            fill = np.where(reach[..., None] < FILL_REACH, lab[keep].mean(0), fill)
         lab = np.where(keep[..., None], lab, fill)
         return lab, self.ring[j]
 
@@ -275,6 +283,8 @@ class TakeInterior:
             pm = cv2.GaussianBlur(pk.astype(np.float32), (0, 0), 1.0)[..., None]
             nonp = ~pk & opening
             base = (np.median(lab[nonp], 0) if nonp.sum() > 8 else np.array([50.0, 138.0, 134.0])).astype(np.float32)
+            if self.mend and nonp.sum() > 8:
+                base[0] = min(base[0], float(np.percentile(lab[nonp][:, 0], SINK_DARK)))
             if got > tgt:
                 need = least_sink(lab, pm, base, seen, over, area, tgt)
         k = max(need, tail)  # the cap holds from the first frame it is needed; letting go is what is eased

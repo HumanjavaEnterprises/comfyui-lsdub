@@ -41,7 +41,8 @@ SNAP = dict(
 
 def snap_paint(paint_args, m):
     """SNAP's paint flags. A --warp-temporal in the caller's flags, in output frames, holds here at the internal rate (x m); it
-    never goes under SNAP's own. --warp-temporal-width, in output frames too, the same. Named by nobody: SNAP's flags unchanged."""
+    never goes under SNAP's own. --warp-temporal-width, in output frames too, the same, and --warp-temporal-spare eases over one output
+    frame. Named by nobody: SNAP's flags unchanged."""
     p = list(SNAP["paint"])
     t = paint_api.temporal(paint_args)
     if t is not None:
@@ -50,6 +51,8 @@ def snap_paint(paint_args, m):
     w = paint_api.temporal(paint_args, "--warp-temporal-width")
     if w is not None:
         p += ["--warp-temporal-width", str(float(w) * m)]
+    if any(str(x) == "--warp-temporal-spare" for x in paint_args):
+        p += ["--warp-temporal-spare-ease", str(float(m))]
     return p
 
 

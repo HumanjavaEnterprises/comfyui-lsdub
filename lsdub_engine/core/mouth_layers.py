@@ -1135,6 +1135,17 @@ def ellipsoid_layer(c, L, box, colour, light=(0.0, -0.55, -0.83), groove=0.08, s
     return np.clip(rgb, 0, 255).astype(np.float32), al
 
 
+def close_slivers(enc, opening, io, side=0.16):
+    """--warp-interior-mend: a small corner of the opening the warped lips do not reach stays inside the mouth; shown as the warped face it
+    is a pale notch at the lip's corner. A large stretch stays out, as the lip clip wants: the opening really is not enclosed there."""
+    out = (opening & (enc < 0.5)).astype(np.uint8)
+    n, lbl, cc, _ = cv2.connectedComponentsWithStats(out, connectivity=8)
+    small = [k for k in range(1, n) if cc[k, cv2.CC_STAT_AREA] <= (side * io) ** 2]
+    if not small:
+        return enc
+    return np.where(np.isin(lbl, small), 1.0, enc).astype(enc.dtype)
+
+
 def fill_blob(img, mask, seed=7, grain=1.0):
     """cover: fill mask (bool) of img (BGR uint8) with the harmonic membrane of the pixels around it plus static
     grain matched to the surrounding skin's high-pass (the same recipe as lip_layers.erase_lips, on any mask). The fill
@@ -2538,6 +2549,8 @@ class LayerCompositor:
         if self.interior_clip and self.lip_ab is not None:
             # the interior is seen only THROUGH the warped lips (enclosed); elsewhere the warped face shows (L6)
             enc = self.enclosed(warped[sl], Q, Qo, io)
+            if self.take_interior is not None and self.take_interior.mend:
+                enc = close_slivers(enc, tl.poly_mask(Q, (h, w), 0.0), io)
             a0_ = float(a2.sum())
             a2 = a2 * enc
             clip_frac = round(1.0 - float(a2.sum()) / a0_, 4) if a0_ > 1e-3 else 0.0

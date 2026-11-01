@@ -34,9 +34,20 @@ def test_gap_top_with_nothing_to_read_maps_nothing():
     assert coart.gap_top_fn(X[:, 0], np.ones(10)) is None
 
 
-def test_the_shape_stack_is_the_interior_stack_plus_its_two_flags():
+def test_the_shape_stack_is_the_interior_stack_plus_its_flags():
     a, b = recipes.get("layers_v16_1_interior").argv, recipes.get("layers_v16_1_shape").argv
-    assert b == (*a, "--coart-gap-anchor", "top", "--warp-erase-close", "--warp-interior-open-floor", "0.5")
+    assert b == (
+        *a,
+        "--coart-gap-anchor",
+        "top",
+        "--warp-erase-close",
+        "--warp-erase-tone",
+        "--warp-interior-open-floor",
+        "0.5",
+        "--warp-interior-mend",
+        "--coart-closure-ramp",
+        "1.0",
+    )
     assert recipes.MOUTH_STACKS["layers_shape"] == "layers_v16_1_shape"
     assert "--warp-erase-close" not in recipes.get("layers_v16_1").argv
 
@@ -643,3 +654,73 @@ def test_a_spared_peak_keeps_its_height_and_width_smooths_whole():
     assert plain[:, 0].max() < 30 and kept[:, 0].max() > 45
     assert np.array_equal(kept[:, 1], plain[:, 1])
     assert np.array_equal(MW.smooth_residual(dF, 3.0, None, None), plain)  # off: as it was
+
+
+def test_close_slivers_keeps_a_corner_in_the_mouth_and_a_stretch_out():
+    from lsdub_engine.core.mouth_layers import close_slivers
+
+    op = np.ones((60, 120), bool)
+    enc = np.ones((60, 120), np.float32)
+    enc[10:14, 5:12] = 0.0  # a small corner
+    enc[30:55, 40:110] = 0.0  # a large stretch
+    out = close_slivers(enc, op, 100.0)
+    assert out[12, 8] == 1.0 and out[40, 80] == 0.0 and out.dtype == enc.dtype
+    assert close_slivers(np.ones((6, 6), np.float32), np.ones((6, 6), bool), 100.0).min() == 1.0
+
+
+def test_mend_fill_stays_in_colour_where_a_donor_keeps_nothing_near():
+    from lsdub_engine.core import interior_take as IT
+
+    class B:
+        pass
+
+    t = IT.TakeInterior.__new__(IT.TakeInterior)
+    P = np.zeros((478, 2))
+    a = np.linspace(0, 2 * np.pi, len(IT.LIP_IN), endpoint=False)
+    P[IT.LIP_IN] = np.stack([150 + 100 * np.cos(a), 50 + 30 * np.sin(a)], 1)
+    f = np.full((100, 300, 3), (200, 200, 230), np.uint8)  # teeth over most of it, a few dark pixels at one end
+    f[45:55, 55:75] = (40, 30, 90)
+    t.S, t.frames, t.ap = [P], [f], np.array([0.5])
+    t.ring = np.zeros((1, 3))
+    for mend, ok in ((False, False), (True, True)):
+        t.mend = mend
+        lab = t.donor_lab(0, P[IT.LIP_IN], 100, 300)[0]
+        far = lab[50, 230]
+        assert (float(far[1]) > 100) is ok  # Lab zero is the blue the fill used to show
+
+
+def test_ease_one_is_the_sparing_as_it_was():
+    r = np.random.default_rng(3)
+    g = np.cumsum(r.normal(0, 1, 80))
+    pp = np.zeros(80, bool)
+    pp[10:13] = True
+    p = 0.15 * max(1e-6, float(np.ptp(np.percentile(g, [5, 95]))))
+    a = np.zeros(80)
+    a[MW.find_peaks(g, prominence=p)[0]] = 1.0
+    a[MW.find_peaks(-g, prominence=p)[0]] = 1.0
+    a[pp] = 1.0
+    assert np.array_equal(MW.spare_frames(g, pp), np.clip(2.5 * MW.gaussian_filter1d(a, 1.0, mode="nearest"), 0.0, 1.0))
+
+
+def test_closed_frames_hold_every_closure_class_through_the_sparing():
+    pp = np.zeros(6, bool)
+    pp[1] = True
+    assert MW.closed_frames(6, pp, [3, 9]).tolist() == [False, True, False, True, False, False]
+    assert MW.closed_frames(6, pp).tolist() == pp.tolist()
+
+
+def test_tone_lips_lands_the_two_lips_on_the_takes_tone_and_keeps_their_mean():
+    img = np.zeros((120, 200, 3), np.uint8)
+    img[:] = (90, 90, 200)
+    P = np.zeros((478, 2))
+    a = np.linspace(np.pi, -np.pi, len(MW.ll.LIP_OUT), endpoint=False)
+    P[MW.ll.LIP_OUT] = np.stack([100 - 70 * np.cos(a), 60 + 32 * np.sin(a)], 1)
+    P[61], P[291] = (30, 60), (170, 60)
+    for k, (x, y) in {78: (40, 60), 308: (160, 60)}.items():
+        P[k] = (x, y)
+    for t, (u, v) in zip(np.linspace(55, 145, 9), MW.IN_PAIRS):
+        P[u], P[v] = (t, 60), (t, 60)
+    t0 = MW.lip_tone(img, P)
+    assert t0 is not None and abs(t0[0]) < 1
+    out = MW.tone_lips(img, P, np.array([-30.0, 0.0, 0.0]))
+    assert MW.lip_tone(out, P)[0] == pytest.approx(-30.0, abs=3.0)

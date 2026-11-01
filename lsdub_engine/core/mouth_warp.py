@@ -545,22 +545,32 @@ def soft_sources(idx, sigma, floor=0.05):
     return out
 
 
-def spare_frames(gap, pp, prom=0.15):
+def spare_frames(gap, pp, prom=0.15, ease=1.0):
     """--warp-temporal-spare, per frame 0..1: the share of the full gap residual a frame keeps through the temporal smoothing. The plan's
-    closures and the tops and bottoms of its moves (prominence over prom of its p5..p95 span), eased over a frame each way: a class that
-    holds for a few frames still reaches its height, what moves between them is what gets smoothed."""
+    closures and the tops and bottoms of its moves (prominence over prom of its p5..p95 span), eased over `ease` frames each way (a
+    delivered frame's worth, whatever the rate the paint runs at): a class that holds for a few frames still reaches its height, what moves
+    between them is what gets smoothed."""
     g = np.asarray(gap, float)
     p = prom * max(1e-6, float(np.ptp(np.percentile(g, [5, 95]))))
     a = np.zeros(len(g))
-    a[find_peaks(g, prominence=p)[0]] = 1.0
-    a[find_peaks(-g, prominence=p)[0]] = 1.0
+    d = max(1, int(round(ease)))  # peaks a delivered frame apart at most: the same moves at any rate
+    a[find_peaks(g, prominence=p, distance=d)[0]] = 1.0
+    a[find_peaks(-g, prominence=p, distance=d)[0]] = 1.0
     a[np.asarray(pp, bool)] = 1.0
-    return np.clip(2.5 * gaussian_filter1d(a, 1.0, mode="nearest"), 0.0, 1.0)
+    return np.clip(2.5 * ease * gaussian_filter1d(a, ease, mode="nearest"), 0.0, 1.0)
+
+
+def closed_frames(n, pp, frames=()):
+    """the frames that must stay shut through the smoothing: the PP frames and the plan's other closures (F, V)."""
+    c = np.array(pp[:n], bool)
+    k = [i for i in frames if i < n]
+    c[k] = True
+    return c
 
 
 def temporal_spare(g, gap, pp):
     """--warp-temporal-spare's weights; None when it is off."""
-    return spare_frames(gap, pp) if g("warp_temporal_spare", False) else None
+    return spare_frames(gap, pp, ease=g("warp_temporal_spare_ease", 1.0)) if g("warp_temporal_spare", False) else None
 
 
 def smooth_residual(dF, sigma, keep_close=None, spare=None):
@@ -687,6 +697,49 @@ def clean_lips(img, P):
     return np.clip(a * soft + (1 - a) * fill + 0.5, 0, 255).astype(np.uint8)
 
 
+def upper_lip(P, shape):
+    """the pixels over the lips' contact line, 0..1 with a soft edge: the upper lip, on a frame's lip mask."""
+    f = lip_frame(P)
+    k = len(ll.LIP_OUT)
+    line = f[k:][np.argsort(f[k:, 0])]
+    yy, xx = np.mgrid[0 : shape[0], 0 : shape[1]].astype(np.float32)
+    return np.clip((np.interp(xx.ravel(), line[:, 0], line[:, 1]).reshape(shape[:2]) - yy) / 2.0 + 0.5, 0.0, 1.0)
+
+
+def lip_tone(img, P):
+    """the upper lip's mean Lab minus the lower's, on the lips clear of their seam and rim; None without enough of either."""
+    P = np.asarray(P, float)[:, :2]
+    lw = float(np.linalg.norm(P[61] - P[291]))
+    k = len(ll.LIP_OUT)
+    s = lip_seam(P)
+    lip = np.zeros(img.shape[:2], np.uint8)
+    cv2.fillPoly(lip, [s[:k].astype(np.int32)], 1)
+    gap = np.zeros(img.shape[:2], np.uint8)
+    cv2.fillPoly(gap, [np.vstack([s[k : k + 11], s[k + 11 :][::-1]]).astype(np.int32)], 1)
+    r = max(1, int(round(lw * 0.02)))
+    core = cv2.erode(lip, np.ones((2 * r + 1, 2 * r + 1), np.uint8)) & ~cv2.dilate(gap, np.ones((2 * r + 1, 2 * r + 1), np.uint8)) & 1
+    up = upper_lip(P, img.shape) > 0.5
+    a, b = (core > 0) & up, (core > 0) & ~up
+    if a.sum() < 16 or b.sum() < 16:
+        return None
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+    return lab[a].mean(0) - lab[b].mean(0)
+
+
+def tone_lips(lips, P, tone):
+    """shut lips on a target taken to the take's tone between the two lips, half a step each way; the lips' mean stays."""
+    now = lip_tone(lips, P)
+    if now is None:
+        return lips
+    Q = np.asarray(P, float)[:, :2]
+    m = np.zeros(lips.shape[:2], np.uint8)
+    cv2.fillPoly(m, [Q[ll.LIP_OUT].astype(np.int32)], 1)
+    w = cv2.GaussianBlur(m.astype(np.float32), (0, 0), 2.0)[..., None]
+    s = 2.0 * upper_lip(Q, lips.shape)[..., None] - 1.0  # + the upper lip, - the lower
+    lab = cv2.cvtColor(lips, cv2.COLOR_BGR2LAB).astype(np.float32) + w * s * 0.5 * (np.asarray(tone, np.float32) - now.astype(np.float32))
+    return cv2.cvtColor(np.clip(lab + 0.5, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
 def shut_lips(img, P, lip_stat=None):
     """the reference's lips for a closure. A shut mouth shows all of its lips, so what a parted one hides reads: the reference frame is
     one frame, the shot's lips (lip_stat: their mean L, a, b over the clip) are what the eye has been seeing, softer than one sharp frame."""
@@ -736,7 +789,9 @@ class EraseLayer:
     own lips or the target lips are (both hulls grown), blended in by the per-frame alpha. A per-frame Lab match on the
     skin band around the region (eased zero-phase at finish) keeps the layer on the frame's light."""
 
-    def __init__(self, ref_img, ref_P, pl, r, ref3, grow=0.22, ring_r=1.9, close=False, lip_stat=None):
+    tone = None
+
+    def __init__(self, ref_img, ref_P, pl, r, ref3, grow=0.22, ring_r=1.9, close=False, lip_stat=None, tone=None):
         self.lips_img = ref_img
         self.bald, _ = ll.erase_lips(ref_img, ref_P, grow)
         self.P = np.asarray(ref_P, float)
@@ -756,6 +811,9 @@ class EraseLayer:
         # the source mesh and onto one line in the target; a reference already shut (under 1.5 px) keeps the contact line
         self.close = bool(close) and float(np.median([np.linalg.norm(self.P[a] - self.P[b]) for a, b in IN_PAIRS])) > 1.5
         self.lips_shut = shut_lips(ref_img, self.P, lip_stat) if self.close else None
+        self.tone = (
+            tone  # the take's upper-minus-lower lip Lab on its most closed frames: one reference frame's shadow does not set them apart
+        )
         sp = np.vstack([lip_seam(self.P) if self.close else lip_frame(self.P), self.ring])
         self.tris = Delaunay(sp).simplices
         self.lab, self.items = [], {}
@@ -789,6 +847,8 @@ class EraseLayer:
             lips, okl = mm.pwa(self.lips_shut if shut else self.lips_img, sp, dp, tris, box)
             if shut:
                 lips = cv2.inpaint(np.clip(lips, 0, 255).astype(np.uint8), (okl < 0.5).astype(np.uint8) * 255, 3, cv2.INPAINT_TELEA)
+                if self.tone is not None:
+                    lips = tone_lips(lips, np.asarray(P_dst, float)[:, :2] - [x0, y0], self.tone)
                 lips = seam_shade(lips, lip_frame(P_dst)[len(ll.LIP_OUT) :] - [x0, y0], lw)
             fg = mp_.hull_mask(rel(P_dst), shp, 0.04, max(3, lw * (0.1 if shut else 0.06)))
         else:  # 'own': the warp output's own lips (and interior) at the target shape stay on top
@@ -1167,7 +1227,8 @@ class WarpClip:
         conf = confidence(dF, scale, a.warp_deadband, a.warp_deadband + g("warp_ramp", 0.08)) if a.warp_deadband >= 0 else np.ones(n)
         conf = gaussian_filter1d(conf, 1.0, mode="nearest")
         dFe = dF * conf[:, None] * a.warp_gain
-        dFe = smooth_residual(dFe, g("warp_temporal", 0.0), pp, temporal_spare(g, Ft[:, 0], pp))  # the field itself, over time
+        shut = closed_frames(n, pp, vars(a).get("coart_closures", ())) if vars(a).get("warp_temporal_spare") else pp
+        dFe = smooth_residual(dFe, g("warp_temporal", 0.0), shut, temporal_spare(g, Ft[:, 0], shut))  # the field itself, over time
         tw = g("warp_temporal_width", 0.0)  # width (corners -> cheeks): slower
         if tw > g("warp_temporal", 0.0):
             dFe[:, 1] = (
@@ -1742,6 +1803,7 @@ class WarpClip:
             self.g("warp_pose_w", 2.0),
             moved=self.sync_frames,
             open_floor=opt("warp_interior_open_floor", 0.0),
+            mend=opt("warp_interior_mend", False),
         )
 
     # --------------------------------------------------------------------------------------------- erase layer --
@@ -1769,8 +1831,15 @@ class WarpClip:
             grow=g("warp_erase_grow", 0.22),
             close=g("warp_erase_close", False),
             lip_stat=md[:3] if okst else None,
+            tone=self.closed_tone() if g("warp_erase_close", False) and g("warp_erase_tone", False) else None,
         )
         self.er_al, self.er_fit, self.er_ref = al, fit, r_
+
+    def closed_tone(self):
+        """the take's upper-minus-lower lip Lab on its most closed fifth of frames; None if it has no such frame to read."""
+        k = np.argsort(self.F[:, 0])[: max(3, self.n // 5)]
+        t = [x for x in (lip_tone(self.frames[i], self.S[i]) for i in k) if x is not None]
+        return np.median(t, 0) if t else None
 
     def erase_one(self, i, out, ov=None, rerender=False):
         """frame i's erase layer (composite only; the eased Lab match is applied by the caller) -> (image, mask, log)."""

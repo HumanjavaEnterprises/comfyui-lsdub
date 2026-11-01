@@ -37,6 +37,10 @@ not the take's lips. In every "A -> B" the left side is the take.
   lsdub mouth-ruler null --reference T.mp4 --null N.mp4 [--frames n] [--json o.json]
   lsdub mouth-ruler source --take T.mp4 [--render R.mp4] [--take-t s] [--render-t s] [--frames n] [--json o.json]
   lsdub mouth-ruler run --manifest m.json --out dir [--labels a,b] [--jobs 4] [--reference audit.json]
+  lsdub mouth-ruler cut --video cut.mp4 --shots shots.json --json o.json
+
+`cut` is the ruler for a finished cut: each dubbed shot read from the delivered file, against its cell's take, because a cell's render.mp4
+is not what gets delivered (sing or native, the encode, the paste).
 """
 
 from ..core import landmarker
@@ -950,6 +954,24 @@ def run_manifest(path, out, labels=None, jobs=4, reference=None):
     return res
 
 
+def cut_stats(video, shots_json, work=None):
+    """a Verify shots.json -> {shot: stats of the delivered frames against the cell's take}; a shot with no cell or no take is left out."""
+    out = {}
+    for s in json.load(open(shots_json))["shots"]:
+        wj = s.get("warp_json")
+        take = os.path.join(wj.split(os.sep + "work" + os.sep)[0], "take.mp4") if wj else ""
+        if not os.path.exists(take):
+            continue
+        n = int(s["f1"]) - int(s["f0"]) + 1
+        A = read_clip(take, 0, n)
+        B = read_clip(video, int(s["f0"]), n)
+        m = min(len(A), len(B))
+        out[f"shot_{s['shot']}"] = stats(
+            A[:m], cached_track(A[:m], f"{take}:{m}", work), B[:m], cached_track(B[:m], f"{video}:{s['f0']}:{m}", work)
+        )
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="lsdub mouth-ruler")
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -992,6 +1014,11 @@ def main(argv=None):
     e_.add_argument("--label", required=True)
     e_.add_argument("--work", required=True)
     e_.add_argument("--json", required=True)
+    g_ = sp.add_parser("cut")
+    g_.add_argument("--video", required=True)
+    g_.add_argument("--shots", required=True, help="a Verify shots.json")
+    g_.add_argument("--work")
+    g_.add_argument("--json")
     a = ap.parse_args(argv)
 
     def emit(r, p):
@@ -1000,6 +1027,9 @@ def main(argv=None):
         else:
             print(json.dumps(r, indent=1))
 
+    if a.cmd == "cut":
+        emit(cut_stats(a.video, a.shots, a.work), a.json)
+        return 0
     if a.cmd == "stats":
         A = read_clip(a.take, 0, a.frames, a.take_t)
         TA = cached_track(A, f"{a.take}:{a.frames}:{a.take_t}", a.work)
