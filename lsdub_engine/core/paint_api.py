@@ -85,6 +85,19 @@ def split_settings(text):
         raise ValueError(f"unmatched quote in {text!r}: put a value holding a space or an apostrophe in double quotes") from None
 
 
+def temporal(args):
+    """the --warp-temporal paint will read from these flags, through paint's own parser; None when they do not name it."""
+    from . import mouth_paint
+
+    a = expand(args)
+    if not any(str(x).split("=", 1)[0] == "--warp-temporal" for x in a):
+        return None
+    try:
+        return mouth_paint._parser().parse_known_args(["--video", "-", "--track", "-", "--out", "-", *a])[0].warp_temporal
+    except SystemExit:
+        return None
+
+
 def advance_s(args):
     """--coart-advance-ms in these flags, in seconds (the last one wins, as the parser's would); 0 when absent."""
     a = [str(x) for x in args or ()]

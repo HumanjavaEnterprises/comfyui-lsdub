@@ -39,6 +39,17 @@ SNAP = dict(
 )
 
 
+def snap_paint(paint_args, m):
+    """SNAP's paint flags. A --warp-temporal in the caller's flags, in output frames, holds here at the internal rate (x m); it
+    never goes under SNAP's own. Named by nobody: SNAP's flags unchanged."""
+    p = list(SNAP["paint"])
+    t = paint_api.temporal(paint_args)
+    if t is not None:
+        i = p.index("--warp-temporal") + 1
+        p[i] = str(max(float(p[i]), float(t) * m))
+    return p
+
+
 # ---------------------------------------------------------------------------------------------------- pick
 def pick_extremes(egap_hi, target, m):
     """egap_hi: the warp's planned opening per INTERNAL frame (n * m); target: the audio opening per OUTPUT frame (n).
@@ -190,7 +201,7 @@ def run(
         user_overrides=paint_args,
         operational=[
             *paint_api.coart_dyn(paint_args, dyn),
-            *(SNAP["paint"] if snap else ()),
+            *(snap_paint(paint_args, m) if snap else ()),
             *(("--occluder-mask", occ) if os.path.exists(occ) else ()),
         ],
     )

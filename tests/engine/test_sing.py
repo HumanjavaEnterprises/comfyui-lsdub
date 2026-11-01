@@ -96,3 +96,15 @@ def test_gpu_todo_names_no_machine_and_sing_takes_a_preset():
     src = open(S.__file__, encoding="utf-8").read()
     assert "gpu" + "run" not in src and "~" + "/" not in src
     assert "--preset" in src
+
+
+def test_snap_paint_holds_the_callers_warp_temporal_at_the_internal_rate():
+    from lsdub_engine.core import sing as S
+
+    assert S.snap_paint(["--lib", "kit"], 2) == S.SNAP["paint"]  # nobody names it: the flags as they were
+    assert S.snap_paint(["--warp-temporal-width", "3"], 2) == S.SNAP["paint"]  # another flag
+    p = S.snap_paint(["--warp-temporal", "1.5"], 2)
+    assert p[p.index("--warp-temporal") + 1] == "3.0"
+    assert S.SNAP["paint"][S.SNAP["paint"].index("--warp-temporal") + 1] == "0.6"  # SNAP itself is left alone
+    p = S.snap_paint(["--warp-temporal", "0.1"], 2)
+    assert p[p.index("--warp-temporal") + 1] == "0.6"  # never under SNAP's own
