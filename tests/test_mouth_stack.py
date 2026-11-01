@@ -32,7 +32,7 @@ def test_widget_order(pack):
     names = [k for p in ordered if p.io_type in WIDGET for k in ((p.id, 'fixed') if has_control(p) else (p.id,))]
     assert names == ['name', 'root', 'mode', 'fps', 'song_offset', 'preset', 'seed', 'fixed', 'force_shots', 'backend', 'mouth_stack']
     p = ordered[-1]
-    assert p.kw['options'] == ['plain', 'layers', 'layers_interior'] and p.kw['default'] == 'plain' and p.optional
+    assert p.kw['options'] == ['plain', 'layers', 'layers_interior', 'layers_shape'] and p.kw['default'] == 'plain' and p.optional
 
 
 def test_project_key_snapshot(pack):
@@ -199,6 +199,13 @@ def test_sync_advance_at_zero_keeps_the_tweaks_hash(pack):
     base = (0.06, 0.06, 512.0, True, True, True, '')
     assert N.execute(*base).args[0].hash == N.execute(*base, '', 0.0).args[0].hash
     assert N.execute(*base).args[0].hash != N.execute(*base, '', 60.0).args[0].hash
+
+
+def test_layers_shape_reaches_its_flags_and_leaves_interior_alone(pack):
+    a = pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers_shape'), _kit('a'), _tw(''), 'skip')
+    b = pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers_interior'), _kit('a'), _tw(''), 'skip')
+    for f in ('--coart-gap-anchor', '--warp-erase-close', '--warp-interior-open-floor'):
+        assert f in a and f not in b
 
 
 def test_layers_interior_reaches_the_take_interior_and_not_the_teeth_fit(pack):
