@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- LSDub Align gains optional `lead_sheet` (default off) and `lead_overrides`: the song written out with what the singer on screen sings plain and backing stutters and answer lines in braces, timed, with a confidence and a reason, as `lead_sheet.txt` and `.json` beside the alignment and in `lyric_check`. What is passed over keeps the take's mouth, drives no alignment or retime and is not read by Verify; correct a call with `pass 10.04 11.93` or `lead 10.04 10.49`.
+- `layers_shape`: each closure takes its erase reference near it in face size and time. Two closures close together leave the vowel between them room to open.
+- LSDub Verify's `vocal` takes no time from the plan or the aligner, so a retimed plan is not marked against itself. `retime_to_vocal`: a vocal with silence before or after it no longer pins or stretches the words at its ends; nasals, glides and frame times read truer.
 - LSDub Align gains optional `retime_to_vocal` (default off): phone times read off the vocal itself, for held notes the aligner spreads across the line. The lyric stays as it is.
 - `layers_shape`: closures are reached at the take's own speed; no blue streak or pale notch on a thin opening; closed lips keep the take's upper-to-lower lip tone. LSDub Verify reports the plan's word times against the vocal, moving no band.
 - New mouth_stack option `layers_interior`, the inside of the mouth from the take; workflow 4 uses it. LSDub Mouth Tweaks gains optional `sync_phrases` (default off), each phrase landing by its vocal. Mouth Ruler gains `boil_all`.
