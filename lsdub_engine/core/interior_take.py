@@ -126,6 +126,7 @@ class TakeInterior:
         self.log, self.gain, self.sank = {}, {}, {}
 
     EMPTY = (None, None, None)
+    open_floor = 0.0
 
     def state(self, i):
         """what paint(i) left behind: a gate candidate's copy, to keep it only if the candidate is kept."""
