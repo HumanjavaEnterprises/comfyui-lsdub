@@ -977,6 +977,7 @@ class WarpClip:
     def __init__(self, a):
         g = lambda k, d: getattr(a, k, d)
         self.a, self.g = a, g
+        self.sync_frames = None  # --coart-sync-vocal: frames per frame the plan was moved earlier
         T = json.load(open(a.track))
         fr_t = T["frames"]
         n = a.frames or len(fr_t)
@@ -1017,6 +1018,7 @@ class WarpClip:
             sync = None
             if g("coart_sync_vocal", None):  # the track moves with the plan, so everything that reads it below moves too
                 fr_t, sync = coart.phrase_sync(a, fr_t, Fs, model, bands, pp, F, S3raw)
+                self.sync_frames = None if sync is None else np.round(np.asarray(sync["dt"]) * float(T.get("fps", 25))).astype(int)
             Ft, pp = coart.plan_clip(a, fr_t, Fs, model, bands, pp, F, S3raw, sync=sync)
         elif g("warp_target", "v9") == "own":  # the null build: the plan IS the take's mouth
             Ft = Fs.copy()
@@ -1508,7 +1510,7 @@ class WarpClip:
             if opt("warp_interior_source", "model") == "take":
                 from .interior_take import TakeInterior
 
-                comp.take_interior = TakeInterior(self.bank, frames, S, Fe, self.scale, g("warp_pose_w", 2.0))
+                comp.take_interior = TakeInterior(self.bank, frames, S, Fe, self.scale, g("warp_pose_w", 2.0), moved=self.sync_frames)
             if opt("warp_teeth_fit", "off") == "take":
                 from .interior_take import TeethFit, clean_atlas
 

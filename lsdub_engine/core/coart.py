@@ -972,6 +972,29 @@ def offset_frames(fr_t, dk):
     return [fr_t[min(max(k + int(d), 0), last)] for k, d in enumerate(dk)] + fr_t[len(dk) :]
 
 
+def _plan_log(warp_json):
+    p = os.path.splitext(warp_json)[0] + "_coart.json" if warp_json else ""
+    return json.load(open(p)) if p and os.path.exists(p) else {}
+
+
+def logged_offsets(warp_json, n):
+    """s earlier each of n delivered frames was planned, from the plan log beside a paint's --warp-json (--coart-advance-ms and
+    --coart-sync-vocal together), or None when nothing moved: a reader of the alignment or the vocal reads at t + this."""
+    log = _plan_log(warp_json)
+    dt = np.asarray(log.get("sync_dt") or [0.0], float)
+    dt = dt[(np.arange(n) * len(dt) // max(n, 1))] + float(log.get("advance_s") or 0.0)
+    return dt if np.any(dt) else None
+
+
+def logged_words(words, warp_json):
+    """the alignment's words as the paint behind warp_json moved them."""
+    log = _plan_log(warp_json)
+    adv = float(log.get("advance_s") or 0.0)
+    if log.get("sync_bounds"):
+        words = offset_align(dict(words=words), log["sync_bounds"], log["sync_phrases_s"])["words"]
+    return offset_align(dict(words=words), [-1e9, 1e9], [adv])["words"] if adv else words
+
+
 def _clip_lead(align, T, t0, n, fps):
     """(lead, match, shift): the lead the track was BUILT with and what it adds to the planner's own anticipation of 0.06 s."""
     if align is None:

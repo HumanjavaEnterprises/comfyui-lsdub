@@ -40,6 +40,13 @@ import cv2, numpy as np
 from ..core import steps
 from ..core.vocalisations import scored_frames
 
+
+def dyn_curve(R, n, t0, fps, moved=None):
+    """the opening built from the alignment (sung_dyn's rows) on n frames from t0; moved: coart.logged_offsets."""
+    t = np.arange(n) / fps + (0.0 if moved is None else moved)
+    return np.interp(t, np.array([float(x["time_s"]) for x in R]) - t0, np.array([float(x["geo_gap_cm"]) for x in R]))
+
+
 DUB_PX, MED_PX, DUB_YAW, PROFILE_YAW = 300.0, 120.0, 16.0, 35.0
 MIN_SHOT, MIN_PRESENT, MIN_VISIBLE = 12, 0.5, 0.5
 VAD_REL, VAD_FLOOR, VOICED_FRAC = 0.12, 0.01, 0.3
@@ -337,6 +344,7 @@ def verdict(s, has_refs):
 def verify(video, vocal, shots_json, before=None, align=None, model=None, work=None, emb=None):
     from . import sync_qa as Q, snap as SN, scorecard as SC
     from ..core import cast as C
+    from ..core.coart import logged_offsets, logged_words
 
     J = json.load(open(shots_json))
     fps = J["fps"]
@@ -393,6 +401,7 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
     if roi is not None and F:
         op, cover = Q.measured_opening(F, roi, fps)
         if op is not None:
+            moved = logged_offsets(s.get("warp_json"), len(op))  # the plan the dub moved: the same reading moved with it
             if align:
                 dyn = os.path.join(work, f"dyn_{s['shot']:04d}.csv")
                 steps.call(
@@ -412,9 +421,7 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
                     quiet=True,
                 )
                 R = list(csv.DictReader(open(dyn)))
-                tg = np.interp(
-                    np.arange(len(op)) / fps, np.array([float(x["time_s"]) for x in R]) - t0, np.array([float(x["geo_gap_cm"]) for x in R])
-                )
+                tg = dyn_curve(R, len(op), t0, fps, moved)
             else:
                 tg = env[: len(op)]
             keep, vocal_frac = scored_frames(s.get("warp_json"), len(op))
@@ -432,7 +439,7 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
                 lag_ms=lag,
                 cover=round(cover, 3),
                 mouth_range=round(float(np.percentile(op, 95) - np.percentile(op, 5)), 4),
-                **SN.snap_metrics(op, vox, words, t0, fps),
+                **SN.snap_metrics(op, vox, logged_words(words, s.get("warp_json")), t0, fps, dt=moved),
             )
     # mouth visible + tier on the DUBBED frames (a few samples)
     idx = np.linspace(0, len(F) - 1, min(5, len(F))).astype(int) if F else []

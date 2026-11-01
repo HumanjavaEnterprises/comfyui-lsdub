@@ -202,7 +202,6 @@ def lab_match(src, ref, w):
     return cv2.cvtColor(np.clip(a, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
 
 
-@functools.lru_cache(maxsize=1)
 def _not_negative(x):
     v = float(x)
     if v < 0:
@@ -210,6 +209,7 @@ def _not_negative(x):
     return v
 
 
+@functools.lru_cache(maxsize=1)
 def _parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipe", help="a named recipe (recipes.py): its flags go in at this point, later flags override them")

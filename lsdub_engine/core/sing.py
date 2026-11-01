@@ -354,8 +354,10 @@ def gate(video, R, target, vocal, align, t0, fps, roi_pad=1.0, work=None, warp_j
     c0, cb, lag = Q.tracking(op, target, fps, keep=keep)
     c1 = max(Q.tracking(op, target, fps, max_lag=1, keep=keep)[1], c0)
     extra = {"vocal_frac": vocal_frac} | ({} if keep is None else {"corr_all": round(Q.tracking(op, target, fps)[0], 3)})
-    words = json.load(open(align))["words"]
-    sn = SN.snap_metrics(op, vocal_clip(vocal, t0, len(target) / fps, work), words, t0, fps)
+    from .coart import logged_offsets, logged_words
+
+    words = logged_words(json.load(open(align))["words"], warp_json)
+    sn = SN.snap_metrics(op, vocal_clip(vocal, t0, len(target) / fps, work), words, t0, fps, dt=logged_offsets(warp_json, len(op)))
     np.save(os.path.join(work, "measured_open.npy"), op)
     ok = c1 >= GATE_CORR and (sn["open_in_silence"] is None or sn["open_in_silence"] <= GATE_SILENCE)
     return dict(

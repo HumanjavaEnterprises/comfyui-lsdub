@@ -496,3 +496,70 @@ def test_plan_clip_plans_on_whole_frames(monkeypatch, tmp_path):
     with pytest.raises(Stop):
         coart.plan_clip(a, [dict(t=1.0)], np.zeros((4, 2)), argparse.Namespace(rng={}), None)
     assert seen["t0"] == 1.0 + 2 / 25
+
+
+def _log(tmp_path, **kw):
+    import json
+
+    wj = str(tmp_path / "w.json")
+    (tmp_path / "w_coart.json").write_text(json.dumps(kw))
+    return wj
+
+
+def test_logged_offsets_add_the_advance_and_the_phrases_on_delivered_frames(tmp_path):
+    wj = _log(tmp_path, advance_s=0.04, sync_dt=[0.08] * 4 + [0.0] * 4)
+    assert coart.logged_offsets(wj, 4) == pytest.approx([0.12, 0.12, 0.04, 0.04])
+    assert coart.logged_offsets(_log(tmp_path, advance_s=0.0), 4) is None
+    assert coart.logged_offsets(str(tmp_path / "none.json"), 4) is None
+    assert coart.logged_offsets(_log(tmp_path, advance_s=0.04), 2) == pytest.approx([0.04, 0.04])
+
+
+def test_logged_words_move_with_the_plan(tmp_path):
+    words = [_w("a", 0.1, 0.4), _w("b", 1.2, 1.6)]
+    wj = _log(tmp_path, advance_s=0.04, sync_bounds=[0.0, 0.8, 2.0], sync_phrases_s=[0.08, 0.0])
+    got = coart.logged_words(words, wj)
+    assert got[0]["start"] == pytest.approx(-0.02) and got[1]["start"] == pytest.approx(1.16) and words[0]["start"] == 0.1
+    assert coart.logged_words(words, _log(tmp_path, advance_s=0.0)) is words
+
+
+def test_silence_reads_where_the_plan_put_it(tmp_path, monkeypatch):
+    from lsdub_engine.audits import snap as SN
+
+    env = np.r_[np.ones(10), np.zeros(10), np.ones(10)]
+    op = np.r_[np.ones(8), np.zeros(10), np.ones(12)]  # closed 2 frames earlier than the silence
+    monkeypatch.setattr(SN, "envelope", lambda v, n, fps: env)
+    raw = SN.snap_metrics(op, "v", [], 0.0, 25.0)["open_in_silence"]
+    moved = SN.snap_metrics(op, "v", [], 0.0, 25.0, dt=np.full(30, 0.08))["open_in_silence"]
+    assert moved < raw
+
+
+def test_sing_gate_reads_the_moved_words(tmp_path, monkeypatch):
+    import json
+
+    from lsdub_engine.core import sing as S
+    from lsdub_engine.audits import snap as SN, sync_qa as Q
+
+    al = tmp_path / "a.json"
+    al.write_text(json.dumps(dict(words=[_w("a", 0.5, 0.9)])))
+    wj = _log(tmp_path, advance_s=0.08)
+    seen = {}
+
+    def snap(op, vox, words, t0, fps, dt=None):
+        seen.update(w=words[0]["start"], dt=dt)
+        return dict(open_in_silence=0.0)
+
+    monkeypatch.setattr(SN, "snap_metrics", snap)
+    monkeypatch.setattr(S, "vocal_clip", lambda *a: "v")
+    monkeypatch.setattr(Q, "measured_opening", lambda *a, **k: (np.linspace(0, 1, 10), 1.0))
+    monkeypatch.setattr(S.MED, "read", lambda *a, **k: ([np.zeros((8, 8, 3), np.uint8)], 25.0), raising=False)
+    R = dict(per_frame=[dict(centre=[4, 4])], face_h_px=8)
+    S.gate("v.mp4", R, np.linspace(0, 1, 10), "v.wav", str(al), 0.0, 25.0, work=str(tmp_path), warp_json=wj)
+    assert seen and seen["w"] == pytest.approx(0.42) and seen["dt"] == pytest.approx([0.08] * 10)
+
+
+def test_qa_reads_the_curve_where_the_plan_moved_it():
+    from lsdub_engine.audits import qa
+
+    R = [dict(time_s=i / 25, geo_gap_cm=i) for i in range(100)]
+    base = qa.dyn_curve(R, 4, 0.4, 25, None)
+    assert qa.dyn_curve(R, 4, 0.4, 25, np.full(4, 0.08)) == pytest.approx(base + 2)

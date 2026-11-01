@@ -460,3 +460,36 @@ def test_boil_all_and_common_read_the_same_frames_across_renders(monkeypatch):
     assert got["cav"] == [5.0, 7.0] and got["lip"] == [5.0, 7.0]
     assert MR.hold_frames(T, np.full(n, 100.0), np.r_[np.zeros(6), np.full(6, 50.0)]) == {1, 2, 3, 4, 7, 8, 9, 10}
     assert MR.boil_common([a, clip_([0, 50] * 6, 1)])["n"] == 0
+    assert got["paired"][0] == dict(cav=2.0, lo=2.0, hi=2.0)
+    assert MR.boil_common([a, clip_([0, 50] * 6, 1)])["paired"] == [None]
+
+
+def test_the_pink_target_has_no_saw_tooth(monkeypatch):
+    """a bin reading 0 is no reading: the target stays steady over frames and the sink does not slam to full."""
+    F, S, Fe, bank = clip()
+    T = IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]))
+    mid = np.linspace(0.05, 0.75, 8)
+    T.bins = np.linspace(0.0, 0.8, 9)
+    T.ap = mid.copy()
+    T.share = np.array([0.0, 0.4, 0.0, 0.4, 0.0, 0.4, 0.0, 0.4])
+    seen = np.ones(8, bool)
+    c = T.pink_curve(T.binned(T.share, seen, mid, drop_zero=True))
+    assert c.min() > 0.3 and np.abs(np.diff(c)).max() < 0.02
+    T.curve = c
+    targets = [T.target(a) for a in (0.1, 0.2, 0.3, 0.2, 0.1, 0.3)]
+    assert min(targets) > 0.3 and max(targets) - min(targets) < 0.03
+
+
+def test_no_pink_reading_anywhere_is_no_cap():
+    assert IT.TakeInterior.pink_curve(np.full(8, np.nan)).min() == 1.0
+
+
+def test_donors_move_with_the_plan(monkeypatch):
+    F, S, Fe, bank = clip()
+    seen = []
+    monkeypatch.setattr(IT.TakeInterior, "pick", lambda self, b, f, sc, w: seen.append(f.copy()) or np.arange(8))
+    Fe = Fe.copy()
+    Fe[:, 0] = np.arange(8.0)
+    T = IT.TakeInterior(bank, F, S, Fe, np.array([10.0, 10.0]), moved=[2] * 8)
+    assert seen[0][4, 0] == 2.0  # the plan as it stood: frame 4 showed what frame 2 shows now
+    assert T.j[3] == 5  # and frame 3 takes the donor frame 5 had

@@ -256,16 +256,27 @@ def hold_frames(T, W_, O, hold=None):
 
 def boil_common(clips, hold=None):
     """boil on the frames held in EVERY render: clips = [(F, T), ...] of one take, compared on the same frames.
-    -> dict(n, cav=[one per clip], lip=[one per clip])."""
+    -> dict(n, cav=[one per clip], lip=[one per clip], paired=[one per clip after the first]). paired reads the difference frame
+    by frame against the first clip: dict(cav, lo, hi) = its median and 95 % bootstrap interval. Each clip's own median can swing
+    by the mode it lands in where the paired difference does not."""
     meas = []
     for F, T in clips:
         S = [frame_stats(F[i], T[i]) for i in range(len(F))]
         meas.append((F, T, np.array([s["w"] for s in S], float), np.array([s["ap"] for s in S], float)))
     keep = sorted(set.intersection(*(hold_frames(T, W_, O, hold) for _, T, W_, O in meas)))
     if not keep:
-        return dict(n=0, cav=[None] * len(clips), lip=[None] * len(clips))
+        return dict(n=0, cav=[None] * len(clips), lip=[None] * len(clips), paired=[None] * (len(clips) - 1))
     q = [np.array([boil(F[i - 1], F[i], F[i + 1], T[i - 1], T[i], T[i + 1]) for i in keep]) for F, T, _, _ in meas]
-    return dict(n=len(keep), cav=[_r(np.nanmedian(x[:, 1])) for x in q], lip=[_r(np.nanmedian(x[:, 0])) for x in q])
+    rng = np.random.default_rng(0)
+    paired = []
+    for x in q[1:]:
+        d = (x[:, 1] - q[0][:, 1])[np.isfinite(x[:, 1] - q[0][:, 1])]
+        if not len(d):
+            paired.append(None)
+            continue
+        b = np.median(rng.choice(d, (2000, len(d))), axis=1)
+        paired.append(dict(cav=_r(np.median(d)), lo=_r(np.percentile(b, 2.5)), hi=_r(np.percentile(b, 97.5))))
+    return dict(n=len(keep), cav=[_r(np.nanmedian(x[:, 1])) for x in q], lip=[_r(np.nanmedian(x[:, 0])) for x in q], paired=paired)
 
 
 def _r(v, k=3):

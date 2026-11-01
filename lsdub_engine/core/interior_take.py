@@ -13,6 +13,7 @@ from . import lip_layers as ll
 
 LIP_IN, LIP_OUT = ll.LIP_IN, ll.LIP_OUT
 PINK_ROOM = 0.94  # the fill's core pink stops at this share of the take's core share at that aperture
+CURVE_SIGMA = 1.0  # the pink curve's smoothing across aperture bins
 CORE = 7  # the take's pink share is read this many px inside its contour (kernel side): the rim is lip, not interior
 RELEASE = 0.8  # the pink sink's share kept per frame after the last frame that needed it
 SANK_MIN = 0.005  # a sink below this is off
@@ -93,7 +94,9 @@ def skin_ring(frame, P):
 
 
 class TakeInterior:
-    def __init__(self, bank, frames, S, Fe, scale, pose_w=2.0):
+    def __init__(self, bank, frames, S, Fe, scale, pose_w=2.0, moved=None):
+        """moved: frames per frame the plan was moved earlier (--coart-sync-vocal): the donors are picked on the plan as it stood and
+        move with it, so moving the plan does not change which of the take's frames fill it."""
         self.frames, self.S = frames, S
         n = len(frames)
         self.ap = np.array([aperture(np.asarray(S[i])) for i in range(n)])
@@ -104,10 +107,13 @@ class TakeInterior:
         # pink share by aperture: the take's median per bin, the cap of the fill
         self.bins = np.linspace(0.0, max(0.1, float(self.ap.max())) + 1e-6, 9)
         mid = 0.5 * (self.bins[:-1] + self.bins[1:])
-        self.curve = self.binned(self.share, seen, mid)
-        self.lcurve = self.binned(self.dark, seen, mid)
-        self.curve, self.lcurve = np.nan_to_num(self.curve, nan=0.0), np.nan_to_num(self.lcurve, nan=255.0)
-        self.j = self.pick(bank, Fe, scale, pose_w)
+        self.curve = self.pink_curve(self.binned(self.share, seen, mid, drop_zero=True))
+        self.lcurve = np.nan_to_num(self.binned(self.dark, seen, mid), nan=255.0)
+        if moved is None:
+            self.j = self.pick(bank, Fe, scale, pose_w)
+        else:
+            k, d = np.arange(n), np.asarray(moved, int)
+            self.j = self.pick(bank, Fe[np.clip(k - d, 0, n - 1)], scale, pose_w)[np.clip(k + d, 0, n - 1)]
         ring = np.array([skin_ring(f, s) for f, s in zip(frames, S)])
         good = np.isfinite(ring[:, 0])
         idx = np.arange(n)
@@ -130,14 +136,19 @@ class TakeInterior:
             else:
                 d[k] = v
 
-    def binned(self, v, seen, mid):
-        """v's median per aperture bin, interpolated over the empty ones."""
+    @staticmethod
+    def pink_curve(c):
+        """the cap per aperture, smooth across bins so a frame's target cannot jump with its bin. No reading anywhere: no cap."""
+        return gaussian_filter1d(c, CURVE_SIGMA, mode="nearest") if np.isfinite(c).all() else np.ones(len(c))
+
+    def binned(self, v, seen, mid, drop_zero=False):
+        """v's median per aperture bin, interpolated over the empty ones. drop_zero: a bin reading exactly 0 is empty too."""
         c = np.full(len(mid), np.nan)
         for b in range(len(mid)):
             hit = (self.ap >= self.bins[b]) & (self.ap < self.bins[b + 1]) & seen & np.isfinite(v)
             if hit.any():
                 c[b] = float(np.median(v[hit]))
-        ok = np.isfinite(c)
+        ok = np.isfinite(c) & (c > 0 if drop_zero else True)
         return np.interp(mid, mid[ok], c[ok]) if ok.any() else np.full(len(mid), np.nan)
 
     def pick(self, bank, Fe, scale, pose_w):
