@@ -627,7 +627,16 @@ def lip_seam(P):
     """outer lip loop (20), corner 78, the upper inner points, corner 308, the lower inner points: lip_frame with the two inner
     lips apart. On a target the two share the contact line, so the source's gap between them lands on no pixels."""
     P = np.asarray(P, float)[:, :2]
-    return np.vstack([P[ll.LIP_OUT], P[78], P[[b for _, b in IN_PAIRS]], P[308], P[[a for a, _ in IN_PAIRS]]])
+    # the corners sit toward the outer ones: the dark of an open mouth's corners stays out of the lips
+    return np.vstack(
+        [
+            P[ll.LIP_OUT],
+            P[78] + 0.75 * (P[61] - P[78]),
+            P[[b for _, b in IN_PAIRS]],
+            P[308] + 0.75 * (P[291] - P[308]),
+            P[[a for a, _ in IN_PAIRS]],
+        ]
+    )
 
 
 def seam_dst(P):
@@ -689,12 +698,21 @@ class EraseLayer:
         box = (x0, y0, x1 - x0, y1 - y0)
         if box[2] < 4 or box[3] < 4:
             return out, np.zeros((H, W), np.float32)
-        bald, okm = mm.pwa(self.bald, sp, dp, self.tris, box)
+        tris = self.tris
+        if shut:  # a collapsed triangle has no affine map
+            tris = tris[np.abs(mm.tri_area(dp, tris)) >= 0.5]
+        bald, okm = mm.pwa(self.bald, sp, dp, tris, box)
+        if shut:  # the collapsed gap leaves pixels no triangle covers
+            hole = (okm < 0.5).astype(np.uint8) * 255
+            bald = cv2.inpaint(np.clip(bald, 0, 255).astype(np.uint8), hole, 3, cv2.INPAINT_TELEA)
+            okm = np.ones_like(okm)
         lw = np.linalg.norm(P_dst[61] - P_dst[291])
         rel = lambda Q: np.asarray(Q, float)[ll.LIP_OUT] - [x0, y0]
         shp = (box[3], box[2])
         if kind == "closed":
-            lips, _ = mm.pwa(self.lips_img, sp, dp, self.tris, box)
+            lips, okl = mm.pwa(self.lips_img, sp, dp, tris, box)
+            if shut:
+                lips = cv2.inpaint(np.clip(lips, 0, 255).astype(np.uint8), (okl < 0.5).astype(np.uint8) * 255, 3, cv2.INPAINT_TELEA)
             fg = mp_.hull_mask(rel(P_dst), shp, 0.04, max(3, lw * 0.06))
         else:  # 'own': the warp output's own lips (and interior) at the target shape stay on top
             lips = out[y0:y1, x0:x1]
