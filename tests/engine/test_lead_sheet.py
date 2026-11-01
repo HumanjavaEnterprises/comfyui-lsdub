@@ -16,6 +16,8 @@ SHEET = "aged like rocks, still in the box\ntimeless on the shelf, winding my ow
 
 @pytest.fixture(scope="module")
 def demo():
+    if not os.path.exists(os.path.join(DATA, "demo_align.json")):
+        pytest.skip("the demo vocal is not in this tree")
     A = json.load(open(os.path.join(DATA, "demo_align.json")))
     x = V.read_mono(os.path.join(DATA, "demo_lead_16k.flac"))
     return A, x, LS.read_sheet(A, x, SHEET)

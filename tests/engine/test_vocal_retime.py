@@ -107,6 +107,8 @@ DATA = os.path.join(os.path.dirname(__file__), "data")
 
 
 def demo():
+    if not os.path.exists(os.path.join(DATA, "demo_align.json")):
+        pytest.skip("the demo vocal is not in this tree")
     return json.load(open(os.path.join(DATA, "demo_align.json"))), V.read_mono(os.path.join(DATA, "demo_lead_16k.flac"))
 
 

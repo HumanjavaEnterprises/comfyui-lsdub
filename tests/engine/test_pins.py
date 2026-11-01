@@ -263,6 +263,8 @@ def test_the_vocal_reading_does_not_move_with_the_plan():
     from lsdub_engine.core import vocal_retime as V
 
     D = os.path.join(os.path.dirname(__file__), "data")
+    if not os.path.exists(os.path.join(D, "demo_align.json")):
+        pytest.skip("the demo vocal is not in this tree")
     A = json.load(open(os.path.join(D, "demo_align.json")))
     x = V.read_mono(os.path.join(D, "demo_lead_16k.flac"))
     B = json.loads(json.dumps(A))
