@@ -310,7 +310,7 @@ def test_align_retries_once_without_the_prompt(pack, tmp_path, align_stubs, monk
 def test_align_retime_to_vocal_changes_the_key_only_when_on(pack, tmp_path):
     A = pack.nodes_audio.LSDubAlign
     p = _proj(pack, tmp_path)
-    song = T.Song(mix='m', lead='m', hash='s', hashes={'lead': 'h'})
+    song = pack.lsdub_types.Song(mix='m', lead='m', hash='s', hashes={'lead': 'h'})
     a = A._key(p, song, None, None, '', 'large-v3', '')
     assert a == A._key(p, song, None, None, '', 'large-v3', '', False)
     assert a != A._key(p, song, None, None, '', 'large-v3', '', True)

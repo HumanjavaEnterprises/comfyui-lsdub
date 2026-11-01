@@ -14,7 +14,7 @@ retime(align, audio) -> the alignment with new times, each word's old ones in st
 
 import argparse, json
 import numpy as np
-from scipy.signal import stft, resample_poly
+from scipy.signal import stft
 
 from ..io import ff
 
