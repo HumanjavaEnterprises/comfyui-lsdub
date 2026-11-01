@@ -154,6 +154,9 @@ class LSDubAlign(io.ComfyNode):
                                        'accurate; smaller is faster.'),
                 io.String.Input('transcript_json', default='', optional=True,
                                 tooltip='Optional: a saved speech-to-text JSON for this vocal (skips that step).'),
+                io.Boolean.Input('retime_to_vocal', default=False, optional=True,
+                                 tooltip='Read the phone times off the vocal itself after aligning: for held sung notes the aligner '
+                                         'spreads across the line. The lyric stays as it is; only times move.'),
             ],
             outputs=[T.LSDubAlign.Output(display_name='align', tooltip='Word timings + the song viseme track.'),
                      io.String.Output(display_name='lyric_check', tooltip='Markdown: least certain words and the '
@@ -165,23 +168,23 @@ class LSDubAlign(io.ComfyNode):
         return (song.lead or song.mix) if vocal is None else None
 
     @classmethod
-    def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json):
+    def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal=False):
         transcript_json = _input_path(transcript_json)
         vh = media.audio_hash(vocal) if vocal is not None else (song.hashes.get('lead') or song.hash or file_hash(cls._vocal(song, None)))
         tj = file_hash(transcript_json) if transcript_json else ''
         return stage_key('LSDubAlign', {'vocal': vh, 'lyrics': lyrics.hash if lyrics else 'transcript', 'pron': text_hash(pronunciations.strip()),
                                         'stt': stt_model, 'transcript': tj, 'v': 3, 'which': 'given' if vocal is not None else
-                                        ('lead' if song.lead else 'mix')}, [project.cache_key()])
+                                        ('lead' if song.lead else 'mix'), **({'retime': 1} if retime_to_vocal else {})}, [project.cache_key()])
 
     @classmethod
-    def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json=''):
-        return cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json)
+    def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False):
+        return cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal)
 
     @classmethod
-    def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json=''):
-        from .lsdub_engine.core import lyric_align as LA, viseme_track as VT, vocalisations as VO
+    def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False):
+        from .lsdub_engine.core import lyric_align as LA, viseme_track as VT, vocalisations as VO, vocal_retime as VR
         transcript_json = _input_path(transcript_json)
-        st = project.stage('audio/align', cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json))
+        st = project.stage('audio/align', cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal))
         align, vis, vis_skip, md = st.path('align.json'), st.path('visemes.json'), st.path('visemes_skip.json'), st.path('lyric_check.md')
         if not st.is_done():
             voc = media.write_audio(vocal, st.path('vocal.wav')) if vocal is not None else cls._vocal(song, None)
@@ -219,6 +222,9 @@ class LSDubAlign(io.ComfyNode):
             warn = check_match(json.load(open(align)).get('lyric_match_ratio'), lyrics is not None)
             if warn: print(f'[LSDub] {warn}', file=sys.stderr)
             devices.free()
+            if retime_to_vocal:
+                aligned = VR.retime(json.load(open(align)), voc)
+                with open(align, 'w') as f: json.dump(aligned, f, indent=1)
             call(VT.main, ['--align', align, '--t0', '0', '--frames', str(int(dur * project.fps)), '--fps', str(project.fps),
                            '--audio', voc, '--out', vis], quiet=True, name='visemes')
             call(VO.main, ['skip', '--track', vis, '--out', vis_skip, '--lyrics', lyr, '--align', align], quiet=True,

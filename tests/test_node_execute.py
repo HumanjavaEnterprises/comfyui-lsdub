@@ -305,3 +305,12 @@ def test_align_retries_once_without_the_prompt(pack, tmp_path, align_stubs, monk
     rec, md = pack.nodes_audio.LSDubAlign.execute(_proj(pack, tmp_path), T.Song(mix=lead, lead=lead, hash='s'),
                                                   T.Lyrics(path=str(lp), hash='l')).args
     assert len(calls) == 2 and '--prompt' in calls[0] and '--prompt' not in calls[1] and 'lyric match 0.9' in md
+
+
+def test_align_retime_to_vocal_changes_the_key_only_when_on(pack, tmp_path):
+    A = pack.nodes_audio.LSDubAlign
+    p = _proj(pack, tmp_path)
+    song = T.Song(mix='m', lead='m', hash='s', hashes={'lead': 'h'})
+    a = A._key(p, song, None, None, '', 'large-v3', '')
+    assert a == A._key(p, song, None, None, '', 'large-v3', '', False)
+    assert a != A._key(p, song, None, None, '', 'large-v3', '', True)
