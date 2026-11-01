@@ -53,14 +53,15 @@ def test_a_slow_take_does_not_stretch_the_ramp_past_its_ceiling(monkeypatch):
     n = 60
     al, _ = align_of([("AA", 0.2), ("M", 0.06), ("AA", 0.4)], 0.2)
     u = take(n, gap=0.5)
-    u[:, 0] = 0.5 + 0.4 * np.sin(np.arange(n) / 14.0)  # closes over half a second
+    u[:, 0] = 0.5 + 0.4 * np.sin(np.arange(n) / 3.0)
+    monkeypatch.setattr(coart, "take_times", lambda *a: (1.0, 1.0))  # a take that closes over a second
     coart.plan(u, track_of(n, al), FPS, 0.0, None, None, args(coart_closure_ramp=1.0), al, 0.0, None)
-    assert seen["a"] <= coart.RAMP_MAX_S * FPS + 1e-9 and seen["b"] <= coart.RAMP_MAX_S * FPS + 1e-9
+    assert seen["a"] == pytest.approx(0.15 * FPS) and seen["b"] == pytest.approx(0.15 * FPS)
 
 
 def test_a_vowel_between_two_close_closures_still_opens():
     lim = coart.closure_ramp({20: 0.05, 26: 0.05}, 60, 1.0, 7.5, 7.5)  # 120 ms apart at 50 fps
-    assert max(lim.get(k, 9) for k in range(21, 26)) >= coart.RAMP_PEAK - 1e-6
+    assert max(lim.get(k, 9) for k in range(21, 26)) >= 0.75
     far = coart.closure_ramp({20: 0.05, 45: 0.05}, 60, 1.0, 7.5, 7.5)
     assert far[21] == pytest.approx(0.05 + 0.95 / 7.5)  # room to spare: the take's speed
 
@@ -140,7 +141,7 @@ def test_near_closed_takes_a_frame_of_the_closures_size_and_time_over_the_shots_
     S = pushin()
     gap = np.full(60, 10.0)
     gap[57] = 0.0  # the shuttest frame in the shot: the end of the push-in, a far bigger face
-    gap[12] = 3.0  # shut enough, near the closure
+    gap[12] = 8.0  # barely shutter, but near the closure
     pose = np.zeros((60, 3))
     r = MW.near_closed(S, gap, pose, 15)
     assert r == 12 and MW.most_closed(S, gap, pose) == 57
