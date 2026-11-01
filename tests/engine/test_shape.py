@@ -156,7 +156,7 @@ def eraser(close=True):
     E.P, E.pl, E.grow, E.close, E.lab, E.items = P, _Rigid, 0.22, close, [], {}
     E.bald = np.full_like(img, (120, 150, 200))
     E.lips_img = img
-    E.lips_shut = MW.clean_lips(img, P) if close else None
+    E.lips_shut = MW.shut_lips(img, P) if close else None
     E.tris = Delaunay(np.vstack([MW.lip_seam(P), E.ring])).simplices
     return E, img
 
@@ -213,7 +213,7 @@ class _Model:
     delta = staticmethod(lambda d: np.tile([0.0, float(d[0]), 0.0], (len(MW.CTRL), 1)))
 
 
-def fold_limited(close, monkeypatch):
+def fold_limited(close, monkeypatch, stats=None):
     """a clip with one closure the fold guard stopped short: the plan reaches 0, the guard kept half the move, the take is at 10."""
     n = 3
     got = {}
@@ -223,7 +223,8 @@ def fold_limited(close, monkeypatch):
             got.update(k)
 
     monkeypatch.setattr(MW, "EraseLayer", Layer)
-    monkeypatch.setattr(MW.ll, "lip_stats", lambda *a: None)
+    monkeypatch.setattr(MW.ll, "lip_stats", lambda *a: stats)
+    monkeypatch.setattr(MW.ll, "lip_fit", lambda *a: 1.0)
     monkeypatch.setattr(MW, "most_closed", lambda *a: 0)
     F = np.tile([10.0, 5.0], (n, 1))
     c = types.SimpleNamespace(
@@ -292,6 +293,23 @@ def test_the_shut_layer_carries_a_contact_line():
     (x0, y0, w, h), layer, _ = E.items[0]
     col = layer[170 - y0 : 231 - y0, 200 - x0, 1]
     assert abs(int(np.argmin(col)) + 170 - 200) <= 2  # the seam is the column's darkest pixel
+
+
+def test_shut_lips_take_the_shots_colour_and_softness():
+    E, img = eraser()
+    have = MW.ll.lip_stats(MW.clean_lips(img, E.P), E.P)
+    want = have[:3] + [20.0, -8.0, 4.0]
+    got = MW.ll.lip_stats(MW.shut_lips(img, E.P, want), E.P)
+    assert np.abs(got[:3] - want).max() < 3
+    assert cv2.Laplacian(MW.shut_lips(img, E.P), cv2.CV_32F).var() < cv2.Laplacian(MW.clean_lips(img, E.P), cv2.CV_32F).var()
+
+
+def test_the_shots_lips_reach_the_layer(monkeypatch):
+    _, got = fold_limited(True, monkeypatch)
+    assert got["lip_stat"] is None  # no stats, nothing to match
+    st = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    _, got = fold_limited(True, monkeypatch, st)
+    assert list(got["lip_stat"]) == list(st[:3])
 
 
 def test_the_shut_contact_is_one_soft_line():

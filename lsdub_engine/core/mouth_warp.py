@@ -687,6 +687,18 @@ def clean_lips(img, P):
     return np.clip(a * soft + (1 - a) * fill + 0.5, 0, 255).astype(np.uint8)
 
 
+def shut_lips(img, P, lip_stat=None):
+    """the reference's lips for a closure. A shut mouth shows all of its lips, so what a parted one hides reads: the reference frame is
+    one frame, the shot's lips (lip_stat: their mean L, a, b over the clip) are what the eye has been seeing, softer than one sharp frame."""
+    x = clean_lips(img, P)
+    have = ll.lip_stats(x, P) if lip_stat is not None else None
+    if have is not None:
+        lab = cv2.cvtColor(x, cv2.COLOR_BGR2LAB).astype(np.float32) + (np.asarray(lip_stat, np.float32) - have[:3].astype(np.float32))
+        x = cv2.cvtColor(np.clip(lab + 0.5, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+    lw = float(np.linalg.norm(np.asarray(P)[61, :2] - np.asarray(P)[291, :2]))
+    return cv2.GaussianBlur(x, (0, 0), max(0.6, lw * 0.006))
+
+
 def seam_shade(lips, line, lw):
     """the shut lips' contact on a target: the seam softened where the two lips meet, one thin shadow along it."""
     h, w = lips.shape[:2]
@@ -724,7 +736,7 @@ class EraseLayer:
     own lips or the target lips are (both hulls grown), blended in by the per-frame alpha. A per-frame Lab match on the
     skin band around the region (eased zero-phase at finish) keeps the layer on the frame's light."""
 
-    def __init__(self, ref_img, ref_P, pl, r, ref3, grow=0.22, ring_r=1.9, close=False):
+    def __init__(self, ref_img, ref_P, pl, r, ref3, grow=0.22, ring_r=1.9, close=False, lip_stat=None):
         self.lips_img = ref_img
         self.bald, _ = ll.erase_lips(ref_img, ref_P, grow)
         self.P = np.asarray(ref_P, float)
@@ -743,7 +755,7 @@ class EraseLayer:
         # close: a reference frame that is not shut shows its own gap (teeth in a slit) on a closure, so its inner lips go apart in
         # the source mesh and onto one line in the target; a reference already shut (under 1.5 px) keeps the contact line
         self.close = bool(close) and float(np.median([np.linalg.norm(self.P[a] - self.P[b]) for a, b in IN_PAIRS])) > 1.5
-        self.lips_shut = clean_lips(ref_img, self.P) if self.close else None
+        self.lips_shut = shut_lips(ref_img, self.P, lip_stat) if self.close else None
         sp = np.vstack([lip_seam(self.P) if self.close else lip_frame(self.P), self.ring])
         self.tris = Delaunay(sp).simplices
         self.lab, self.items = [], {}
@@ -778,7 +790,7 @@ class EraseLayer:
             if shut:
                 lips = cv2.inpaint(np.clip(lips, 0, 255).astype(np.uint8), (okl < 0.5).astype(np.uint8) * 255, 3, cv2.INPAINT_TELEA)
                 lips = seam_shade(lips, lip_frame(P_dst)[len(ll.LIP_OUT) :] - [x0, y0], lw)
-            fg = mp_.hull_mask(rel(P_dst), shp, 0.04, max(3, lw * 0.06))
+            fg = mp_.hull_mask(rel(P_dst), shp, 0.04, max(3, lw * (0.1 if shut else 0.06)))
         else:  # 'own': the warp output's own lips (and interior) at the target shape stay on top
             lips = out[y0:y1, x0:x1]
             fg = mp_.hull_mask(rel(P_dst), shp, 0.06, max(3, lw * 0.06))
@@ -1749,7 +1761,14 @@ class WarpClip:
             fit = np.ones(n)
         r_ = most_closed(S, F[:, 0], self.pose, fit)
         self.erase = EraseLayer(
-            frames[r_], S[r_][:, :2], pl, r_, self.S3raw[r_], grow=g("warp_erase_grow", 0.22), close=g("warp_erase_close", False)
+            frames[r_],
+            S[r_][:, :2],
+            pl,
+            r_,
+            self.S3raw[r_],
+            grow=g("warp_erase_grow", 0.22),
+            close=g("warp_erase_close", False),
+            lip_stat=md[:3] if okst else None,
         )
         self.er_al, self.er_fit, self.er_ref = al, fit, r_
 
