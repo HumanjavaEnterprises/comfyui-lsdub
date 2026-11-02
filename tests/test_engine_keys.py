@@ -168,3 +168,15 @@ def test_the_cache_keeps_roots_apart(pack, tmp_path):
         pack.engine_keys.STAGES.clear()
         pack.engine_keys.STAGES.update(old)
         pack.engine_keys._cache.clear()
+
+
+def test_a_stage_is_hashed_once_per_root(pack, monkeypatch):
+    k = pack.engine_keys
+    k._cache.clear()
+    calls = []
+    real = k.reached
+    monkeypatch.setattr(k, 'reached', lambda e, root=k.ROOT: calls.append(1) or real(e, root))
+    k.part('LSDubPerformance', '1')
+    k.part('LSDubPerformance', '1')
+    assert len(calls) == 1
+    k._cache.clear()
