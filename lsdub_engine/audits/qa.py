@@ -483,7 +483,15 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
                 lag_ms=lag,
                 cover=round(cover, 3),
                 mouth_range=round(float(np.percentile(op, 95) - np.percentile(op, 5)), 4),
-                **SN.snap_metrics(op, vox, logged_words(words, s.get("warp_json")), t0, fps, dt=moved),
+                **SN.snap_metrics(
+                    op,
+                    vox,
+                    logged_words(words, s.get("warp_json")),
+                    t0,
+                    fps,
+                    dt=moved,
+                    keep=keep if any(w.get("vocal") == "pass-over" for w in words) else None,
+                ),
             )
             out.update(shape_readings(Q.shape_of(F), s.get("warp_json"), logged_words(words, s.get("warp_json")), t0, fps, SN))
     # mouth visible + tier on the DUBBED frames (a few samples)

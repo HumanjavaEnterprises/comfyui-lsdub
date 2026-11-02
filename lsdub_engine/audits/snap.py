@@ -135,7 +135,7 @@ def open_in_silence(op, env, thr=SIL_RMS):
     return float(np.mean((op[sil] - lo) / (hi - lo + 1e-9)))
 
 
-def snap_metrics(op, vox, words, t0, fps=25.0, dt=None):
+def snap_metrics(op, vox, words, t0, fps=25.0, dt=None, keep=None):
     """dt: per frame, s the plan was moved earlier (coart.logged_offsets), words already moved with it (coart.logged_words). Silence
     is then read where the mouth was planned to meet it; rise_ms stays the raw delay against the sound."""
     op = np.asarray(op, float)
@@ -143,7 +143,10 @@ def snap_metrics(op, vox, words, t0, fps=25.0, dt=None):
     r, nr = rise_ms(op, env, fps)
     h, nh = closure_hit(op, closures(words, t0, len(op), fps))
     k = np.arange(len(op))
-    s = open_in_silence(op, env if dt is None else np.interp(k + np.asarray(dt) * fps, k, env))
+    e_ = env if dt is None else np.interp(k + np.asarray(dt) * fps, k, env)
+    s = (
+        open_in_silence(op, e_) if keep is None else open_in_silence(np.asarray(op)[keep], np.asarray(e_)[keep])
+    )  # keep: leaves out the take's own mouth on passed-over time
     return dict(
         rise_ms=None if r is None else round(r),
         onsets=nr,
