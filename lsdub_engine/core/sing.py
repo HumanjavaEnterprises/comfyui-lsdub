@@ -272,6 +272,15 @@ def run(
     return info
 
 
+def pick_paint(s, n):
+    """the rate that wins, by their gates: one that passes beats one that fails, else the better sync, within 0.02 the quieter silences. Unmeasured silence is the worst."""
+    key = lambda g: (g["corr"] if g["corr"] is not None else -9, -(g["open_in_silence"] if g.get("open_in_silence") is not None else 9))
+    if bool(s.get("pass")) != bool(n.get("pass")):
+        return "native" if n.get("pass") else "sing"
+    s_c, n_c = key(s), key(n)
+    return "native" if (n_c[0] > s_c[0] + 0.02) or (abs(n_c[0] - s_c[0]) <= 0.02 and n_c[1] > s_c[1]) else "sing"
+
+
 def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info, t_plan=None):
     """Per-shot auto-selection: also run the native warp (lsdub paint on the full take at the frame rate, the pre-sing
     recipe) and keep whichever scores the higher MEASURED corr (lag 0); open-in-silence breaks a tie (within 0.02).
@@ -312,14 +321,7 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
     target = target if t_plan is None else moved_target(dyn, n, t_plan, fps, nat_json)  # its own paint, its own offsets
     g_n = gate(nat, R, target, vocal, align, t0, fps, work=os.path.join(work, "native_gate"), warp_json=nat_json)
 
-    def key(g):
-        return (
-            g["corr"] if g["corr"] is not None else -9,
-            -(g["open_in_silence"] if g.get("open_in_silence") is not None else 9),
-        )  # unmeasured silence = the worst
-
-    s_c, n_c = key(sing_info), key(g_n)
-    win = "native" if (n_c[0] > s_c[0] + 0.02) or (abs(n_c[0] - s_c[0]) <= 0.02 and n_c[1] > s_c[1]) else "sing"
+    win = pick_paint(sing_info, g_n)
     if win == "native":
         shutil.copyfile(nat, out)
     return {

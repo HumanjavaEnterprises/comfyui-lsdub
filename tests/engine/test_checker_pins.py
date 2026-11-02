@@ -277,3 +277,18 @@ def test_verify_reads_the_curve_flags_the_dub_logged(tmp_path):
     (tmp_path / "w_coart.json").write_text(json.dumps(dict(dyn_flags=["--phone-plan"])))
     assert coart.logged_dyn_flags(str(w)) == ["--phone-plan"]
     assert coart.logged_dyn_flags(str(tmp_path / "none.json")) == []
+
+
+def test_a_rate_that_passes_its_gate_beats_one_that_fails():
+    from lsdub_engine.core import sing
+
+    good, bad = dict(corr=0.79, open_in_silence=0.28, **{"pass": True}), dict(corr=0.81, open_in_silence=0.351, **{"pass": False})
+    assert sing.pick_paint(bad, good) == "native" and sing.pick_paint(good, bad) == "sing"
+
+
+def test_of_two_that_pass_the_better_sync_wins_and_within_a_margin_the_quieter():
+    from lsdub_engine.core import sing
+
+    g = lambda c, o: dict(corr=c, open_in_silence=o, **{"pass": True})
+    assert sing.pick_paint(g(0.9, 0.3), g(0.7, 0.1)) == "sing" and sing.pick_paint(g(0.7, 0.1), g(0.9, 0.3)) == "native"
+    assert sing.pick_paint(g(0.8, 0.3), g(0.81, 0.1)) == "native" and sing.pick_paint(g(0.8, None), g(0.8, 0.3)) == "native"
