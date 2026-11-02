@@ -55,7 +55,8 @@ SHARE = 0.35  # a vowel keeps at least this share of the length the aligner gave
 CLOSED = 50.0  # score per frame of a phone in time the lead sheet passed over
 EARN = 3.0  # a hiss has to beat this to be placed: sung lines drop them and an alignment can have the wrong word, and a blip earns no phone
 CUT = 1.0  # score per phone left unsung when the walk stops early: the vocal ended on the lyric, with silence or the clip's end after it
-UNSUNG = 3.0  # ... and per phone the alignment has wholly inside the audio: a word the aligner heard is not dropped past the end to feed the vowels before it
+UNSUNG = 5.0  # ... and per second of vowel the alignment holds wholly inside the audio: a long vowel it heard is not dropped past the end to feed the one before it. By its length, so
+# a word the aligner only squeezed in ahead of a cut, a few frames of vowel, costs next to nothing and may stay past the end
 
 
 def phone_class(p):
@@ -176,10 +177,10 @@ def walk(seq, em, t0=0.0, band=BAND, closed=None, home=None):
     over_cost = np.where(
         gap[:-1], 0.0, np.where(np.array([s[2] == "H" for s in seq[:-1]]), EARN, -np.inf)
     )  # entry i - 1 stepped over to reach i
-    sung = np.array([s[2] not in "QO" for s in seq])  # phones
-    left = np.cumsum((sung & (b < tt[-1]))[::-1])[
-        ::-1
-    ]  # from each entry on, the phones the alignment has wholly inside the audio (a free walk's have no end to read)
+    held = np.array(
+        [x[5] - x[4] if x[2] == "V" and x[5] < tt[-1] else 0.0 for x in seq]
+    )  # the vowel time the alignment has wholly inside the audio (a free walk's has no end to read)
+    left = np.cumsum(held[::-1])[::-1]  # from each entry on
     quit_ = -CUT * (len(seq) - 2 - np.arange(len(seq) - 1)) - UNSUNG * left[1:]
     D = np.full(S, -np.inf)
     D[0] = E[0, 0]

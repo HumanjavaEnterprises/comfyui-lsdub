@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""pins for what the independent check found: the erase's nearest closure, the free walk, the lost reading, the lead sheet's proposals, short clips, noise."""
+"""regressions: the erase's nearest closure, the free walk, the lost reading, the lead sheet's proposals, short clips, noise."""
 
-import json, types
+import json, os, types
 
 import numpy as np
 import pytest
@@ -151,7 +151,7 @@ def test_the_cli_stops_on_a_missing_overrides_file(tmp_path, monkeypatch):
         LS.main(["--align", str(p), "--vocal", "x", "--overrides", str(tmp_path / "none"), "--out", str(tmp_path / "o")])
 
 
-# -- what the second check found ----------------------------------------------------------------------------------------------
+# -- short clips, the walk's end, the lead sheet's proposals --------------------------------------------------------------------
 from lsdub_engine.core import mouth_layers as ML, phone_plan as PP  # noqa: E402
 
 
@@ -194,39 +194,39 @@ def test_the_teeth_reading_is_the_takes_teeth():
     assert ML.LayerCompositor.take_teeth(None, [fr], [q]) == pytest.approx(200, abs=10)
 
 
-def tail_walk(reach=2.2):
-    """three words, the audio ending before the aligner's last one would, the last vowel long enough for it."""
-    words = [word("a", ("AA", 0.1, 0.8)), word("b", ("AA", 0.8, 1.6)), word("m", ("AA", 1.6, 1.9), ("M", 1.9, 2.0))]
-    return words
-
-
-def test_the_walk_does_not_leave_a_word_past_the_clip_for_free():
-    sr = V.SR
-    t = np.arange(int(2.1 * sr)) / sr
-    x = 0.3 * sum(np.sin(2 * np.pi * 220 * k * t) / k for k in range(1, 6))
-    A = dict(words=tail_walk())
-    r = V.retime(A, "", x=x)
-    assert r["words"][-1]["phones"][-1]["start"] < len(x) / sr
-
-
-def test_a_free_walk_keeps_its_open_end():
-    sr = V.SR
-    t = np.arange(int(1.0 * sr)) / sr
-    x = 0.3 * np.sin(2 * np.pi * 220 * t)
-    r = V.retime(dict(words=tail_walk()), "", x=x, free=True)
-    assert r["words"][-1]["phones"][-1]["start"] >= 1.0  # it stops where the audio does: the lyric's times are not read, nothing is charged
-
-
-def test_the_demos_last_m_stays_in_the_clip():
-    import os
-
+def demo():
     d = os.path.join(os.path.dirname(__file__), "data")
     if not os.path.exists(os.path.join(d, "demo_align.json")):
         pytest.skip("the demo vocal is not in this tree")
-    A, x = json.load(open(os.path.join(d, "demo_align.json"))), V.read_mono(os.path.join(d, "demo_lead_16k.flac"))
-    h = LS.honour(A, LS.read_sheet(A, x))
-    p = V.retime(h, "", x=x)["words"][-1]["phones"]
-    assert p[-1]["p"] == "M" and 15.0 < p[-1]["start"] and p[-1]["end"] <= len(x) / V.SR
+    return json.load(open(os.path.join(d, "demo_align.json"))), V.read_mono(os.path.join(d, "demo_lead_16k.flac"))
+
+
+def test_a_clip_cut_after_a_long_vowel_keeps_it():
+    A, x = demo()
+    i = [w["w"] for w in A["words"]].index("own")
+    r = V.retime(dict(A, words=A["words"][: i + 1]), "", x=x[: int(7.3 * V.SR)])
+    assert abs(r["words"][i]["start"] - 6.46) < 0.05  # dropped past the end, "my" took its time, 1 s off
+
+
+def test_words_the_aligner_only_squeezed_in_stay_past_the_cut():
+    """the clip cuts the song on "that": the line goes on to "time", 15.3 and 15.57 on the uncut stem, and the aligner fitted it inside."""
+    A, x = demo()
+    p = V.retime(A, "", x=x)["words"][-1]["phones"]
+    assert p[-1]["p"] == "M" and p[-1]["start"] >= len(x) / V.SR
+
+
+def test_the_final_m_past_the_cut_is_reported_as_such():
+    A, x = demo()
+    r = V.retime(A, "", x=x)["words"]
+    assert [(w, q) for w, q, _ in SN.lost_closures(r, len(x) / V.SR)] == [("time", "M")]
+
+
+def test_a_free_walk_keeps_its_open_end():
+    t = np.arange(V.SR) / V.SR
+    x = 0.3 * np.sin(2 * np.pi * 220 * t)
+    words = [word("a", ("AA", 0.1, 0.8)), word("b", ("AA", 0.8, 1.6)), word("m", ("AA", 1.6, 1.9), ("M", 1.9, 2.0))]
+    r = V.retime(dict(words=words), "", x=x, free=True)
+    assert r["words"][-1]["phones"][-1]["start"] >= 1.0  # it stops where the audio does: the lyric's times are not read, nothing is charged
 
 
 def test_verify_names_a_closure_past_the_clip_or_left_no_time():
@@ -292,3 +292,71 @@ def test_of_two_that_pass_the_better_sync_wins_and_within_a_margin_the_quieter()
     g = lambda c, o: dict(corr=c, open_in_silence=o, **{"pass": True})
     assert sing.pick_paint(g(0.9, 0.3), g(0.7, 0.1)) == "sing" and sing.pick_paint(g(0.7, 0.1), g(0.9, 0.3)) == "native"
     assert sing.pick_paint(g(0.8, 0.3), g(0.81, 0.1)) == "native" and sing.pick_paint(g(0.8, None), g(0.8, 0.3)) == "native"
+
+
+def test_verifys_meta_carries_what_it_cannot_show(tmp_path, monkeypatch):
+    p, sh = tmp_path / "a.json", tmp_path / "s.json"
+    p.write_text(json.dumps(dict(words=[dict(word("time", ("M", 15.5, 15.6)), start0=14.8)])))
+    sh.write_text(json.dumps(dict(fps=25.0, shots=[])))
+    monkeypatch.setattr(qa.cv2, "VideoCapture", lambda v: types.SimpleNamespace(get=lambda k: 382, release=lambda: None))
+    monkeypatch.setattr(qa, "vad", lambda *a: (np.zeros(382), np.zeros(382)))
+    monkeypatch.setattr(qa, "vocal_walk", lambda *a: ([], None))
+    import lsdub_engine.core.cast as C
+
+    monkeypatch.setattr(C, "Faces", lambda: None)
+    meta, rows = qa.verify("v.mp4", "x.wav", str(sh), align=str(p), work=str(tmp_path))
+    assert meta["closures_lost"] == [("time", "M", 15.5)] and rows == []
+
+
+def test_verifys_curve_gets_the_flags_the_dub_logged(tmp_path, monkeypatch):
+    class Stop(Exception):
+        pass
+
+    seen = []
+
+    def call(name, argv, **k):
+        seen.append(argv)
+        raise Stop
+
+    monkeypatch.setattr(qa.steps, "call", call)
+    monkeypatch.setattr(qa.ff, "run", lambda *a, **k: None)
+    (tmp_path / "w_coart.json").write_text(json.dumps(dict(dyn_flags=["--phone-plan", "--function-gate"])))
+    Q = types.SimpleNamespace(
+        read_span=lambda *a: [0] * 4, singer_roi=lambda *a: [0, 1, 0, 1], measured_opening=lambda F, r, f: (np.zeros(4), 1.0)
+    )
+    sn = types.SimpleNamespace(envelope=lambda *a: np.zeros(4))
+    s = dict(shot=0, f0=0, f1=3, start=0.0, box=[0, 0, 1, 1], warp_json=str(tmp_path / "w.json"))
+    with pytest.raises(Stop):
+        qa.measure_shot("v.mp4", s, 25.0, 0.0, "x.wav", np.ones(4), "a.json", [], None, str(tmp_path), Q, sn)
+    assert seen[0][-2:] == ["--phone-plan", "--function-gate"]
+
+
+def test_the_plan_log_names_the_curves_flags(tmp_path, monkeypatch):
+    from lsdub_engine.core import coart
+
+    T = tmp_path / "t.json"
+    T.write_text(json.dumps(dict(fps=25, t0=0.0, frames=[dict(vis="sil")] * 6)))
+    info = dict(
+        closures=[],
+        n_segments=0,
+        dom_ms=0,
+        undershoot=0,
+        prior=0,
+        lambda_open=0,
+        lambda_width=0,
+        closure_cap_p5=0,
+        pauses=[],
+        rest=[0, 0],
+        range_ratio_plan=[1, 1],
+        hull_projected=0,
+        dyn_mix=0,
+    )
+    monkeypatch.setattr(coart, "jaw_split", lambda *a, **k: (1.0, 1.0))
+    monkeypatch.setattr(coart, "plan", lambda *a: (np.zeros((6, 2)), np.zeros(6, bool), dict(info)))
+    monkeypatch.setattr(coart, "press_closures", lambda Ft, *a: Ft)
+    model = types.SimpleNamespace(rng=dict(g_lo=0.0, g_hi=1.0, w_lo=-1.0, w_med=0.0, w_hi=1.0))
+    a = types.SimpleNamespace(
+        track=str(T), coart_phones=True, coart_function_gate=False, warp_json=str(tmp_path / "w.json"), warp_deadband=0.04
+    )
+    coart.plan_clip(a, json.load(open(T))["frames"], np.zeros((6, 2)), model, None)
+    assert coart.logged_dyn_flags(a.warp_json) == ["--phone-plan"]

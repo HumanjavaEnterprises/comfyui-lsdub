@@ -21,7 +21,7 @@ def stamp(text, version, tag, sha):
 
 
 def check(z, version, tag):
-    """the arguments make sense and the zip holds one root folder, lsdub-demo-<version>/, as fetch_demo.py unpacks it."""
+    """the arguments make sense and the zip holds one root folder, lsdub-demo-<version>/, with its kits/, as fetch_demo.py unpacks it."""
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise SystemExit(f'stamp_demo: {version!r} is not a version')
     if not re.fullmatch(r'[A-Za-z0-9._-]+', tag):
@@ -29,9 +29,12 @@ def check(z, version, tag):
     if not os.path.isfile(z) or not zipfile.is_zipfile(z):
         raise SystemExit(f'stamp_demo: {z} is not a zip')
     with zipfile.ZipFile(z) as zf:
-        roots = {n.split('/')[0] for n in zf.namelist()}
+        names = zf.namelist()
+    roots = {n.split('/')[0] for n in names}
     if roots != {f'lsdub-demo-{version}'}:
         raise SystemExit(f'stamp_demo: the zip\'s root is {sorted(roots)}, not lsdub-demo-{version}')
+    if not any(n.startswith(f'lsdub-demo-{version}/kits/') for n in names):
+        raise SystemExit('stamp_demo: the zip has no kits/, fetch_demo.py copies it')
 
 
 def readme(text, version):

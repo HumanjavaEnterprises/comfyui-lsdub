@@ -192,11 +192,10 @@ EVENTS = [
     (27, 0, 14.19),
     (27, 1, 14.23),
     (27, 2, 14.34),
-    (27, 3, 14.49),
-    (28, 0, 14.52),
-    (28, 2, 14.66),
-    (29, 2, 15.09),
-]  # the tail read with "time" sung inside the clip: its M on the dip at 15.02-15.10, where the take shuts
+    (27, 3, 14.65),
+    (28, 0, 14.80),
+    (28, 2, 15.02),
+]
 
 
 def misses(r, tol=0.1):
@@ -323,9 +322,7 @@ def test_the_demo_holds_across_home_and_under_a_shifted_aligner(monkeypatch):
         assert misses(V.retime(A, "", x=x)) == []
     for h in (0.5, 1.0, 3.0):
         monkeypatch.setattr(V, "HOME", h)
-        assert len([m for m in misses(V.retime(A, "", x=x)) if m[0] < 27]) <= 6
+        assert len(misses(V.retime(A, "", x=x))) <= 6
     monkeypatch.setattr(V, "HOME", 1.5)
     for d in (-0.3, -0.15, 0.15, 0.3):
-        assert (
-            len([m for m in misses(V.retime(shifted(A, d), "", x=x)) if m[0] < 27]) <= 7
-        )  # the last three words, one vowel short of the lyric, hang on the aligner
+        assert len(misses(V.retime(shifted(A, d), "", x=x))) <= 7

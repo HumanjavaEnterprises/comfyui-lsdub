@@ -283,7 +283,7 @@ def pick_paint(s, n):
 
 def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info, t_plan=None):
     """Per-shot auto-selection: also run the native warp (lsdub paint on the full take at the frame rate, the pre-sing
-    recipe) and keep whichever scores the higher MEASURED corr (lag 0); open-in-silence breaks a tie (within 0.02).
+    recipe) and keep pick_paint's choice of the two.
     Both are kept: <out>_sing.mp4 and <out>_native.mp4; <out> is the winner."""
     import shutil
 

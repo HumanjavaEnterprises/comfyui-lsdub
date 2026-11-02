@@ -17,7 +17,7 @@ def build(src, version, out):
         raise SystemExit(f'build_demo_zip: {version!r} is not a version')
     if not os.path.isdir(src):
         raise SystemExit(f'build_demo_zip: no folder {src}')
-    with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+    with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
         for d, dirs, files in sorted(os.walk(src)):
             dirs.sort()
             for f in sorted(files):

@@ -56,6 +56,17 @@ def test_stamp_checks_the_root_the_version_and_the_tag(tmp_path):
         m.main(['only', 'two'])
 
 
+def test_stamp_wants_the_kits(tmp_path):
+    B, m = load('build_demo_zip'), load('stamp_demo')
+    d = tmp_path / 'demo'
+    d.mkdir()
+    (d / 'b.txt').write_text('b')
+    z = str(tmp_path / 'a.zip')
+    B.build(str(d), '1.2.3', z)
+    with pytest.raises(SystemExit, match='kits'):
+        m.check(z, '1.2.3', 'v1')
+
+
 def test_stamp_rewrites_every_name_in_the_readme():
     m = load('stamp_demo')
     t = 'Get `lsdub-demo-0.1.0.zip`, then `--zip lsdub-demo-0.1.0.zip`; lsdub-demo stays.'
