@@ -344,6 +344,22 @@ def honour(align, S):
             mv = lambda t: round(to + (float(t) - s) * scale, 3)
             w.update(start=mv(w["start"]), end=mv(w["end"]), phones=[dict(p, start=mv(p["start"]), end=mv(p["end"])) for p in w["phones"]])
         W.append(w)
+    # the whole of a span is the take's: its passed words reach across it, and a span with none gets one of its own
+    for q in S["spans"]:
+        inside = [w for w in W if w.get("vocal") == PASS and w["start"] < q["t1"] and w["end"] > q["t0"]]
+        if not inside:
+            before = sum(1 for w in W if w["start"] < q["t0"])
+            frag = (q.get("fragments") or [dict(w="(backing)")])[0]["w"]
+            W.insert(
+                before,
+                dict(w=frag, start=q["t0"], end=q["t1"], vocal=PASS, phones=[dict(p="SIL", start=q["t0"], end=q["t1"])], src="sung-only"),
+            )
+            continue
+        inside[0]["start"], inside[-1]["end"] = q["t0"], q["t1"]
+        n = len(inside)
+        for k, w in enumerate(inside):
+            a, b = q["t0"] + (q["t1"] - q["t0"]) * k / n, q["t0"] + (q["t1"] - q["t0"]) * (k + 1) / n
+            w.update(start=round(a, 3), end=round(b, 3), phones=[dict(p="SIL", start=round(a, 3), end=round(b, 3))])
     return dict(align, words=W, pass_over=spans)
 
 

@@ -193,3 +193,21 @@ def test_a_paint_in_mouth_mode_still_keeps_passed_time_out_of_the_singers_mouth(
     H["words"] = [dict(w, vocal=None) for w in H["words"]]
     al.write_text(json.dumps(H))
     assert VO.for_warp(a) is None  # no passed word, mouth mode is what it was
+
+
+def test_the_passed_words_cover_the_whole_span_so_no_frame_of_it_is_left_to_the_plan(demo):
+    A, x, S = demo
+    H = LS.honour(A, S)
+    a, b = H["pass_over"][0]
+    w = [w for w in H["words"] if w.get("vocal") == LS.PASS]
+    assert w[0]["start"] == a and w[-1]["end"] == b and all(p["end"] > p["start"] for q in w for p in q["phones"])
+
+
+def test_a_span_with_no_word_in_it_gets_a_passed_word_of_its_own(demo):
+    A, x, _ = demo
+    S = LS.read_sheet(A, x, SHEET, "lead 9 13\npass 1.45 1.58")
+    H = LS.honour(A, S)
+    assert len(H["words"]) == len(A["words"]) + 1
+    w = [w for w in H["words"] if w.get("vocal") == LS.PASS]
+    assert (w[0]["start"], w[0]["end"]) == (1.45, 1.58)
+    assert [q["start"] for q in H["words"]] == sorted(q["start"] for q in H["words"])
