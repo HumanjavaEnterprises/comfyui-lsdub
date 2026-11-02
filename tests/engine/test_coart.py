@@ -544,7 +544,7 @@ def test_sing_gate_reads_the_moved_words(tmp_path, monkeypatch):
     wj = _log(tmp_path, advance_s=0.08)
     seen = {}
 
-    def snap(op, vox, words, t0, fps, dt=None):
+    def snap(op, vox, words, t0, fps, dt=None, keep=None):
         seen.update(w=words[0]["start"], dt=dt)
         return dict(open_in_silence=0.0)
 
