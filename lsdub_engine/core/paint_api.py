@@ -114,6 +114,12 @@ def advance_s(args):
     return v / 1000.0
 
 
+def dyn_flags(args):
+    """the sung_dyn flags these paint flags ask for: the curve and the plan read the same phones."""
+    a = [str(x) for x in args or ()]
+    return [d for p, d in (("--coart-phones", "--phone-plan"), ("--coart-function-gate", "--function-gate")) if p in a]
+
+
 def coart_dyn(args, dyn):
     """--coart-dyn belongs to the coart planner: nothing else reads it."""
     return ("--coart-dyn", dyn, "--coart-dyn-mix", "1.0") if target(args) == "coart" else ()

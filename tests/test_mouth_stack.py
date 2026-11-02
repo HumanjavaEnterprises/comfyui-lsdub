@@ -204,7 +204,7 @@ def test_sync_advance_at_zero_keeps_the_tweaks_hash(pack):
 def test_layers_shape_reaches_its_flags_and_leaves_interior_alone(pack):
     a = pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers_shape'), _kit('a'), _tw(''), 'skip')
     b = pack.nodes_mouth._paint_flags(_proj(pack, mouth_stack='layers_interior'), _kit('a'), _tw(''), 'skip')
-    for f in ('--coart-gap-anchor', '--warp-erase-close', '--warp-interior-open-floor'):
+    for f in ('--coart-gap-anchor', '--warp-erase-close', '--warp-interior-open-floor', '--coart-phones', '--coart-function-gate', '--warp-round', '--warp-contact'):
         assert f in a and f not in b
 
 

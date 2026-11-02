@@ -113,6 +113,10 @@ REG_END = 0.18  # reg: the incisal edge "ends" logged at +-0.18 IOD of arc from 
 smootherstep = tl.smootherstep
 # vowel classes for the tongue: (dorsum rise, tip rise, retraction) in IOD; narrow vowels raise the tongue body, open
 # ones drop and retract it
+TIP_W = 0.085  # --warp-contact: the tongue tip's half width, eye distances
+TIP_RED = (72.0, 78.0, 150.0)  # ... and the red it leans to, BGR: a tip in shadow, not the pale take colour of a lit tongue
+TEETH_LIFT = 1.7  # ... the most the arch is lifted there
+TEETH_SOFT = 0.006  # ... a thin strip of arch at a dental frame reads as a comb of tooth seams: softened by this, x IOD
 TONGUE_VOWEL = {
     "E": (0.035, 0.012, -0.01),
     "ih": (0.045, 0.015, -0.015),
@@ -2508,6 +2512,58 @@ class LayerCompositor:
         rgb = acc_rgb / np.maximum(acc_a, 1e-4)[..., None]
         return np.clip(rgb, 0, 255).astype(np.float32), acc_a
 
+    def lips_to_edge(self, i, P):
+        """--warp-contact: (the head's down direction in the frame, the upper and lower inner lip below the upper incisal edge in eye distances, a positive
+        number being below it, the eye distance in frame px)."""
+        t = self.t
+        e2 = self.proj(i, False)(self.up.o[None])[0][0]
+        dn = (t.pl.R[i] @ t.d)[:2]
+        dn = dn / max(1e-6, np.linalg.norm(dn))
+        io = t.iod * t.pl.s[i]
+        P = np.asarray(P, float)
+        return dn, float((P[13, :2] - e2) @ dn) / io, float((P[14, :2] - e2) @ dn) / io, io
+
+    def take_teeth(self, frames, S):
+        """--warp-contact: the L of the take's own teeth (OpenCV 0-255), read inside its openings; None when it shows none."""
+        from .interior_take import teeth
+
+        v = []
+        for f, s in zip(frames[::4], S[::4]):
+            q = np.asarray(s)[LIP_IN, :2]
+            x0, y0 = np.maximum(np.floor(q.min(0)).astype(int), 0)
+            x1, y1 = np.ceil(q.max(0)).astype(int)
+            if x1 - x0 < 4 or y1 - y0 < 4:
+                continue
+            lab = cv2.cvtColor(f[y0:y1, x0:x1], cv2.COLOR_BGR2LAB).astype(np.float32)
+            m = tl.poly_mask(q - [x0, y0], (y1 - y0, x1 - x0), 0.0) & teeth(lab)
+            if m.sum() >= 8:
+                v.append(float(np.median(lab[..., 0][m])))
+        return float(np.median(v)) if v else None
+
+    def lit_teeth(self, rgb, a, Q, k, h, w):
+        """the arch at a dental frame, up to the take's teeth's light by share k, never darker; only where the opening shows it."""
+        L0 = getattr(self, "teeth_take_L", None)
+        seen = tl.poly_mask(Q, (h, w), 0.0) & (a > 0.5)
+        if L0 is None or seen.sum() < 8:
+            return rgb
+        L = cv2.cvtColor(np.clip(rgb, 0, 255).astype(np.uint8), cv2.COLOR_BGR2LAB)[..., 0][seen]
+        return np.clip(rgb * (1 + k * (np.clip(L0 / max(1.0, float(np.percentile(L, 75))), 1.0, TEETH_LIFT) - 1)), 0, 255)
+
+    def tongue_tip(self, i, box, P, io):
+        """--warp-contact, TH: the tip seen under the upper incisors, on the lower lip, in the take's tongue colour. -> (BGR, alpha) in the box."""
+        t = self.t
+        c = np.asarray(P[14, :2], float)
+        e2 = self.proj(i, False)(self.up.o[None])[0][0]
+        dn = (t.pl.R[i] @ t.d)[:2]
+        dn = dn / max(1e-6, np.linalg.norm(dn))
+        right = np.array([dn[1], -dn[0]])
+        drop = float((c - e2) @ dn)
+        centre = e2 + dn * (0.55 * drop) + right * float((c - e2) @ right)
+        L = np.stack([right * TIP_W * io, dn * max(0.55 * drop, 0.012 * io)], 1)
+        base = 0.4 * np.asarray(self.tongue_c, np.float32) + 0.6 * np.array(TIP_RED, np.float32)
+        col = np.clip(base * float(t.light[i]) / max(1e-3, t.skin_med), 0, 255)
+        return ellipsoid_layer(centre, L, (box[0], box[1], box[2], box[3]), col, spec=0.05, groove=0.05, ambient=0.5, diffuse=0.4)
+
     def layers(self, warped, i, P_take, P_out, gap_t):
         """all seven layers of frame i: dict name -> (BGR float box, alpha box), the box (x0, y0, w, h)."""
         t = self.t
@@ -2644,6 +2700,20 @@ class LayerCompositor:
             it_rgb, it_a = self.take_interior.paint(i, Q, box, self.interior_ap(Po), L["L4"][1], L["L4"][0])
             L["L2"] = (L["L2"][0] * (1 - it_a[..., None]) + it_rgb * it_a[..., None], L["L2"][1])
             L["L3"] = (L["L3"][0], L["L3"][1] * (1 - it_a))
+        ct = getattr(self, "contact", None)
+        dental = 0.0 if ct is None else float(max(ct["FF"][i], ct["TH"][i]))
+        if ct is not None and ct["FF"][i] > 0.02:
+            L["L4"] = (cv2.GaussianBlur(L["L4"][0], (0, 0), TEETH_SOFT * io), cv2.GaussianBlur(L["L4"][1], (0, 0), TEETH_SOFT * io))
+        if dental > 0.02:  # the strip sits in the arch's shade: at these frames it is the picture, and takes the take's teeth's light
+            L["L4"] = (self.lit_teeth(L["L4"][0], L["L4"][1], Q, dental, h, w), L["L4"][1])
+        if (
+            ct is not None and ct["TH"][i] > 0.02
+        ):  # the tip lies over the teeth's edge: drawn on the upper arch's layer, clipped by the same opening
+            tip, ta = self.tongue_tip(i, box, np.asarray(P_out, float), io)
+            ta = 0.85 * ta * clip * float(ct["TH"][i])
+            a4 = L["L4"][1]
+            a4n = ta + a4 * (1 - ta)
+            L["L4"] = ((tip * ta[..., None] + L["L4"][0] * (a4 * (1 - ta))[..., None]) / np.maximum(a4n, 1e-4)[..., None], a4n)
         if band_log:
             self._band = dict(i=i, up_h=up_h, lo_h=lo_h, rims=rims)
         self._full = dict(L3=a3, L4=up_a)  # unclipped arches (the debug view shows the whole band)
@@ -2674,6 +2744,7 @@ class LayerCompositor:
             sh2 = sh
         if v12b:  # the lip band is the lips' own inner surface: no contact shadow of the lips on it
             sh4 = sh if gw_up is None else sh + (1 - sh) * gw_up[..., None]
+            sh4 = sh4 + (1 - sh4) * dental
             sh3 = sh if gw_lo is None else sh + (1 - sh) * gw_lo[..., None]
             L["L2"] = (L["L2"][0] * sh2, L["L2"][1])
             L["L3"] = (L["L3"][0] * sh3, L["L3"][1])
@@ -2703,8 +2774,8 @@ class LayerCompositor:
             nonlip = (lp < 0.35) & (tl.teeth_key(lab, t.skin_med) | (lab[..., 0] < 0.5 * t.skin_med) | (chroma < 10))
             band = tl.poly_mask(Q, (h, w), 0.0, 0.03 * io) & ~opening
             see = cv2.GaussianBlur((nonlip & band).astype(np.float32), (0, 0), 0.8)
-            a5 = a5 * (1 - see)
-            deep = nonlip & outer & ~tl.poly_mask(Q, (h, w), 0.0, 0.03 * io)
+            a5 = a5 * (1 - see * (1 - dental))  # a lifted lip carries the take's teeth up with it: those go to lip colour, not through
+            deep = nonlip & outer & ~tl.poly_mask(Q, (h, w), 0.0, 0.03 * (1 - dental) * io)
             if deep.any():
                 wk = (~nonlip).astype(np.float32)
                 sg = max(2.0, 0.03 * io)

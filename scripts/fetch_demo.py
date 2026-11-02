@@ -18,7 +18,8 @@ import urllib.request
 import zipfile
 
 VERSION = '0.1.0'
-URL = f'https://github.com/HumanjavaEnterprises/comfyui-lsdub/releases/download/v{VERSION}/lsdub-demo-{VERSION}.zip'
+TAG = f'v{VERSION}'
+URL = f'https://github.com/HumanjavaEnterprises/comfyui-lsdub/releases/download/{TAG}/lsdub-demo-{VERSION}.zip'
 SHA256 = 'a431085d931f2b983b620d31710ac868a459d461a6dcb158177d199637790edb'
 
 

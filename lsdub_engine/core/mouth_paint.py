@@ -928,6 +928,27 @@ def _parser():
         help="warp (coart): the mouth reaches a closure and leaves it over this share of the take's own closing and opening times, at most 150 ms, the "
         "width with it (0 = off: the planned opening is cut to the closure on its frame)",
     )
+    ap.add_argument(
+        "--coart-phones",
+        action="store_true",
+        help="warp (coart): reduced vowels apart from full ones, diphthongs as a nucleus and an offglide (phone_plan.py); lsdub sing gives sung_dyn the same phones",
+    )
+    ap.add_argument(
+        "--coart-function-gate",
+        action="store_true",
+        help="warp (coart): a closed-class word gets less opening by its sung length and level, a held or loud one none (phone_plan.function_gain)",
+    )
+    ap.add_argument(
+        "--warp-round",
+        type=_not_negative,
+        default=0.0,
+        help="warp (coart): the lips round on rounded phones, corners in and lips fuller, this share of the full gesture, on top of the planned width (0 = off)",
+    )
+    ap.add_argument(
+        "--warp-contact",
+        action="store_true",
+        help="warp (coart, layers): F / V lift the upper lip off the teeth and bring the lower lip to their edge, TH shows the tongue tip under them",
+    )
     # (opt-in; audits/frame_gate.py = the checker, core/frame_gate.py = the maker): the per-frame gate ---
     ap.add_argument(
         "--warp-gate",

@@ -175,7 +175,7 @@ def parse_overrides(text):
         ln = ln.split("#")[0].strip()
         if not ln:
             continue
-        m = re.fullmatch(r"(pass|lead)\s+([\d.]+)\s*[- ]\s*([\d.]+)", ln, re.I)
+        m = re.fullmatch(r"(pass|lead)\s+(\d+(?:\.\d*)?|\.\d+)\s*[- ]\s*(\d+(?:\.\d*)?|\.\d+)", ln, re.I)
         if not m or float(m[3]) <= float(m[2]):
             raise ValueError(f"lead_sheet: override '{ln}': use `pass 10.04 11.93` or `lead 10.04 10.49`")
         out.append((m[1].lower(), float(m[2]), float(m[3])))
@@ -214,6 +214,12 @@ def fragments(q, echo):
     cuts = [q["t0"], *[c for c in q["cuts"] if q["t0"] + 0.05 < c < q["t1"] - 0.05], q["t1"]]
     short = (echo[:2] if len(echo) > 3 else echo) or "?"
     return [dict(w=echo if b - a >= FULL_S else short, t0=round(a, 3), t1=round(b, 3)) for a, b in zip(cuts, cuts[1:])]
+
+
+def proposes(q):
+    """a span heard only as outside the clip's pitch range, and not re-heard as a repeat: a proposal. One voice singing high fires it, and real singing must
+    not keep the take's mouth on that alone."""
+    return set(q["kinds"]) == {"register"} and not (q.get("relisten") and repeated(q["relisten"]))
 
 
 def confidence(q, relisten=None):
@@ -267,6 +273,9 @@ def read_sheet(align, x, lyrics=None, overrides="", relisten=None):
                     reason=f"on the sheet and heard so, moved out of the run at {q['t0']:.2f}-{q['t1']:.2f}",
                     move=[q["t0"], q["t1"]],
                 )
+            elif proposes(q):  # pitch alone only proposes: it fires on one voice singing high
+                cf, why = confidence(q, None)
+                c.update(conf=round(min(cf, LOW - 0.01), 2), reason=f"proposed, not passed: {why}; `pass {q['t0']} {q['t1']}` passes it")
             else:
                 cf, why = confidence(q, q.get("relisten"))
                 c.update(
@@ -323,7 +332,9 @@ def as_text(S):
 def honour(align, S):
     """the alignment with the passed time out of it: a passed word keeps its place and no phones of its own, a lyric moved out of a run is held
     by the time left to it, and `pass_over` names the spans for the retime and for Verify. The lyric is untouched."""
-    spans = [[q["t0"], q["t1"]] for q in S["spans"]]
+    kept = [q for q in S["spans"] if not proposes(q)]
+    S = dict(S, spans=kept)
+    spans = [[q["t0"], q["t1"]] for q in kept]
     if not spans:
         return dict(align)
     calls = {c["i"]: c for c in S["words"]}
@@ -394,7 +405,7 @@ def main(argv=None):
         A,
         VR.read_mono(a.vocal),
         open(a.lyrics, encoding="utf-8").read() if a.lyrics else None,
-        open(a.overrides).read() if a.overrides and os.path.exists(a.overrides) else "",
+        open(a.overrides).read() if a.overrides else "",
     )
     t, _ = write(S, a.out)
     print(open(t, encoding="utf-8").read())

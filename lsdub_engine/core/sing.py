@@ -196,6 +196,7 @@ def run(
         vs += ["--a2f-csv", a2f]
     if snap:
         sd += ["--attack-ms", str(SNAP["attack_ms"]), "--lead", str(lead)]
+    sd += paint_api.dyn_flags(paint_args)
     if word_close:
         vs += ["--word-close", str(word_close)]
     steps.call("sung_dyn", sd, quiet=True)

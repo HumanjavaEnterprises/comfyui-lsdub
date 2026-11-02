@@ -188,6 +188,8 @@ def build(
     pump_gate=0.0,
     pump_ratio=4.0,
     pump_hold_ms=60.0,
+    phone_plan=False,
+    function_gate=False,
 ):
     ts = t0 - pad
     n = int(round((dur + 2 * pad) * rate))
@@ -197,6 +199,10 @@ def build(
     sw = np.array([(1 - f["mix"]) * WID[f["vis"]] + f["mix"] * WID[f["vis2"]] for f in fr])
     closure = np.array([f["vis"] == "PP" for f in fr])
     drive = envelope(audio, ts, n, rate, floor_db, attack_ms, release_ms)
+    if phone_plan or function_gate:
+        from . import phone_plan as pl
+
+        so, sw, closure = pl.curves(pl.phones(align, (tt, drive), phone_plan, function_gate), ts, n, rate, lead)
     if a2f:
         jaw, rnd = a2f_curves(a2f, tt)
         drive = (1 - a2f_mix) * drive + a2f_mix * np.clip(jaw, 0, 1)
@@ -239,6 +245,12 @@ def main(argv=None):
     )
     ap.add_argument("--pump-ratio", type=float, default=4.0)
     ap.add_argument("--pump-hold-ms", type=float, default=60.0)
+    ap.add_argument("--phone-plan", action="store_true", help="reduced vowels and diphthongs (phone_plan): --coart-phones")
+    ap.add_argument(
+        "--function-gate",
+        action="store_true",
+        help="closed-class words reduced by sung length and level (phone_plan): --coart-function-gate",
+    )
     ap.add_argument("--lead-align-out", help="also write the alignment with only the lead words (for the viseme track)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
@@ -259,6 +271,8 @@ def main(argv=None):
         pump_gate=a.pump_gate,
         pump_ratio=a.pump_ratio,
         pump_hold_ms=a.pump_hold_ms,
+        phone_plan=a.phone_plan,
+        function_gate=a.function_gate,
     )
     if a.lead_align_out:
         al = json.load(open(a.align))

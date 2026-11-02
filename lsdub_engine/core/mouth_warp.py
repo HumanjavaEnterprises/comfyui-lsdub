@@ -560,6 +560,40 @@ def spare_frames(gap, pp, prom=0.15, ease=1.0):
     return np.clip(2.5 * ease * gaussian_filter1d(a, ease, mode="nearest"), 0.0, 1.0)
 
 
+CONTACT_UP = -0.012  # --warp-contact: the upper inner lip this far above the upper incisal edge, eye distances: the incisors show
+CONTACT_LO = {"FF": 0.008, "TH": 0.055}  # ... and the lower inner lip this far below it: on the edge for F / V, a tongue's room for TH
+CONTACT_MAX = 0.1  # the most either lip is moved for it, eye distances
+ROUND_IN, ROUND_IN_INNER, ROUND_FULL = (
+    0.13,
+    0.2,
+    0.07,
+)  # --warp-round 1: corners in, the opening's corners in, lips fuller, shares of their distance from the mouth's centre
+
+
+def round_field(X, ix, iin):
+    """--warp-round: the lips rounding, canonical units on the control points: x toward the mouth's middle, more on the opening's rim, the outer lips a little
+    further from the mouth's line (a pout seen from the front; depth does not reach a frontal warp)."""
+    c = 0.5 * (X[61] + X[291])
+    d = X[CTRL] - c
+    D = np.zeros((len(CTRL), 3))
+    lip = [ix[k] for k in LIP_OUT]
+    D[lip, 0] = -ROUND_IN * d[lip, 0]
+    D[lip, 1] = ROUND_FULL * d[lip, 1]
+    D[iin, 0] = -ROUND_IN_INNER * d[iin, 0]
+    return D
+
+
+def lip_rows():
+    """per control point: its share of the upper lip's and the lower lip's move (--warp-contact). The soft chin follows the lower lip by half."""
+    from .coart import LOWER_LIP
+
+    up, lo = np.zeros(len(CTRL)), np.zeros(len(CTRL))
+    for j, k in enumerate(CTRL):
+        up[j] = k in UPPER
+        lo[j] = 1.0 if k in LOWER_LIP else 0.5 if k in CHIN_C else 0.0
+    return up, lo
+
+
 def closed_frames(n, pp, frames=()):
     """the frames that must stay shut through the smoothing: the PP frames and the plan's other closures (F, V)."""
     c = np.array(pp[:n], bool)
@@ -694,7 +728,8 @@ class EraseSet:
         self.layers, self.which = layers, which  # {ref: EraseLayer}, {frame: ref}
 
     def at(self, i):
-        return self.layers[self.which[i]]
+        """the layer of i's closure; a frame outside every closure (a gate's repair can erase one) takes the nearest."""
+        return self.layers[self.which[i] if i in self.which else self.which[min(self.which, key=lambda k: abs(k - i))]]
 
     def forget(self, i):
         self.at(i).forget(i)
@@ -1259,6 +1294,8 @@ class WarpClip:
         if g("warp_target", "v9") == "coart":
             from . import coart
 
+            if vars(a).get("warp_contact", False):
+                a.warp_contact_iod = (float(np.median(np.linalg.norm(C[:, 33] - C[:, 263], axis=1))), model.rng["g_lo"], model.rng["g_hi"])
             sync = None
             if g("coart_sync_vocal", None):  # the track moves with the plan, so everything that reads it below moves too
                 fr_t, sync = coart.phrase_sync(a, fr_t, Fs, model, bands, pp, F, S3raw)
@@ -1324,6 +1361,11 @@ class WarpClip:
             )
         Fe = F + dFe  # effective target features
         rot = np.array([pl.s[i] * pl.R[i] for i in range(n)])  # canonical -> frame linear part
+        self.events = vars(a).get("coart_events")
+        self.shape_px = None  # per frame, frame px on the control points, on top of the residual's move: the lips' own gestures
+        if self.events is not None and vars(a).get("warp_round", 0.0) > 0:
+            D = round_field(C.mean(0), ix, iin) * float(a.warp_round)
+            self.shape_px = np.stack([r * (D @ rot[k].T)[:, :2] for k, r in enumerate(np.resize(self.events["round"], n))])
         pose = pl.par[:, 1:4]
         interp = cv2.INTER_LANCZOS4 if g("warp_interp", "cubic") == "lanczos" else cv2.INTER_CUBIC
         ell = None
@@ -1469,6 +1511,9 @@ class WarpClip:
         )
 
     # ------------------------------------------------------------------------------------------------ geometry --
+    def shape_at(self, i):
+        return 0.0 if self.shape_px is None else self.shape_px[i]
+
     def geometry(self, i, src, dst, ell=None):
         ell = self.ell if ell is None else ell
         if ell is not None:
@@ -1481,7 +1526,7 @@ class WarpClip:
         Si = self.S[i] if Si is None else Si
         dFe_i = self.dFe[i] if dFe_i is None else dFe_i
         src = Si[CTRL, :2]
-        dst = src + (self.model.delta(dFe_i) @ self.rot[i].T)[:, :2]
+        dst = src + (self.model.delta(dFe_i) @ self.rot[i].T)[:, :2] + self.shape_at(i)
         return src, (dst if getattr(self, "yc", None) is None else self.yc.apply(i, src, dst))  # --warp-yaw-clamp
 
     def fold_det_of(self, i, dFe_i=None, Si=None, ell=None, lam=None):
@@ -1547,7 +1592,7 @@ class WarpClip:
                 )
             else:
                 dl = model.delta(dFe_i)
-                dst = src + (dl @ self.rot[i].T)[:, :2]
+                dst = src + (dl @ self.rot[i].T)[:, :2] + self.shape_at(i)
                 if getattr(self, "yc", None) is not None:
                     dst = self.yc.apply(i, src, dst, ent)  # inside the face
                 if np.abs(dst - src).max() < 0.25:
@@ -1883,6 +1928,8 @@ class WarpClip:
         er = g("warp_erase", "off")
         self.er_gap = Fe[:, 0] if not g("warp_erase_close", False) else np.minimum(Fe[:, 0], F[:, 0] + self.dFe_pre_fold[:, 0])
         al = erase_alpha(F[:, 0], self.er_gap, model.rng, g("warp_erase_thr", 0.12), er == "all", F[:, 1], Fe[:, 1])
+        if getattr(getattr(self, "comp", None), "contact", None) is not None:  # a dental frame shows its teeth: no closed lips over them
+            al = al * (1.0 - np.minimum(1.0, self.comp.contact["FF"] + self.comp.contact["TH"]))
         # never paste at a mistracked frame: the take's lip landmarks must sit on lip-coloured pixels
         st_ = [ll.lip_stats(frames[i], S[i][:, :2]) for i in range(n)]
         okst = [x for x in st_ if x is not None]
@@ -2041,6 +2088,8 @@ class WarpClip:
         if self.rigid_teeth:
             self.setup_layers()
             teeth = self.teeth
+            if vars(self.a).get("warp_contact", False) and self.comp is not None and self.events is not None:
+                self.contact_pass()
             for i in range(n):
                 if self.profile(i):
                     log[i]["layers_off"] = True
@@ -2080,6 +2129,35 @@ class WarpClip:
                 f"lip lock -> Lab {lk.ref.round(1).tolist()}: shift a*/b* median {np.median([lk.shift(i)[1:] for i in range(n)], 0).round(1).tolist()}"
             )
         return self
+
+    def contact_pass(self):
+        """--warp-contact, once the arches exist: F / V and TH frames warped again with the lips put where the upper incisal edge wants them, the upper lip
+        CONTACT_UP above it, the lower CONTACT_LO[class] below. The event's frames carry all of it, one frame either side eases it."""
+        comp, n = self.comp, self.n
+        e = {
+            v: np.maximum(np.resize(self.events[v], n), gaussian_filter1d(np.resize(self.events[v], n), 1.0, mode="nearest"))
+            for v in ("FF", "TH")
+        }
+        if self.shape_px is None:
+            self.shape_px = np.zeros((n, len(CTRL), 2))
+        up_w, lo_w = lip_rows()
+        cx = self.S[:, CTRL, 0]
+        for i in np.flatnonzero((e["FF"] > 0.02) | (e["TH"] > 0.02)):
+            k = "FF" if e["FF"][i] >= e["TH"][i] else "TH"
+            w = float(e[k][i])
+            dn, up, lo, io = comp.lips_to_edge(int(i), self.P_out[i])
+            dy_up = np.clip(CONTACT_UP - up, -CONTACT_MAX, CONTACT_MAX) * io * w
+            dy_lo = np.clip(CONTACT_LO[k] - lo, -CONTACT_MAX, CONTACT_MAX) * io * w
+            mid = 0.5 * (self.S[i, 61, 0] + self.S[i, 291, 0])
+            hw = max(1.0, 0.5 * abs(self.S[i, 291, 0] - self.S[i, 61, 0]))
+            bow = np.clip(1.0 - ((cx[i] - mid) / hw) ** 2, 0.0, 1.0)[:, None] ** 0.5
+            self.shape_px[i] += (up_w * dy_up + lo_w * dy_lo)[:, None] * bow * dn
+            self.warped[i], self.masks[i], self.log[i], self.dsts[i] = self.warp_one(int(i))
+            self.P_out[i] = self.p_out_of(i, self.dsts[i])
+            self.outs[i] = self.warped[i]
+        comp.contact = e
+        comp.teeth_take_L = comp.take_teeth(self.frames, self.S)
+        print(f"contact: {int((e['FF'] > 0.5).sum())} F / V frames, {int((e['TH'] > 0.5).sum())} TH frames")
 
     def teeth_info(self):
         if not self.rigid_teeth or self.teeth is None:

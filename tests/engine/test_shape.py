@@ -48,6 +48,18 @@ def test_the_shape_stack_is_the_interior_stack_plus_its_flags():
         "--warp-interior-mend",
         "--coart-closure-ramp",
         "1.0",
+        "--coart-phones",
+        "--coart-function-gate",
+        "--warp-round",
+        "0.4",
+        "--warp-contact",
+        "--warp-temporal",
+        "1.5",
+        "--warp-temporal-spare",
+        "--warp-temporal-width",
+        "2",
+        "--coart-advance-ms",
+        "40",
     )
     assert recipes.MOUTH_STACKS["layers_shape"] == "layers_v16_1_shape"
     assert "--warp-erase-close" not in recipes.get("layers_v16_1").argv

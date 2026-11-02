@@ -46,6 +46,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 
 from . import mouth_warp as mw
+from . import phone_plan as pl
 from . import viseme_track as vt
 
 # per class: (dominance of the OPENING, dominance of the WIDTH, rise width x --coart-dom-width)
@@ -86,6 +87,15 @@ VMAX_FLOOR = 0.35  # the speed limit is never below this (take units / frame: sh
 PRIOR_FLOOR = ((0.08, 0.03), (0.15, 0.06))  # the prior's take velocity / acceleration p95 floors (opening, width), /frame
 REST_OPEN_MAX = 0.15  # the rest mouth's opening is at most this (the library's resting opening, take units)
 REST_CLOSED_Q = 20.0  # the take's closed mode = its frames below this percentile of opening
+PLAN_OPEN = {
+    "ae": (0.55, 0.95),
+    "ah": (0.45, 0.85),
+    "ax": (0.15, 0.45),
+    "ix": (0.12, 0.4),
+    "gi": (0.35, 0.75),
+    "gu": (0.3, 0.65),
+}  # --coart-phones: the classes the library has no band for
+CONTACT_OPEN = {"FF": 0.04, "TH": 0.07}  # --warp-contact: the opening a dental gesture is planned at, in eye distances
 RANGE_ANCHORS = "neutral"  # the plan's range match: its p5 / p95 -> the take's, the neutral level (0) fixed
 
 
@@ -129,7 +139,7 @@ def class_bands(v, bands, open_audio, a):
     og, wg = getattr(a, "warp_open_gain", 1.0), getattr(a, "warp_width_gain", 1.0)
     if v == "skip":
         return (-mw.INF, mw.INF), (-mw.INF, mw.INF)
-    lo, hi = VO.get(v, (0.0, 0.6))
+    lo, hi = VO.get(v, PLAN_OPEN.get(v, (0.0, 0.6)))
     if v in OPEN_FROM_AUDIO:
         lo = max(lo, min(hi, 0.8 * float(open_audio)))
     cd = getattr(a, "warp_close_depth", 0.0) or 0.0
@@ -184,7 +194,7 @@ def detect_lead(align, fr_t, t0, n, fps, grid=np.arange(0.0, 0.2051, 0.01)):
     return float(np.median(Ls)), best
 
 
-def segments(fr_t, n, fps, t0, align=None, shift=0.0, rest_s=0.0, skip_kind="free"):
+def segments(fr_t, n, fps, t0, align=None, shift=0.0, rest_s=0.0, skip_kind="free", phones=None):
     """phone segments covering the clip: dicts (v viseme, a / b seconds, p phone, w word, frames: the frames whose
     centre is inside). From the alignment when given (each phone's start moved `shift` s earlier: a track built with
     a longer lead than the planner's own anticipation starts its shapes that much earlier; the ends stay), else from the track's own viseme runs;
@@ -195,7 +205,10 @@ def segments(fr_t, n, fps, t0, align=None, shift=0.0, rest_s=0.0, skip_kind="fre
     tc = t0 + (np.arange(n) + 0.5) / fps
     lo_t, hi_t = t0 - 1.0, t0 + n / fps + 1.0
     if align is not None:
-        ph = [dict(v=p["vis"], a=p["start"] - shift, b=p["end"], p=p["p"], w=p["word"]) for p in vt.phone_list(align)]
+        ph = [
+            dict(v=p["vis"], a=p["start"] - shift, b=p["end"], p=p["p"], w=p["word"])
+            for p in (vt.phone_list(align) if phones is None else phones)
+        ]
     else:
         ph = []
         lab = [fr_t[min(i, len(fr_t) - 1)]["vis"] for i in range(n)]
@@ -704,7 +717,8 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     # a vocalisation span (track frames with `skip`): free by default; with the earlier --vocalisations rest a rest, with
     # --vocalisations mouth mouthed as words (the flags ignored)
     skip_kind = {"rest": "rest", "mouth": "ignore"}.get(str(getattr(a, "vocalisations", None)), "free")
-    segs, tc = segments(fr_t, n, fps, t0, align, lead_shift, rest_s, skip_kind)
+    segs, tc = segments(fr_t, n, fps, t0, align, lead_shift, rest_s, skip_kind, plan_phones(a, align))
+    contact = vars(a).get("warp_contact", False)
     for s in segs:
         if not s["frames"]:
             m = 0.5 * (s["a"] + s["b"])
@@ -767,8 +781,12 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     p5 = float(np.percentile(Ft_u[keep, 0], 5))
     caps, pp = {}, np.zeros(n, bool)
     tvis = [fr_t[min(i, len(fr_t) - 1)]["vis"] for i in range(n)]
+    held_open = contact_caps(a.warp_contact_iod) if contact else {}
     for s in segs:
-        if s["v"] in CLOSURES:
+        if s["v"] in held_open:
+            for k in core_frames(s, tc):
+                caps[k] = min(caps.get(k, np.inf), held_open[s["v"]])
+        elif s["v"] in CLOSURES:
             for k in core_frames(s, tc):
                 caps[k] = min(caps.get(k, np.inf), s["T"][0], p5)
                 pp[k] |= s["v"] == "PP"
@@ -777,7 +795,7 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
         j = i
         while j + 1 < n and tvis[j + 1] == tvis[i]:
             j += 1
-        if tvis[i] in CLOSURES:
+        if tvis[i] in CLOSURES and tvis[i] not in held_open:
             (ol, oh), _ = class_bands(tvis[i], bands, 0.0, a)
             c = min(to_band_soft(float(u[i : j + 1, 0].mean()), ol, oh, centre), p5)
             for k in range(i, j + 1):
@@ -834,6 +852,9 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
         x[k, 0] = min(x[k, 0], c)
     if ramp_k > 0 and caps:
         x[:, 1] = ramp_width(x[:, 1], caps, r_in, r_out)
+    if vars(a).get("coart_phones", False) or contact or vars(a).get("warp_round", 0.0):
+        marks = [dict(vis=s["v"], start=s["a"], end=s["b"]) for s in segs]
+        a.coart_events = dict(pl.event_frames(marks, tc, ("FF", "TH")), round=pl.rounding(marks, tc))
     rng_ratio = lambda X: [
         float(np.ptp(np.percentile(X[:, d], [5, 95])) / max(1e-6, np.ptp(np.percentile(Ft_u[keep, d], [5, 95])))) for d in range(2)
     ]
@@ -886,6 +907,33 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
 
 class _Args:
     pass
+
+
+def plan_phones(a, align):
+    """--coart-phones / --coart-function-gate: the plan's phones, the vocal's drive read off the --coart-dyn csv; None without either or without an alignment."""
+    reduce, gate = vars(a).get("coart_phones", False), vars(a).get("coart_function_gate", False)
+    if align is None or not (reduce or gate):
+        return None
+    return pl.phones(align, load_drive(vars(a).get("coart_dyn")), reduce, gate)
+
+
+def load_drive(path):
+    """(t, drive) of a sung_dyn csv; None when there is none."""
+    import csv
+
+    try:
+        with open(path) as fh:
+            R = list(csv.DictReader(fh))
+        t = np.array([float(r["time_s"]) for r in R])
+        return t + 0.5 * float(np.median(np.diff(t))), np.array([float(r["drive"]) for r in R])
+    except (TypeError, OSError, KeyError, ValueError):
+        return None
+
+
+def contact_caps(iod_rng):
+    """--warp-contact: {class: the opening its core frames are held to, take units}. iod_rng: (the eye distance, g_lo, g_hi) in canonical px."""
+    iod, lo, hi = iod_rng
+    return {v: (g * iod - lo) / max(1e-6, hi - lo) for v, g in CONTACT_OPEN.items()}
 
 
 def closure_ramp(caps, n, top, f_in, f_out):
@@ -1070,7 +1118,7 @@ def logged_classes(warp_json, n, fps=None):
     a log. The log counts the paint's frames, which a sing render has more of than it delivers: a frame reads its own time, however
     many frames the file kept."""
     log = _plan_log(warp_json)
-    segs = [x for x in (log.get("segments") or []) if x.get("frames")]
+    segs = [dict(x, v=pl.base_class(x["v"])) for x in (log.get("segments") or []) if x.get("frames")]
     if not segs:
         return None
     N = max(int(len(json.load(open(warp_json))["frames"])), 1)

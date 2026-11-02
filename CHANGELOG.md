@@ -2,10 +2,14 @@
 
 ## Unreleased
 
-- LSDub Align gains optional `lead_sheet` (default off) and `lead_overrides`: the song written out with what the singer on screen sings plain and backing stutters and answer lines in braces, timed, with a confidence and a reason, as `lead_sheet.txt` and `.json` beside the alignment and in `lyric_check`. What is passed over keeps the take's mouth, drives no alignment or retime and is not read by Verify; correct a call with `pass 10.04 11.93` or `lead 10.04 10.49`.
+- Stage keys: a stage before the dub carries the release plus the hash of the engine files it can reach, so a change to the paint keeps the take, the kit and the alignment; the dub and after carry the whole engine. A change a stage can reach re-runs it, and every folder keyed by the older scheme re-runs once.
+- `lead_sheet`: a span read only as outside the clip's pitch range is a proposal: it stays in the sheet and passes no word until a `pass` line says so. A number like `1.2.3` in `lead_overrides` stops with the usage line.
+- LSDub Verify's `vocal` takes no vowel length from the plan and reads `lost`, no number, on a shot where the free walk has run away, as it can past about 40 s of a long song. Verify reads the vocal once for the run, and clips under a window no longer stop it. The retime's silence follows a noise floor on a clip that has gaps.
+- `layers_shape`: carries its temporal smoothing and a 40 ms plan advance, so no `settings` are needed. Reduced vowels read smaller than full ones, diphthongs move through both their shapes, a function word loses opening only when it is quick, lips round on rounded sounds, and F, V and TH show their contact: lower lip on the upper teeth, tongue tip under them. p, b, m still shut. Other stacks are unchanged.
+- LSDub Align gains optional `lead_sheet` (default off, experimental) and `lead_overrides`: the song written out with what the singer on screen sings plain and backing stutters and answer lines in braces, timed, with a confidence and a reason, as `lead_sheet.txt` and `.json` beside the alignment and in `lyric_check`. What is passed over keeps the take's mouth, drives no alignment or retime and is not read by Verify; correct a call with `pass 10.04 11.93` or `lead 10.04 10.49`.
 - `layers_shape`: each closure takes its erase reference near it in face size and time. Two closures close together leave the vowel between them room to open.
 - LSDub Verify's `vocal` takes no time from the plan or the aligner, so a retimed plan is not marked against itself. `retime_to_vocal`: a vocal with silence before or after it no longer pins or stretches the words at its ends; nasals, glides and frame times read truer.
-- LSDub Align gains optional `retime_to_vocal` (default off): phone times read off the vocal itself, for held notes the aligner spreads across the line. The lyric stays as it is.
+- LSDub Align gains optional `retime_to_vocal` (default off, experimental): phone times read off the vocal itself, for held notes the aligner spreads across the line. The lyric stays as it is.
 - `layers_shape`: closures are reached at the take's own speed; no blue streak or pale notch on a thin opening; closed lips keep the take's upper-to-lower lip tone. LSDub Verify reports the plan's word times against the vocal, moving no band.
 - New mouth_stack option `layers_interior`, the inside of the mouth from the take; workflow 4 uses it. LSDub Mouth Tweaks gains optional `sync_phrases` (default off), each phrase landing by its vocal. Mouth Ruler gains `boil_all`.
 - `scripts/make_workflows.py` builds the committed example workflows byte for byte again; `--check` compares without writing, and thumbnails are left alone unless a picture is given.
@@ -21,7 +25,7 @@
 - The vendored `lsdub_engine/workflows/*.json` are gone; `graphs.py` is the single source of the generator graphs.
 - The lyric sheet's scat markup, `( ... )` and `[skip]`, now reaches the Dub: Align reads it, leaves it out of the speech-to-text prompt, and flags those words in `align.json`.
 - Workflow 4 uses `shot_seconds` 5.5, so the demo song takes 3 generated shots, not 4.
-- `lsdub_engine/` and `tests/engine/` are now build output, never edited here; `lsdub_engine/VERSION` carries a tree hash that CI checks.
+- `lsdub_engine/` and `tests/engine/` are now build output, never edited here; `lsdub_engine/VERSION` carries a tree hash that CI checks; stage keys use it only from the dub on (see Stage keys above).
   Presets move to `lsdub_engine/core/presets.py`, recipes arrive beside them.
 - One cache reset: every stage key moves once in this release, so the generator slots (LTX, Qwen) re-run too, along with analysis, kits and shots. Earlier folders stay on disk. It groups four changes: the engine version now includes the vendored tree hash, kits hash by bytes instead of modification time, the unused project field `vocalisations` is gone, and `mouth_stack` arrives. A `project.json` from 0.1.3 still loads.
 - LSDub Project gains `mouth_stack` (`plain`, `layers`). `layers` renders the full layer stack on any kit, in its own cache folders. The default, `plain`, keeps every kit's render as it was.

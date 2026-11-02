@@ -9,7 +9,9 @@
   layers_v16_1_interior  layers_v16_1 with the mouth interior filmed from the take (--warp-interior-source take, its pink cap
                     included); teeth fit stays off
   layers_v16_1_shape  layers_v16_1_interior with the plan's gap anchored at the top (--coart-gap-anchor top) and closures that shut
-                    (--warp-erase-close), and interior donors that stay open (--warp-interior-open-floor)
+                    (--warp-erase-close), interior donors that stay open (--warp-interior-open-floor), reduced vowels, diphthongs and the
+                    function-word gate (--coart-phones, --coart-function-gate), rounding (--warp-round), F / V / TH contact (--warp-contact), the
+                    temporal smoothing that keeps closures (--warp-temporal 1.5, spare, width 2) and the plan 40 ms ahead of the vocal
   layers_v16_1_min  the same minus the flags listed in `inert_under`. A candidate, nothing ships it
   morph             the `lsdub pipeline` path: `paint --mode morph` (the paint default), no warp flags
 
@@ -135,6 +137,7 @@ LAYERS_V16_1 = (
 
 
 LAYER_ONLY = (
+    "--warp-contact",
     "--warp-arch-",
     "--warp-reg",
     "--warp-cavity",
@@ -159,6 +162,7 @@ RULES = (
         lambda a: a.warp_target != "coart",
         prefix=True,
     ),
+    Rule(("--warp-round",), "read only with the coart planner's phones, no --warp-target coart here", lambda a: a.warp_target != "coart"),
     Rule(("--warp-sigma",), "read only by the plain targets, not under this --warp-target", lambda a: a.warp_target in ("coart", "own")),
     Rule(
         ("--warp-tongue",),
@@ -246,6 +250,18 @@ RECIPES = {
                 "--warp-interior-mend",
                 "--coart-closure-ramp",
                 "1.0",
+                "--coart-phones",
+                "--coart-function-gate",
+                "--warp-round",
+                "0.4",
+                "--warp-contact",
+                "--warp-temporal",
+                "1.5",
+                "--warp-temporal-spare",
+                "--warp-temporal-width",
+                "2",
+                "--coart-advance-ms",
+                "40",
             ),
             INERT,
             overrides_at=4,

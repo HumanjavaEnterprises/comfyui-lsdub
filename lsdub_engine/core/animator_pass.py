@@ -30,6 +30,7 @@ from ..io import ff
 import argparse, json
 import numpy as np
 
+from . import phone_plan
 from .viseme_track import VIS, envelope_open, phone_list
 
 VOWELS = {"AA", "AE", "AH", "AY", "AW", "EH", "EY", "IH", "IY", "AO", "OW", "OY", "UW", "UH", "ER"}
@@ -127,6 +128,21 @@ def song_hf_stats(audio):
     return float(np.log(e + 1e-9).mean()), float(np.log(e + 1e-9).std() + 1e-6)
 
 
+def word_gain(p, ph, env, t0, fps):
+    """--function-gate: what p's word keeps, read off its longest vowel and the vocal's level on the word."""
+    vs = [q for q in ph if q["wi"] == p["wi"] and strip_stress(q["p"]) in VOWELS]
+    held = max((q["end"] - q["start"] for q in vs), default=0.0)
+    a, b = [
+        int(np.clip((t - t0) * fps, 0, len(env) - 1))
+        for t in (min((q["start"] for q in vs), default=p["start"]), max((q["end"] for q in vs), default=p["end"]))
+    ]
+    return phone_plan.function_gain(p["word"], held, float(env[a : b + 1].max()))
+
+
+def strip_stress(p):
+    return "".join(c for c in p if not c.isdigit())
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="lsdub animate")
     ap.add_argument("--align", required=True)
@@ -140,6 +156,11 @@ def main(argv=None):
     ap.add_argument("--open-max", type=float)
     ap.add_argument("--apex-lead", type=float, default=0.04, help="s; every apex this much before phone onset (picture leads sound)")
     ap.add_argument("--json-report")
+    ap.add_argument(
+        "--function-gate",
+        action="store_true",
+        help="a function word loses articulation by its sung length and level (phone_plan.function_gain), not always by half",
+    )
     a = ap.parse_args(argv)
     fps, n, t0 = a.fps, a.frames, a.t0
     G = a.gain if a.gain is not None else GAIN[a.shot]
@@ -163,6 +184,7 @@ def main(argv=None):
     words = {}
     for p in ph:
         words.setdefault((p["word"], round(p.get("wstart", 0), 3)), []).append(p)
+    env = envelope_open(a.audio, t0, n, fps) if a.function_gate else None
     for i, p in enumerate(ph):
         arpa = "".join(c for c in p["p"] if not c.isdigit())
         dur = p["end"] - p["start"]
@@ -178,7 +200,10 @@ def main(argv=None):
         if p["vis"] in ("oh", "ou") or arpa == "W":
             p["cls"] = "round" if p["cls"] != "closer" else "closer"
             p["alpha"] = max(p["alpha"], 0.9)
-        if p["word"].lower().strip(".,!?'") in FUNCTION:
+        if a.function_gate:
+            if p["cls"] != "closer":
+                p["alpha"] *= word_gain(p, ph, env, t0, fps)
+        elif p["word"].lower().strip(".,!?'") in FUNCTION:
             p["alpha"] = max(0.8, p["alpha"] * 0.5) if p["cls"] == "closer" else p["alpha"] * 0.5
         p["sustain"] = p["cls"] in ("vowel", "round") and dur > 0.20
         if p["cls"] not in ("vowel", "round"):  # rule 7: consonant strength from 8-20 kHz energy

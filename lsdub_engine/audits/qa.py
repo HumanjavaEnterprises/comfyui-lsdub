@@ -355,13 +355,9 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
     cap.release()
     act, env = vad(vocal, n, fps, offset)
     words = json.load(open(align))["words"] if align else []
-    vocal_words = None
+    vocal_words = heard = None
     if align:
-        from ..core.vocal_retime import retime
-
-        vocal_words = retime(json.load(open(align)), vocal, free=True)[
-            "words"
-        ]  # the lyric alone over the vocal: no time of the plan's goes in
+        vocal_words, heard = vocal_walk(json.load(open(align)), vocal)
     faces = C.Faces()
     emb = (emb or C.Embedder(model or C.MODEL)) if before else None
     rows = []
@@ -370,7 +366,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
             continue
         r = {k: s.get(k) for k in ("shot", "f0", "f1", "start", "end", "verdict", "target", "px1080")}
         r.update(measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q, SN))
-        r.update(vocal_reading(words, vocal_words, s, offset, vocal))
+        r.update(vocal_reading(words, vocal_words, s, offset, heard))
         if before:
             b = measure_shot(before, s, fps, offset, vocal, act, align, words, faces, os.path.join(work, "before"), Q, SN)
             r["before"] = {k: b.get(k) for k in ("corr", "mouth_range", "open_in_silence", "mouth_visible")}
@@ -414,17 +410,26 @@ def shape_readings(shape, warp_json, words, t0, fps, SN):
     return out
 
 
+def vocal_walk(align, vocal):
+    """the lyric alone over the vocal, no time of the plan's going in, and the vocal's samples and features for the run: -> (words, (samples, features))."""
+    from ..core.vocal_retime import features, read_mono, retime
+
+    x = read_mono(vocal)
+    return retime(align, vocal, x=x, free=True)["words"], (x, features(x))
+
+
 def vocal_reading(words, vocal_words, s, offset, vocal=None):
-    """the plan's word times against the vocal itself on this shot: reported, moving no band. The plan's own words, as the dub moved them."""
+    """the plan's word times against the vocal itself on this shot: reported, moving no band. The plan's own words, as the dub moved them.
+    vocal: the vocal's (samples, features), once for the whole run."""
     if not vocal_words or not s.get("warp_json"):
         return {}
     from ..core.coart import logged_words
-    from ..core.vocal_retime import plan_hits, read_mono, word_offsets
+    from ..core.vocal_retime import plan_hits, word_offsets
 
     done = logged_words(words, s["warp_json"])
     a, b = s["start"] - offset, s["end"] - offset
     return (
-        dict(word_offsets(done, vocal_words, a, b), **plan_hits(done, read_mono(vocal), a, b))
+        dict(word_offsets(done, vocal_words, a, b), **plan_hits(done, vocal[0], a, b, vocal[1]))
         if vocal
         else word_offsets(done, vocal_words, a, b)
     )
@@ -671,6 +676,7 @@ def write_verify(meta, rows, out):
         "closure_real_n",
         "closure_corner",
         "height_contrast",
+        "vocal_lost",
         "vocal_off_ms",
         "vocal_off_n",
         "vocal_words",
@@ -693,9 +699,9 @@ def write_verify(meta, rows, out):
         "`shape` is reported and moves no band: height contrast (1 = the delivered heights follow the card's, 0 = every class the same "
         "height), then p / b / m phones with the lips really shut (gap under a share of the eye distance), then the width travel, then "
         "the darkest reading at the lips' corners on closures (no calibrated threshold: compare to the take's).",
-        "`vocal` is reported and moves no band, and takes no time from the plan or the aligner, so a retimed plan is not marked against itself: "
-        "the lyric alone walked over the vocal, with the plan's word starts against that walk (median offset in ms, words past 100 ms of those in "
-        "the shot, the worst word; a free walk, so a word it loses reads as off), then the plan's phones read directly on the vocal's frames: "
+        "`vocal` is reported and moves no band, and takes no time or length from the plan or the aligner, so a retimed plan is not marked against itself; "
+        "a lead sheet's passed spans stay closed to it: the lyric alone walked over the vocal, with the plan's word starts against that walk (median offset in ms, words past 100 ms of those in "
+        "the shot, the worst word; a free walk, so a word it loses reads as off, and `lost` when a shot's words sit more than 0.6 s off, where the walk has run away on a long song: no reading), then the plan's phones read directly on the vocal's frames: "
         "hiss on hiss, closures on a dip or nasal, vowels on open sound, 0..1. Passed-over words (a lead sheet) are not read.",
         "",
         "| shot | t (s) | band | score | Δ vs before | class | sync corr | audio | shape | vocal | travel | silence | mouth | identity | reason |",
@@ -721,9 +727,11 @@ def write_verify(meta, rows, out):
 
 
 def _vocal_cell(r):
+    hits = " ".join(f"{k} {r[f'vocal_{k}']:.2f}" for k in ("hiss", "shut", "open") if r.get(f"vocal_{k}") is not None)
+    if r.get("vocal_lost"):
+        return f"lost; {hits}" if hits else "lost"
     if r.get("vocal_off_ms") is None:
         return ""
-    hits = " ".join(f"{k} {r[f'vocal_{k}']:.2f}" for k in ("hiss", "shut", "open") if r.get(f"vocal_{k}") is not None)
     return f"{r['vocal_off_ms']} ms, {r['vocal_off_n']}/{r['vocal_words']}, {r['vocal_worst']}" + (f"; {hits}" if hits else "")
 
 

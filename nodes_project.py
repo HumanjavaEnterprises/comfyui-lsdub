@@ -50,7 +50,7 @@ class LSDubProjectNode(io.ComfyNode):
                                tooltip='The mouth recipe: plain = the simple warp; layers = the full layer stack (teeth, '
                                        'tongue, cavity) on any kit; layers_interior = layers with the inside of the mouth taken '
                                        'from the video\'s own frames; layers_shape = layers_interior with mouth heights that follow the '
-                                       'sounds and closures that shut. It changes the render; shots keep their own cache folders.'),
+                                       'sounds, closures that shut, and F, V and TH with their teeth and tongue contact. It changes the render; shots keep their own cache folders.'),
             ],
             outputs=[T.LSDubProject.Output(display_name='project', tooltip='The project: pass it to every LSDub node.')],
         )

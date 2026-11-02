@@ -128,3 +128,43 @@ def test_the_dub_keeps_the_whole_engine(pack):
     K = pack.project.stage_key
     assert K('LSDubDub/shot', {}, []) == K('LSDubDub/shot', {}, [], engine_version=pack.project.ENGINE_VERSION)
     assert K('LSDubDub/shot', {}, []) != K('LSDubDub/shot', {}, [], engine_version='other')
+
+
+def tree(tmp_path, **files):
+    (tmp_path / 'core').mkdir()
+    (tmp_path / 'core' / '__init__.py').write_text('')
+    (tmp_path / 'core' / 'steps.py').write_text('STEPS = {}\n')
+    for n, s in files.items():
+        (tmp_path / 'core' / f'{n}.py').write_text(s)
+    return str(tmp_path)
+
+
+def test_a_modules_top_level_is_followed(pack, tmp_path):
+    root = tree(tmp_path, a='from . import b\nV = b.K\ndef f():\n    pass\n', b='from . import c\nK = c.Z\n', c='Z = 1\n')
+    assert {'core.a', 'core.b', 'core.c'} <= pack.engine_keys.reached(['core.a:f'], root)[0]
+
+
+def test_a_module_attribute_is_followed_to_that_function_only_and_its_module(pack, tmp_path):
+    root = tree(tmp_path, a='from . import b\ndef f():\n    return b.g()\n', b='from . import c, d\ndef g():\n    return c.h()\ndef other():\n    return d.h()\n', c='def h():\n    pass\n', d='def h():\n    pass\n')
+    mods, _ = pack.engine_keys.reached(['core.a:f'], root)
+    assert 'core.c' in mods and 'core.d' not in mods
+
+
+def test_a_name_imported_into_a_module_is_followed_from_there(pack, tmp_path):
+    root = tree(tmp_path, a='from .b import g\ndef f():\n    return g\n', b='from .c import g\n', c='def g():\n    pass\n')
+    assert 'core.c' in pack.engine_keys.reached(['core.a:f'], root)[0]
+
+
+def test_the_cache_keeps_roots_apart(pack, tmp_path):
+    (tmp_path / 'x').mkdir()
+    (tmp_path / 'y').mkdir()
+    a, b = [tree(tmp_path / d, m=f'V = {k}\ndef f():\n    return V\n') for d, k in (('x', 1), ('y', 2))]
+    pack.engine_keys._cache.clear()
+    old = dict(pack.engine_keys.STAGES)
+    try:
+        pack.engine_keys.STAGES['T'] = ('core.m:f',)
+        assert pack.engine_keys.part('T', '1', a) != pack.engine_keys.part('T', '1', b)
+    finally:
+        pack.engine_keys.STAGES.clear()
+        pack.engine_keys.STAGES.update(old)
+        pack.engine_keys._cache.clear()

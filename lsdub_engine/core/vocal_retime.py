@@ -32,7 +32,12 @@ LO_HZ, MID_HZ, TOP_HZ = 500.0, 700.0, 2400.0
 BAND = 1.5  # s: a phone is charged for going further than this from where the aligner put it
 OUTSIDE = 0.6  # score per frame out there. A charge and not a wall: no alignment, however wrong, leaves the walk with no path
 ZERO_DB = -45.0  # under the clip's p95: silence
+FLOOR_DB, HAS_GAPS_DB = (
+    6.0,
+    -30.0,
+)  # a noisy clip's silence: this far over its quietest twentieth, when that sits this far under its p95 (a clip with no gaps has no floor to read)
 PASS = "pass-over"  # a word the lead sheet passed: the walk leaves it where it is
+LOST_S = 0.6  # a shot whose words sit this far off, median: a free walk that has run away on a long song, or a plan that lost it. Not a number to report
 OFF_S = 0.1  # a word this far from the vocal counts as off
 HOME = (
     1.5  # score of a phone starting where the aligner started it, once, however long it then stays: what the vocal says nothing about stays
@@ -81,8 +86,16 @@ def nearby(a, k, q):
     return np.array([np.percentile(a[max(0, i - k) : i + k + 1], q) for i in range(len(a))])
 
 
+def zero_db(db):
+    """what reads as silence, in db under the clip's p95: ZERO_DB, or just over a noise floor that sits above it."""
+    q = float(np.percentile(db, 5))
+    return max(ZERO_DB, q + FLOOR_DB) if q < HAS_GAPS_DB else ZERO_DB
+
+
 def features(x):
-    """dict of per-frame readings at HOP: voiced, hiss, quiet, under, nasal, silent (0..1), and db under the clip's p95."""
+    """dict of per-frame readings at HOP: voiced, hiss, quiet, under, nasal, silent (0..1), and db under the clip's p95. A clip shorter than a
+    window reads as one window."""
+    x = np.pad(np.asarray(x, float), (0, max(0, int(WIN * SR) + 2 * int(HOP * SR) - len(x))))
     v = voicing(x)
     n = len(v)
     N, H = int(WIN * SR), int(HOP * SR)
@@ -95,7 +108,7 @@ def features(x):
     db -= np.percentile(db, 95)
     hf = P[f >= HF_HZ].sum(0) / total
     sm = lambda a, lo, hi: np.clip((a - lo) / (hi - lo), 0.0, 1.0)
-    silent = sm(ZERO_DB - db, -3.0, 6.0)
+    silent = sm(zero_db(db) - db, -3.0, 6.0)
     voiced = sm(v, 0.35, 0.7) * (1 - silent)
     hiss = np.maximum(sm(hf, 0.02, 0.15), 1 - sm(v, 0.3, 0.6)) * (1 - silent)
     quiet = sm(nearby(db, max(1, int(round(LOCAL / HOP))), 100) - db, 4.0, 14.0)
@@ -121,13 +134,14 @@ def emissions(fx):
     )
 
 
-def sequence(words):
-    """the state chain: (word index, phone index or -1 for the gap, class, shortest stay in frames), gap states between the words."""
+def sequence(words, free=False):
+    """the state chain: (word index, phone index or -1 for the gap, class, shortest stay in frames), gap states between the words. free: no
+    length of the alignment's: a vowel's shortest stay is its class's."""
     out = []
     for wi, w in enumerate(words):
         for pi, p in enumerate(w.get("phones") or ()):
             c = phone_class(p["p"])
-            least = max(MIN_S[c], SHARE * (float(p["end"]) - float(p["start"]))) if c == "V" else MIN_S[c]
+            least = max(MIN_S[c], SHARE * (float(p["end"]) - float(p["start"]))) if c == "V" and not free else MIN_S[c]
             out.append((wi, pi, c, max(1, int(round(least / HOP))), float(p["start"]), float(p["end"])))
         if wi + 1 < len(words):
             out.append((wi, -1, "Q", 1, float(w["end"]), float(words[wi + 1]["start"])))
@@ -215,7 +229,7 @@ def retime(align, audio, x=None, free=False):
     W = [w for w in align["words"] if w.get("phones") and w.get("vocal") != PASS]
     if not W or n < 10:
         return dict(align)
-    seq = sequence(W)
+    seq = sequence(W, free)
     closed = None
     if align.get("pass_over"):
         tt = np.arange(n) * HOP + WIN / 2
@@ -256,10 +270,10 @@ def retime(align, audio, x=None, free=False):
     return out
 
 
-def plan_hits(words, x, t0, t1):
+def plan_hits(words, x, t0, t1, fx=None):
     """the plan read against the vocal's own frames, no walk and no alignment: of its phones starting in t0..t1 the share of hiss time on hiss, of closures with
-    a dip or a nasal in them, of vowel time on open voiced sound. {} with none. A reading, it moves nothing."""
-    fx = features(x)
+    a dip or a nasal in them, of vowel time on open voiced sound. {} with none. A reading, it moves nothing. fx: features(x), when the caller has them."""
+    fx = features(x) if fx is None else fx
     n = len(fx["db"])
     tt = np.arange(n) * HOP + WIN / 2
     hit = dict(H=fx["hiss"] * (1 - fx["voiced"]), N=np.maximum(fx["quiet"], fx["nasal"]), V=fx["voiced"] * (1 - fx["quiet"]))
@@ -285,6 +299,8 @@ def word_offsets(words, vocal_words, t0, t1, far=OFF_S):
     if not pairs:
         return {}
     d = np.array([float(a["start"]) - float(b["start"]) for a, b in pairs])
+    if np.median(np.abs(d)) > LOST_S:
+        return dict(vocal_lost=True)
     k = int(np.argmax(np.abs(d)))
     return dict(
         vocal_off_ms=int(round(1000 * float(np.median(np.abs(d))))),

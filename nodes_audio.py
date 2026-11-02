@@ -155,10 +155,10 @@ class LSDubAlign(io.ComfyNode):
                 io.String.Input('transcript_json', default='', optional=True,
                                 tooltip='Optional: a saved speech-to-text JSON for this vocal (skips that step).'),
                 io.Boolean.Input('retime_to_vocal', default=False, optional=True,
-                                 tooltip='Read the phone times off the vocal itself after aligning: for held sung notes the aligner '
+                                 tooltip='Experimental. Read the phone times off the vocal itself after aligning: for held sung notes the aligner '
                                          'spreads across the line. The lyric stays as it is; only times move.'),
                 io.Boolean.Input('lead_sheet', default=False, optional=True,
-                                 tooltip='Read which sung words the singer on screen sings and write the song as a sheet with the rest in '
+                                 tooltip='Experimental. Read which sung words the singer on screen sings and write the song as a sheet with the rest in '
                                          'braces (backing stutters, answer lines): lead_sheet.txt and .json beside the alignment, and in '
                                          'lyric_check. What is passed over keeps the take\'s mouth, drives no alignment or retime and is not '
                                          'read by Verify.'),
