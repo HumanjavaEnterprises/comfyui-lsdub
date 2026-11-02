@@ -4,7 +4,8 @@
 
 Every stage writes into <root>/<name>/<stage>/<key>/ and marks it finished with a done.json. The key is a hash of the
 node id, the engine version, the node's canonical inputs and the hashes of what came from upstream, so a re-run with
-the same inputs finds its folder and skips the work, and a changed input writes a NEW key folder. Nothing is deleted.
+the same inputs finds its folder and skips the work, and a changed input writes a NEW key folder. The stages before the dub
+carry only the engine files they can reach (engine_keys.py), so a change to the paint keeps the take, the kit and the alignment. Nothing is deleted.
 Per-shot stages keep one folder per shot (shots/shot_###/<key>/) and skip shots whose done.json says pass=true;
 force_shots ("21,23") re-opens just those (their done.json is set aside as done.<n>.json, the renders stay).
 
@@ -16,6 +17,7 @@ import os
 import time
 from dataclasses import asdict, dataclass, field, fields
 
+from .engine_keys import STAGES as _STAGES, part as _engine_part
 from .lsdub_engine import __version__
 
 
@@ -61,8 +63,12 @@ def file_hash(path, chunk=1 << 20):
     return h.hexdigest()
 
 
-def stage_key(node_id, inputs=None, upstream=(), engine_version=ENGINE_VERSION):
-    """key = sha1(node_id, engine_version, canonical inputs, upstream hashes), 16 hex chars."""
+def stage_key(node_id, inputs=None, upstream=(), engine_version=None):
+    """key = sha1(node_id, engine_version, canonical inputs, upstream hashes), 16 hex chars. A stage before the dub carries the part of the
+    engine it can reach (engine_keys), the rest the whole engine's version."""
+    if engine_version is None:
+        stage = node_id.split('/')[0]
+        engine_version = _engine_part(stage, __version__) if stage in _STAGES else ENGINE_VERSION
     blob = canonical({'node': node_id, 'engine': engine_version, 'inputs': inputs or {}, 'upstream': list(upstream)})
     return hashlib.sha1(blob.encode('utf-8')).hexdigest()[:16]
 
