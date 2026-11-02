@@ -115,6 +115,7 @@ smootherstep = tl.smootherstep
 # ones drop and retract it
 TIP_W = 0.085  # --warp-contact: the tongue tip's half width, eye distances
 TIP_RED = (72.0, 78.0, 150.0)  # ... and the red it leans to, BGR: a tip in shadow, not the pale take colour of a lit tongue
+DENTAL_FOLD = 0.7  # ... how far the slit past the arch and the lips' inner rim go to lip colour there
 TEETH_LIFT = 1.7  # ... the most the arch is lifted there
 TEETH_SOFT = 0.006  # ... a thin strip of arch at a dental frame reads as a comb of tooth seams: softened by this, x IOD
 TONGUE_VOWEL = {
@@ -2531,7 +2532,7 @@ class LayerCompositor:
         for f, s in zip(frames[::4], S[::4]):
             q = np.asarray(s)[LIP_IN, :2]
             x0, y0 = np.maximum(np.floor(q.min(0)).astype(int), 0)
-            x1, y1 = np.ceil(q.max(0)).astype(int)
+            x1, y1 = np.minimum(np.ceil(q.max(0)).astype(int), [f.shape[1], f.shape[0]])
             if x1 - x0 < 4 or y1 - y0 < 4:
                 continue
             lab = cv2.cvtColor(f[y0:y1, x0:x1], cv2.COLOR_BGR2LAB).astype(np.float32)
@@ -2704,6 +2705,13 @@ class LayerCompositor:
         dental = 0.0 if ct is None else float(max(ct["FF"][i], ct["TH"][i]))
         if ct is not None and ct["FF"][i] > 0.02:
             L["L4"] = (cv2.GaussianBlur(L["L4"][0], (0, 0), TEETH_SOFT * io), cv2.GaussianBlur(L["L4"][1], (0, 0), TEETH_SOFT * io))
+        if (
+            ct is not None and ct["FF"][i] > 0.02 and rims is not None and rims.get("lo") is not None
+        ):  # past the arch the slit is the lips' own fold, not a dark wire
+            L["L2"] = (
+                L["L2"][0] * (1 - DENTAL_FOLD * ct["FF"][i]) + np.asarray(rims["lo"], np.float32) * DENTAL_FOLD * ct["FF"][i],
+                L["L2"][1],
+            )
         if dental > 0.02:  # the strip sits in the arch's shade: at these frames it is the picture, and takes the take's teeth's light
             L["L4"] = (self.lit_teeth(L["L4"][0], L["L4"][1], Q, dental, h, w), L["L4"][1])
         if (
@@ -2797,7 +2805,7 @@ class LayerCompositor:
 
                 rgb5, _ = corner_guard(rgb5, outer, opening, io, lipc)
         rim = np.exp(-dout / max(0.8, self.rim[1] * io)) * outer
-        rgb5 = rgb5 * (1 - self.rim[0] * rim)[..., None]
+        rgb5 = rgb5 * (1 - self.rim[0] * (1 - DENTAL_FOLD * dental) * rim)[..., None]
         if self.wet > 0:  # the lip's wet inner edge -- a faint 1-2 px lift where it turns over the teeth, only on
             wl = np.exp(-(((dout - 1.3) / 0.9) ** 2)) * outer  # lip pixels and scaled by their own light
             if lp is not None:

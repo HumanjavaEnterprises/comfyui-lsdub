@@ -219,7 +219,7 @@ def fragments(q, echo):
 def proposes(q):
     """a span heard only as outside the clip's pitch range, and not re-heard as a repeat: a proposal. One voice singing high fires it, and real singing must
     not keep the take's mouth on that alone."""
-    return set(q["kinds"]) == {"register"} and not (q.get("relisten") and repeated(q["relisten"]))
+    return set(q.get("kinds", ())) == {"register"} and not (q.get("relisten") and repeated(q["relisten"]))
 
 
 def confidence(q, relisten=None):
@@ -265,7 +265,10 @@ def read_sheet(align, x, lyrics=None, overrides="", relisten=None):
         elif share >= 0.5:
             q = max(spans, key=lambda q: min(e, q["t1"]) - max(s, q["t0"]))
             room = (s < q["t0"] - 0.08) or (i + 1 < len(W) and float(W[i + 1]["start"]) - q["t1"] >= 0.15)
-            if (
+            if proposes(q):  # pitch alone only proposes, and a proposal moves nothing: it fires on one voice singing high
+                cf, why = confidence(q, None)
+                c.update(conf=round(min(cf, LOW - 0.01), 2), reason=f"proposed, not passed: {why}; `pass {q['t0']} {q['t1']}` passes it")
+            elif (
                 sung and room
             ):  # on the sheet and heard as written: the lyric is sung, the run covers its old times. What is left of the line holds it
                 c.update(
@@ -273,9 +276,6 @@ def read_sheet(align, x, lyrics=None, overrides="", relisten=None):
                     reason=f"on the sheet and heard so, moved out of the run at {q['t0']:.2f}-{q['t1']:.2f}",
                     move=[q["t0"], q["t1"]],
                 )
-            elif proposes(q):  # pitch alone only proposes: it fires on one voice singing high
-                cf, why = confidence(q, None)
-                c.update(conf=round(min(cf, LOW - 0.01), 2), reason=f"proposed, not passed: {why}; `pass {q['t0']} {q['t1']}` passes it")
             else:
                 cf, why = confidence(q, q.get("relisten"))
                 c.update(
@@ -298,7 +298,7 @@ def as_text(S):
     items = [(c["t0"], "w", c) for c in S["words"]] + [(q["t0"], "s", q) for q in S["spans"]]
     items.sort(key=lambda it: (it[0], it[1] == "w"))
     L, cur, line = [], [], None
-    notes = []
+    notes, proposed = [], []
     for _, kind, it in items:
         if kind == "w":
             if it["call"] == "PASS":
@@ -310,6 +310,11 @@ def as_text(S):
             cur.append(it["w"] + ("?" if it["conf"] < LOW else ""))
         else:
             pw = [c["w"] for c in S["words"] if c["call"] == "PASS" and it["t0"] - 0.05 <= c["t0"] and c["t1"] <= it["t1"] + 0.25]
+            if proposes(it):  # nothing is passed: the words stand in the line, the proposal is a note
+                proposed.append(
+                    f"{it['t0']:.2f}-{it['t1']:.2f} s  ? proposed, not passed: {it['reason']}; `pass {it['t0']} {it['t1']}` passes it"
+                )
+                continue
             cur.append("{" + ("? " if it["conf"] < LOW else "") + " ".join(f["w"] for f in it["fragments"]) + "}")
             notes.append(
                 f"{it['t0']:.2f}-{it['t1']:.2f} s  passed over, confidence {it['conf']:.2f}: {it['reason']}"
@@ -323,6 +328,8 @@ def as_text(S):
         + ["", "# what is passed over: its mouth stays the take's, it drives nothing and Verify does not read it"]
         + [f"# {n}" for n in notes]
     )
+    if proposed:
+        out += ["# proposals: no word moved and the plan still drives these"] + [f"# {n}" for n in proposed]
     if low:
         out += ["# low confidence, read these: `word?` above"] + [f"# {n}" for n in low]
     out += ["# correct with `pass 10.04 11.93` / `lead 10.04 10.49`, one per line, in the overrides"]
@@ -345,7 +352,7 @@ def honour(align, S):
             q = next((q for q in S["spans"] if q["t0"] < c["t1"] and q["t1"] > c["t0"]), None)
             a, b = (max(c["t0"], q["t0"]), min(c["t1"], q["t1"])) if q else (c["t0"], c["t1"])
             w.update(start=a, end=b, vocal=PASS, phones=[dict(p="SIL", start=a, end=b)])
-        elif c.get("move"):
+        elif c.get("move") and any([q["t0"], q["t1"]] == list(c["move"]) for q in kept):
             a, b = c["move"]
             s, e = float(w["start"]), float(w["end"])
             to = max(b, s) if e > b else None

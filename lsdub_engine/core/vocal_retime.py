@@ -55,6 +55,7 @@ SHARE = 0.35  # a vowel keeps at least this share of the length the aligner gave
 CLOSED = 50.0  # score per frame of a phone in time the lead sheet passed over
 EARN = 3.0  # a hiss has to beat this to be placed: sung lines drop them and an alignment can have the wrong word, and a blip earns no phone
 CUT = 1.0  # score per phone left unsung when the walk stops early: the vocal ended on the lyric, with silence or the clip's end after it
+UNSUNG = 12.0  # ... and per phone the alignment has inside the audio: a word the aligner heard is not dropped past the end to feed the vowels before it
 
 
 def phone_class(p):
@@ -175,7 +176,10 @@ def walk(seq, em, t0=0.0, band=BAND, closed=None, home=None):
     over_cost = np.where(
         gap[:-1], 0.0, np.where(np.array([s[2] == "H" for s in seq[:-1]]), EARN, -np.inf)
     )  # entry i - 1 stepped over to reach i
-    quit_ = -CUT * (len(seq) - 2 - np.arange(len(seq) - 1))
+    sung = np.array([s[2] not in "QO" for s in seq])  # phones
+    inside = np.isfinite(a) & (a > -1e5) & (a < tt[-1])  # (a free walk's phones have no time of their own to read)
+    left = np.cumsum((sung & inside)[::-1])[::-1]  # from each entry on, the phones the alignment has inside the audio
+    quit_ = -CUT * (len(seq) - 2 - np.arange(len(seq) - 1)) - UNSUNG * left[1:]
     D = np.full(S, -np.inf)
     D[0] = E[0, 0]
     D[base[1]] = E[0, 1] + near[0, 0]
@@ -207,7 +211,9 @@ def walk(seq, em, t0=0.0, band=BAND, closed=None, home=None):
         if stop[j] > N_[base[-1]]:
             N_[base[-1]], bk[base[-1]] = stop[j], last[j]
         D, back[t] = N_ + E[t, owner], bk
-    k = int(np.argmax(D))
+    k = int(
+        np.argmax(D - UNSUNG * np.r_[left[1:], 0][owner])
+    )  # the last frame is a stop too: what the alignment heard is not left past it for free
     path = np.zeros(n, int)
     for t in range(n - 1, -1, -1):
         path[t] = owner[k]

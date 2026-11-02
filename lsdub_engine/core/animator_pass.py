@@ -200,9 +200,8 @@ def main(argv=None):
         if p["vis"] in ("oh", "ou") or arpa == "W":
             p["cls"] = "round" if p["cls"] != "closer" else "closer"
             p["alpha"] = max(p["alpha"], 0.9)
-        if a.function_gate:
-            if p["cls"] != "closer":
-                p["alpha"] *= word_gain(p, ph, env, t0, fps)
+        if a.function_gate:  # (a closer goes back to full below)
+            p["alpha"] *= word_gain(p, ph, env, t0, fps)
         elif p["word"].lower().strip(".,!?'") in FUNCTION:
             p["alpha"] = max(0.8, p["alpha"] * 0.5) if p["cls"] == "closer" else p["alpha"] * 0.5
         p["sustain"] = p["cls"] in ("vowel", "round") and dur > 0.20

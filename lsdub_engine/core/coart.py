@@ -1113,6 +1113,11 @@ def frames_per_delivered(log, N, n, fps=None):
     return float(max(1, round(N / max(n, 1))))
 
 
+def logged_dyn_flags(warp_json):
+    """the sung_dyn flags the paint behind warp_json read its curve with, from the plan log: Verify reads the same curve."""
+    return list(_plan_log(warp_json).get("dyn_flags") or ())
+
+
 def logged_classes(warp_json, n, fps=None):
     """the plan's viseme class on each of n delivered frames, from the plan log beside --warp-json ("" outside a segment); None without
     a log. The log counts the paint's frames, which a sing render has more of than it delivers: a frame reads its own time, however
@@ -1234,6 +1239,7 @@ def plan_clip(a, fr_t, Fs, model, bands, pp_track=None, F=None, S3raw=None, sync
         plan_fps=fps,
         jaw_share=s,
         jaw_share_take=s_take,
+        dyn_flags=[f for k, f in (("coart_phones", "--phone-plan"), ("coart_function_gate", "--function-gate")) if vars(a).get(k)],
         dyn_source=getattr(a, "coart_dyn", None),
         Ft=np.round(Ft, 3).tolist(),
     )

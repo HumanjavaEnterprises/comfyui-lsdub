@@ -387,7 +387,9 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
         s = next(x for x in J["shots"] if x.get("shot") == r["shot"])
         if s.get("used") == "source":  # after the scoring: a shot left as source still counts in the film's medians
             r.update(band="N/A", score=None, delta=None, reason=f"left as source: {s.get('left_reason') or 'no render used'}")
-    return {"video": video, "shots_json": shots_json, "before": before, "bands": {"PASS": PASS_BAND, "REVIEW": REVIEW_BAND}}, rows
+    meta = {"video": video, "shots_json": shots_json, "before": before, "bands": {"PASS": PASS_BAND, "REVIEW": REVIEW_BAND}}
+    meta["closures_lost"] = SN.lost_closures(words, n / fps - offset)
+    return meta, rows
 
 
 def shape_readings(shape, warp_json, words, t0, fps, SN):
@@ -436,7 +438,7 @@ def vocal_reading(words, vocal_words, s, offset, vocal=None):
 
 
 def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q, SN):
-    from ..core.coart import logged_offsets, logged_words
+    from ..core.coart import logged_dyn_flags, logged_offsets, logged_words
 
     os.makedirs(work, exist_ok=True)
     F = Q.read_span(video, s["f0"], s["f1"] + 1)
@@ -466,6 +468,7 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
                         f"{len(F) / fps + 0.5:.3f}",
                         "--out",
                         dyn,
+                        *logged_dyn_flags(s.get("warp_json")),
                     ],
                     quiet=True,
                 )
@@ -714,6 +717,12 @@ def write_verify(meta, rows, out):
             f"{_audio_cell(r)} | {_shape_cell(r)} | {_vocal_cell(r)} | {r.get('mouth_range', '')} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
             f"{r['mouth_visible']:.0%} | {'' if r.get('identity_cos') is None else r['identity_cos']} | {r['reason']} |"
         )
+    if meta.get("closures_lost"):
+        L += [
+            "",
+            "**Closures the mouth cannot show** (past the clip's end, or left no time by a retime): "
+            + ", ".join(f"{w} {p} at {t:.2f} s" for w, p, t in meta["closures_lost"]),
+        ]
     open(out + ".md", "w").write("\n".join(L) + "\n")
     sheet(
         meta["video"],

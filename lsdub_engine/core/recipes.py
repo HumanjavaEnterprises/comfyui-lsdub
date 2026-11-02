@@ -162,7 +162,11 @@ RULES = (
         lambda a: a.warp_target != "coart",
         prefix=True,
     ),
-    Rule(("--warp-round",), "read only with the coart planner's phones, no --warp-target coart here", lambda a: a.warp_target != "coart"),
+    Rule(
+        ("--warp-round", "--warp-contact"),
+        "read only with the coart planner's phones, no --warp-target coart here",
+        lambda a: a.warp_target != "coart",
+    ),
     Rule(("--warp-sigma",), "read only by the plain targets, not under this --warp-target", lambda a: a.warp_target in ("coart", "own")),
     Rule(
         ("--warp-tongue",),

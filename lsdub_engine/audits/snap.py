@@ -85,6 +85,19 @@ def closures(words, t0, n, fps=25.0):
     return out
 
 
+def lost_closures(words, end):
+    """p / b / m phones the mouth can never show: of a word that begins (as the aligner had it) inside a clip ending at `end` s, past that end, or left no time by a
+    retime. A later line of a longer song is no business of this clip's. -> [(word, phone, start s)]."""
+    return [
+        (w["w"], p["p"].upper().rstrip("012"), round(float(p["start"]), 3))
+        for w in words
+        for p in w.get("phones", [])
+        if float(w.get("start0", w["start"])) < end
+        and p["p"].upper().rstrip("012") in CLOSERS
+        and (float(p["start"]) >= end or float(p["end"]) <= float(p["start"]))
+    ]
+
+
 def closure_hit(op, frames, frac=CLOSE_FRAC):
     x = norm(op)
     hits = [bool(np.min(x[max(0, f - 1) : f + 2]) <= frac) for f in frames]

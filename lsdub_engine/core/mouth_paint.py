@@ -931,12 +931,14 @@ def _parser():
     ap.add_argument(
         "--coart-phones",
         action="store_true",
-        help="warp (coart): reduced vowels apart from full ones, diphthongs as a nucleus and an offglide (phone_plan.py); lsdub sing gives sung_dyn the same phones",
+        help="warp (coart): reduced vowels apart from full ones, diphthongs as a nucleus and an offglide (phone_plan.py). lsdub sing gives sung_dyn the same phones; "
+        "`lsdub paint` alone uses the --coart-dyn csv it is given",
     )
     ap.add_argument(
         "--coart-function-gate",
         action="store_true",
-        help="warp (coart): a closed-class word gets less opening by its sung length and level, a held or loud one none (phone_plan.function_gain)",
+        help="warp (coart): the plan's segments read a closed-class word's opening by its sung length and level, a held word losing none (phone_plan.function_gain). "
+        "With --coart-dyn the curve carries the opening: lsdub sing passes the same flag to sung_dyn; `lsdub paint` alone uses the csv it is given",
     )
     ap.add_argument(
         "--warp-round",

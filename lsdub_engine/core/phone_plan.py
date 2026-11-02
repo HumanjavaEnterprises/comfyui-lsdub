@@ -8,7 +8,7 @@ loses the second half of every diphthong. Here the phones keep their identity:
   merge     a vowel the aligner cut into repeats (AY AY AY) is one vowel
   reduced   AH, IH under no stress (digit 0; without digits, shorter than REDUCED_S) get a low, unrounded class of their own
   glides    AY, AW, OY, EY and OW become a nucleus and an offglide: the nucleus holds the note, the glide takes GLIDE_SHARE of it, GLIDE_S at most
-  dental    F, V, TH, DH last at least EVENT_S, an aligner's 20 ms is less than a frame
+  dental    F, V, TH, DH last at least EVENT_S where anything beside them can give it (stretch_dental), an aligner's 20 ms is less than a frame
   gate      a closed-class word gets less opening only when it is quick and not loud (function_gain); a held word is left whole
 
 phones() -> a phone list as viseme_track.phone_list gives it, each with `k`, the opening gain of its word; curves() reads it as sung_dyn reads the
@@ -48,6 +48,7 @@ DENTAL = ("FF", "TH")
 REDUCED_S = 0.12  # s: an AH or IH shorter than this, with no stress digit to read, is reduced
 GLIDE_SHARE, GLIDE_MIN_S, GLIDE_S = 0.3, 0.06, 0.12  # the offglide's share of its vowel, the least and the most of it, s
 EVENT_S = 0.07  # s: the least a dental gesture lasts
+MIN_LEFT = 0.03  # s: what a phone keeps when a dental takes time from it
 QUICK_S, HELD_S = 0.1, 0.24  # s: a word's longest vowel at or under QUICK_S is quick, at or over HELD_S it is held
 SOFT_LEVEL, LOUD_LEVEL = 0.7, 0.95  # the vocal's drive, 0..1: from soft to loud a quick word gets back up to LOUD_KEEP of what it lost
 LOUD_KEEP = 0.3
@@ -114,21 +115,36 @@ def split_glide(p, nucleus, glide):
 
 
 def stretch_dental(ph):
-    """a dental shorter than EVENT_S takes the time from the vowel beside it, whichever side has more; the word's other phones stay put."""
+    """a dental shorter than EVENT_S grows to it: first from a vowel of its word beside it, whichever side has more, then into the silence beside it, then from any
+    other phone of its word but a closure. Each phone keeps MIN_LEFT; what is still short stays short (a lone F between two words with nothing to give)."""
     for i, p in enumerate(ph):
         lack = EVENT_S - (p["end"] - p["start"])
         if p["vis"] not in DENTAL or lack <= 0:
             continue
         nxt, prv = ph[i + 1] if i + 1 < len(ph) else None, ph[i - 1] if i else None
-        room = lambda q: q["end"] - q["start"] - 0.03 if q is not None and strip(q["p"]) in VOWELS and q["wi"] == p["wi"] else 0.0
-        if room(nxt) >= room(prv):
-            d = min(lack, max(room(nxt), 0.0))
-            p["end"] += d
-            nxt["start"] += d
-        else:
-            d = min(lack, max(room(prv), 0.0))
-            p["start"] -= d
-            prv["end"] -= d
+        ours = lambda q, vowel: q is not None and q["wi"] == p["wi"] and q["vis"] != "PP" and (strip(q["p"]) in VOWELS) == vowel
+        room = lambda q, vowel: max(q["end"] - q["start"] - MIN_LEFT, 0.0) if ours(q, vowel) else 0.0
+        take = lambda q, d: (
+            (p.update(end=p["end"] + d), q.update(start=q["start"] + d))
+            if q is nxt
+            else (p.update(start=p["start"] - d), q.update(end=q["end"] - d))
+        )
+        for q in sorted((nxt, prv), key=lambda q: -room(q, True)):
+            d = min(lack, room(q, True))
+            if d > 0:
+                take(q, d)
+                lack -= d
+        d = min(lack, np.inf if nxt is None else max(nxt["start"] - p["end"], 0.0))
+        p["end"] += d
+        lack -= d
+        d = min(lack, np.inf if prv is None else max(p["start"] - prv["end"], 0.0))
+        p["start"] -= d
+        lack -= d
+        for q in (nxt, prv):
+            d = min(lack, room(q, False))
+            if d > 0:
+                take(q, d)
+                lack -= d
     return ph
 
 
@@ -169,7 +185,7 @@ def curves(ph, ts, n, rate, lead=0.06, release=0.11):
 
     wide = {**WID, **EXTRA_WIDE}
     tt = ts + (np.arange(n) + 0.5) / rate
-    cls = sorted({p["vis"] for p in ph} | {"sil"})
+    cls = sorted({p["vis"] for p in ph} | {"sil", "PP"})  # two classes at least: the runner-up is read below
     ix = {v: i for i, v in enumerate(cls)}
     W, G = np.zeros((n, len(cls))), np.zeros((n, len(cls)))
     W[:, ix["sil"]] = 0.15
