@@ -437,6 +437,20 @@ def vocal_reading(words, vocal_words, s, offset, vocal=None):
     )
 
 
+def nose_of(F, s):
+    """the nose on these frames against the shot's own take; {} without one."""
+    from . import mouth_ruler as MR
+
+    take = s.get("warp_json") and os.path.join(s["warp_json"].split(os.sep + "work" + os.sep)[0], "take.mp4")
+    if not take or not os.path.exists(take):
+        return {}
+    A = MR.read_clip(take, 0, len(F))
+    n = min(len(A), len(F))
+    if not n:
+        return {}
+    return MR.nose_reading(A[:n], MR.track(A[:n]), F[:n], MR.track(F[:n])) or {}
+
+
 def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q, SN):
     from ..core.coart import logged_dyn_flags, logged_offsets, logged_words
 
@@ -502,6 +516,7 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
                 ),
             )
             out.update(shape_readings(Q.shape_of(F), s.get("warp_json"), logged_words(words, s.get("warp_json")), t0, fps, SN))
+            out.update(nose_of(F, s))
     # mouth visible + tier on the DUBBED frames (a few samples)
     idx = np.linspace(0, len(F) - 1, min(5, len(F))).astype(int) if F else []
     vis, px = [], []
@@ -679,6 +694,9 @@ def write_verify(meta, rows, out):
         "closure_real_n",
         "closure_corner",
         "height_contrast",
+        "nose_off",
+        "nose_step",
+        "nose_ok",
         "vocal_lost",
         "vocal_off_ms",
         "vocal_off_n",

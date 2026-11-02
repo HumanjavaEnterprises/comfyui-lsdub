@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- LSDub Verify reports the nose base against the shot's take on delivered frames (`nose_off`, `nose_step`, `nose_ok`). A reading only: it moves no band and fails nothing.
 - `retime_to_vocal` no longer drops a long held vowel past a clip's end; a word the clip really cuts stays past it. LSDub Verify lists p, b, m sounds past the clip's end or lost by the retime (`closures_lost`), and its sync curve reads the phones the dub read.
 - LSDub Dub: when one of its two paint rates passes the sync gate and the other fails, the one that passes is used; the shot used to fall back to source on the failing one's better sync.
 - Stage keys: a stage before the dub carries the release plus the hash of the engine files it can reach, so a change to the paint keeps the take, the kit and the alignment; the dub and after carry the whole engine. A change a stage can reach re-runs it, and every folder keyed by the older scheme re-runs once.

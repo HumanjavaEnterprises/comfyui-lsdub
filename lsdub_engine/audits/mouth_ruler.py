@@ -302,11 +302,25 @@ def video_stats(F, T):
     return r
 
 
+def nose_reading(A, TA, B, TB):
+    """the nose against the take (audits/nose.py) and the frames a wide take was pulled shut; None without frames of the same size."""
+    from . import nose as N
+
+    T, R = np.asarray(TA, float), np.asarray(TB, float)
+    if not len(T) or T.ndim != 3 or A[0].shape != B[0].shape:
+        return None
+    iod = np.linalg.norm(T[:, 33, :2] - T[:, 263, :2], axis=1)
+    dx, dy = N.shifts(A, B, T)
+    gap = lambda P: np.linalg.norm(P[:, 13, :2] - P[:, 14, :2], axis=1) / iod
+    return dict(N.stillness(dx, dy, iod), nose_overpull=N.overpull(gap(T), gap(R)) if R.ndim == 3 else [])
+
+
 def stats(A, TA, B=None, TB=None):
     n = min(len(A), len(TA), *([len(B), len(TB)] if B is not None else []))
     r = dict(n=n, take=video_stats(A[:n], TA[:n]))
     if B is not None:
         r["render"] = video_stats(B[:n], TB[:n])
+        r["nose"] = nose_reading(A[:n], TA[:n], B[:n], TB[:n])
         r["frame_absdiff"] = (
             _r(np.median([np.abs(A[i].astype(float) - B[i]).mean() for i in range(n)]), 2) if A[0].shape == B[0].shape else None
         )
