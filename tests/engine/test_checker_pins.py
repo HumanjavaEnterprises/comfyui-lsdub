@@ -214,7 +214,7 @@ def test_a_free_walk_keeps_its_open_end():
     t = np.arange(int(1.0 * sr)) / sr
     x = 0.3 * np.sin(2 * np.pi * 220 * t)
     r = V.retime(dict(words=tail_walk()), "", x=x, free=True)
-    assert r["words"][-1]["start"] >= 0.0  # it may stop short: the lyric's times are not read
+    assert r["words"][-1]["phones"][-1]["start"] >= 1.0  # it stops where the audio does: the lyric's times are not read, nothing is charged
 
 
 def test_the_demos_last_m_stays_in_the_clip():
@@ -260,7 +260,7 @@ def test_honour_applies_no_move_from_a_dropped_span():
         dict(i=2, w="bye", t0=4.0, t1=4.5, call="PASS", conf=0.9),
     ]
     h = LS.honour(A, dict(spans=[sp, real], words=c))
-    assert h["words"][1]["start"] == 1.0 and h["pass_over"] == [[4.0, 4.5]]
+    assert (h["words"][1]["start"], h["words"][1]["end"]) == (1.0, 1.4) and h["pass_over"] == [[4.0, 4.5]]
 
 
 def test_the_sheet_shows_a_proposal_with_a_mark_and_not_as_passed():
@@ -268,3 +268,12 @@ def test_the_sheet_shows_a_proposal_with_a_mark_and_not_as_passed():
     c = [dict(i=k, w=w["w"], t0=w["start"], t1=w["end"], call="LEAD", conf=1.0, reason="", line=0) for k, w in enumerate(A["words"])]
     t = LS.as_text(dict(spans=[sp], words=c))
     assert "{" not in t.split("#")[0] and "? proposed, not passed" in t and "passed over, confidence" not in t
+
+
+def test_verify_reads_the_curve_flags_the_dub_logged(tmp_path):
+    from lsdub_engine.core import coart
+
+    w = tmp_path / "w.json"
+    (tmp_path / "w_coart.json").write_text(json.dumps(dict(dyn_flags=["--phone-plan"])))
+    assert coart.logged_dyn_flags(str(w)) == ["--phone-plan"]
+    assert coart.logged_dyn_flags(str(tmp_path / "none.json")) == []
