@@ -27,7 +27,9 @@ detector; YuNet + MediaPipe faces; DINOv2 identity, all already in LSDub). Two m
           identity drift -> REVIEW); with --before, the same score of the original and the delta. A shot the dub left as
           source (`used: source` in the json) is measured with the rest and banded N/A. A shot carrying `warp_json` leaves its
           vocalisation frames out of the corr and reports vocal_frac. mouth_identity_cos is the same cosine on the lower
-          face: reported, it moves no band.
+          face: reported, it moves no band. `path` is the paint delivered (sing, native, source) and `lag_frames` how many of a sing
+          shot's frames were picked from before their own time, so the skin under the paint is a frame old: read from the shot's
+          gate.json, reported, moving no band; blank with no gate.
 
   lsdub qa triage --video film.mp4 [--vocal stem.wav --offset 0] [--cast-db db.npz | --refs dir | --face name=ref.png ...]
                   [--target name ...] --out dir/name
@@ -367,6 +369,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
         r = {k: s.get(k) for k in ("shot", "f0", "f1", "start", "end", "verdict", "target", "px1080")}
         r.update(measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q, SN))
         r.update(vocal_reading(words, vocal_words, s, offset, heard))
+        r.update(path_reading(s))
         if before:
             b = measure_shot(before, s, fps, offset, vocal, act, align, words, faces, os.path.join(work, "before"), Q, SN)
             r["before"] = {k: b.get(k) for k in ("corr", "mouth_range", "open_in_silence", "mouth_visible")}
@@ -435,6 +438,43 @@ def vocal_reading(words, vocal_words, s, offset, vocal=None):
         if vocal
         else word_offsets(done, vocal_words, a, b)
     )
+
+
+def lag_keys(picked, m):
+    """the output frames whose pick sits before their own: each frame is painted m times, so a pick under k * m is an older frame's skin."""
+    return [k for k, j in enumerate(picked) if int(j) < k * m]
+
+
+def gate_reading(gate):
+    """(path, lag frames) off a shot's gate.json: (None, None) with none. The picks are the sing paint's, written whatever won: a native
+    shot delivers none of them. lag frames is None when a sing gate cannot say."""
+    if not gate or not os.path.exists(gate):
+        return None, None
+    try:
+        G = json.load(open(gate))
+        path = (G.get("auto") or {}).get("winner") or ("sing" if G.get("medium") else None)
+        if path is not None and not isinstance(path, str):
+            return None, None
+        if path != "sing":
+            return path, [] if path else None
+        picked, m = (G.get("medium") or {}).get("picked"), G.get("fps_mult")
+        return path, lag_keys(picked, int(m)) if picked and m else None
+    except (OSError, ValueError, TypeError, AttributeError, OverflowError):  # a reading only: a gate it cannot read leaves it blank
+        return None, None
+
+
+def delivered(s):
+    """gate_reading of a shot of a shots.json, its cell the folder above its warp log. A shot left as source delivers no paint."""
+    if s.get("used") == "source":
+        return "source", []
+    wj = s.get("warp_json")
+    return gate_reading(os.path.join(os.path.dirname(os.path.dirname(wj)), "gate.json") if wj else None)
+
+
+def path_reading(s):
+    """the two report-only columns: path, lag_frames."""
+    path, lag = delivered(s)
+    return dict(path=path, lag_frames=None if lag is None else len(lag))
 
 
 def nose_of(F, s):
@@ -660,6 +700,12 @@ def _shape_cell(r):
     return f"{h}, shut {c}, w {r['width_range']:.2f}{k}"
 
 
+def _path_cell(r):
+    if r.get("path") is None:
+        return ""
+    return r["path"] if r.get("lag_frames") is None else f"{r['path']}, lag {r['lag_frames']}"
+
+
 def write_verify(meta, rows, out):
     order = sorted(
         rows,
@@ -697,6 +743,8 @@ def write_verify(meta, rows, out):
         "nose_off",
         "nose_step",
         "nose_ok",
+        "path",
+        "lag_frames",
         "vocal_lost",
         "vocal_off_ms",
         "vocal_off_n",
@@ -724,14 +772,15 @@ def write_verify(meta, rows, out):
         "a lead sheet's passed spans stay closed to it: the lyric alone walked over the vocal, with the plan's word starts against that walk (median offset in ms, words past 100 ms of those in "
         "the shot, the worst word; a free walk, so a word it loses reads as off, and `lost` when a shot's words sit more than 0.6 s off, where the walk has run away on a long song: no reading), then the plan's phones read directly on the vocal's frames: "
         "hiss on hiss, closures on a dip or nasal, vowels on open sound, 0..1. Passed-over words (a lead sheet) are not read.",
+        "`path` is reported and moves no band: the paint delivered, then the frames of it picked from before their own time, whose skin is a frame old.",
         "",
-        "| shot | t (s) | band | score | Δ vs before | class | sync corr | audio | shape | vocal | travel | silence | mouth | identity | reason |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| shot | t (s) | band | score | Δ vs before | class | path | sync corr | audio | shape | vocal | travel | silence | mouth | identity | reason |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in order:
         L.append(
             f"| {r['shot']} | {r['start']:.2f}-{r['end']:.2f} | **{r['band']}** | {'-' if r['score'] is None else (format(r['score'], '.0f'))} | "
-            f"{'' if r.get('delta') is None else (format(r['delta'], '+.0f'))} | {r['class']} | {'' if r.get('corr') is None else (format(r['corr'], '+.2f'))} | "
+            f"{'' if r.get('delta') is None else (format(r['delta'], '+.0f'))} | {r['class']} | {_path_cell(r)} | {'' if r.get('corr') is None else (format(r['corr'], '+.2f'))} | "
             f"{_audio_cell(r)} | {_shape_cell(r)} | {_vocal_cell(r)} | {r.get('mouth_range', '')} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
             f"{r['mouth_visible']:.0%} | {'' if r.get('identity_cos') is None else r['identity_cos']} | {r['reason']} |"
         )
