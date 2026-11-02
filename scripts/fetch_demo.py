@@ -4,11 +4,14 @@
 """Fetch the LSDub demo assets (a 7.5 s clip, its song and dry lead vocal, the lyrics, a 12 s chorus, a start still and a lip kit;
 ~29 MB, Apache-2.0, original synthetic characters and song) into a ComfyUI install, for the example workflows.
 
-  python scripts/fetch_demo.py [--comfyui PATH/TO/ComfyUI] [--zip lsdub-demo-0.1.0.zip]
+  python scripts/fetch_demo.py [--comfyui PATH/TO/ComfyUI] [--zip lsdub-demo-<VERSION>.zip]
 
 Media go to ComfyUI/input/lsdub_demo_<name> (where Load Video / Load Audio / Load Image list them), the kit to
 ComfyUI/input/lsdub_demo_kits/red_nova. The download is checked against its SHA-256. Run it once, by hand: the node
-pack itself never downloads anything at startup."""
+pack itself never downloads anything at startup.
+
+A released zip is never replaced. A new one takes a new version: scripts/build_demo_zip.py makes it, scripts/stamp_demo.py sets VERSION, TAG and
+SHA256 here and the name in the README, the release attaches the zip to TAG."""
 import argparse
 import hashlib
 import os
