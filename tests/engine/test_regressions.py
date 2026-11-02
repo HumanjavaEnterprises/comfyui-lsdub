@@ -360,3 +360,12 @@ def test_the_plan_log_names_the_curves_flags(tmp_path, monkeypatch):
     )
     coart.plan_clip(a, json.load(open(T))["frames"], np.zeros((6, 2)), model, None)
     assert coart.logged_dyn_flags(a.warp_json) == ["--phone-plan"]
+
+
+def test_a_stop_ahead_of_the_end_pays_for_the_vowel_it_leaves():
+    n = 100
+    em = dict(G=np.r_[np.ones(60), -np.ones(40)], V=np.full(n, -0.6), Q=np.zeros(n), O=np.zeros(n))
+    assert V.walk([(0, 0, "G", 2, 0.1, 0.4), (1, 0, "V", 2, 0.2, 0.7)], em, home=0.0)[1] is not None
+    assert (
+        V.walk([(0, 0, "G", 2, 0.1, 0.4), (1, 0, "V", 2, 0.2, 2.0)], em, home=0.0)[1] is None
+    )  # its end is past the audio: nothing to charge
