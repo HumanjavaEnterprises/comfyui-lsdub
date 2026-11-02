@@ -107,7 +107,7 @@ and `LSDub/qa`.
   - `seed`: Seed for the generator slots (video, still, song).
   - `force_shots`: Shots to redo even if they passed, e.g. "21,23". Acts once per value: change it to redo again. Their earlier renders are kept.
   - `backend`: Where the generator slots (song, still, video, lip kit) run: local = this ComfyUI's GPU and models; comfy_cloud = Comfy Cloud, signed in with your comfy.org account (needs a paid Comfy Cloud plan; uses your credits). The dub and QA always run locally.
-  - `mouth_stack`: The mouth recipe: plain = the simple warp; layers = the full layer stack (teeth, tongue, cavity) on any kit; layers_interior = layers with the inside of the mouth taken from the video's own frames; layers_shape = layers_interior with mouth heights that follow the sounds and closures that shut. It changes the render; shots keep their own cache folders.
+  - `mouth_stack`: The mouth recipe: plain = the simple warp; layers = the full layer stack (teeth, tongue, cavity) on any kit; layers_interior = layers with the inside of the mouth taken from the video's own frames; layers_shape = layers_interior with mouth heights that follow the sounds, closures that shut, and F, V and TH with their teeth and tongue contact. It changes the render; shots keep their own cache folders.
 <!-- project-inputs:end -->
 
 **VIDEO lane**
