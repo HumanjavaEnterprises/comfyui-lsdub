@@ -51,7 +51,7 @@ def test_the_shape_stack_is_the_interior_stack_plus_its_flags():
         "--coart-phones",
         "--coart-function-gate",
         "--warp-round",
-        "0.4",
+        "0.6",
         "--warp-contact",
         "--warp-temporal",
         "1.5",

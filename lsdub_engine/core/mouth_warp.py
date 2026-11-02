@@ -563,6 +563,7 @@ def spare_frames(gap, pp, prom=0.15, ease=1.0):
 CONTACT_UP = -0.012  # --warp-contact: the upper inner lip this far above the upper incisal edge, eye distances: the incisors show
 CONTACT_LO = {"FF": 0.008, "TH": 0.055}  # ... and the lower inner lip this far below it: on the edge for F / V, a tongue's room for TH
 CONTACT_MAX = 0.1  # the most either lip is moved for it, eye distances
+ROUND_EASE = 1.0  # --warp-round: frames, the corners' levelling over time
 ROUND_IN, ROUND_IN_INNER, ROUND_FULL = (
     0.13,
     0.2,
@@ -2077,6 +2078,8 @@ class WarpClip:
     def run_batch(self):
         """round 0 (the earlier batch, bit-identical to the earlier run())."""
         g, n = self.g, self.n
+        if self.shape_px is not None:
+            self.round_corners()
         for i in range(n):
             self.warped[i], self.masks[i], self.log[i], self.dsts[i] = self.warp_one(i)
         # layers (opt-in): lip erase + the take's own closed lips at closures, then the lip colour lock
@@ -2129,6 +2132,25 @@ class WarpClip:
                 f"lip lock -> Lab {lk.ref.round(1).tolist()}: shift a*/b* median {np.median([lk.shift(i)[1:] for i in range(n)], 0).round(1).tolist()}"
             )
         return self
+
+    def round_corners(self):
+        """--warp-round: the corners of a rounding mouth level with the lips' centre. Narrowing a take that smiles keeps its smile: per frame, how far the planned corners
+        sit above the lips' centre, taken back by the rounding's share, eased over time, the lip points following by how near the corner they are."""
+        n = self.n
+        r = np.resize(self.events["round"], n)
+        ix, k = self.ix, np.zeros(n)
+        dn = self.pl.R[:, :2, 1] / np.maximum(np.linalg.norm(self.pl.R[:, :2, 1], axis=1), 1e-6)[:, None]
+        for i in np.flatnonzero(r > 0.02):
+            dst = self.dst_of(i)[1]
+            k[i] = r[i] * max(0.0, float(0.5 * (dst[ix[13]] + dst[ix[14]] - dst[ix[61]] - dst[ix[291]]) @ dn[i]))
+        k = gaussian_filter1d(k, ROUND_EASE, mode="nearest")
+        lips = np.array([c in LIP_OUT or c in LIP_IN for c in CTRL], float)
+        for i in np.flatnonzero(k > 0.05):
+            x, hw = (
+                self.S[i, CTRL, 0] - 0.5 * (self.S[i, 61, 0] + self.S[i, 291, 0]),
+                max(1.0, 0.5 * abs(self.S[i, 291, 0] - self.S[i, 61, 0])),
+            )
+            self.shape_px[i] += (lips * k[i] * np.clip(np.abs(x) / hw, 0.0, 1.0) ** 3)[:, None] * dn[i]
 
     def contact_pass(self):
         """--warp-contact, once the arches exist: F / V and TH frames warped again with the lips put where the upper incisal edge wants them, the upper lip

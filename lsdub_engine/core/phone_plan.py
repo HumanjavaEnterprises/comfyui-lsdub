@@ -9,6 +9,7 @@ loses the second half of every diphthong. Here the phones keep their identity:
   reduced   AH, IH under no stress (digit 0; without digits, shorter than REDUCED_S) get a low, unrounded class of their own
   glides    AY, AW, OY, EY and OW become a nucleus and an offglide: the nucleus holds the note, the glide takes GLIDE_SHARE of it, GLIDE_S at most
   dental    F, V, TH, DH last at least EVENT_S where anything beside them can give it (stretch_dental), an aligner's 20 ms is less than a frame
+  bite      T, D after a rounded offglide are the teeth meeting, not an open consonant
   gate      a closed-class word gets less opening only when it is quick and not loud (function_gain); a held word is left whole
 
 phones() -> a phone list as viseme_track.phone_list gives it, each with `k`, the opening gain of its word; curves() reads it as sung_dyn reads the
@@ -30,9 +31,10 @@ EXTRA_OPEN = {
     "ax": 0.36,
     "ix": 0.26,
     "gi": 0.6,
-    "gu": 0.5,
+    "gu": 0.75,
+    "tt": 0.1,
 }  # gi, gu: the offglides. A sung glide shapes the lips on a note still sounding, so it stays open
-EXTRA_WIDE = {"ae": 0.3, "ah": 0.05, "ax": 0.05, "ix": 0.25, "gi": 0.5, "gu": -0.7}
+EXTRA_WIDE = {"ae": 0.3, "ah": 0.05, "ax": 0.05, "ix": 0.25, "gi": 0.5, "gu": -0.7, "tt": 0.0}
 BASE = {
     "ae": "aa",
     "ah": "aa",
@@ -40,13 +42,16 @@ BASE = {
     "ix": "ih",
     "gi": "ih",
     "gu": "ou",
+    "tt": "DD",
 }  # the fifteen-class name of each: what the readers of the plan's log know
 GLIDES = {"AY": ("aa", "gi"), "AW": ("aa", "gu"), "OY": ("oh", "gi"), "EY": ("E", "gi"), "OW": ("oh", "gu")}
 ROUNDED = ("ou", "gu", "oh")
 VOWELS = frozenset(("AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY", "IH", "IY", "OW", "OY", "UH", "UW"))
 DENTAL = ("FF", "TH")
+BITE = "tt"  # T / D closing a rounded offglide: near shut on the plan, the teeth showing, lips apart. "out", "about": no lip closure, no open mouth either
 REDUCED_S = 0.12  # s: an AH or IH shorter than this, with no stress digit to read, is reduced
 GLIDE_SHARE, GLIDE_MIN_S, GLIDE_S = 0.3, 0.06, 0.12  # the offglide's share of its vowel, the least and the most of it, s
+ROUND_SHARE, ROUND_S = 0.55, 0.24  # ... a rounded one's: the lips have further to go, and it has to read before the consonant takes them
 EVENT_S = 0.07  # s: the least a dental gesture lasts
 MIN_LEFT = 0.03  # s: what a phone keeps when a dental takes time from it
 QUICK_S, HELD_S = 0.1, 0.24  # s: a word's longest vowel at or under QUICK_S is quick, at or over HELD_S it is held
@@ -109,9 +114,29 @@ def vowel_class(p):
 def split_glide(p, nucleus, glide):
     """the diphthong as two phones: the nucleus, then the offglide on its tail."""
     dur = p["end"] - p["start"]
-    g = float(np.clip(GLIDE_SHARE * dur, min(GLIDE_MIN_S, 0.5 * dur), GLIDE_S))
+    share, top = (ROUND_SHARE, ROUND_S) if glide in ROUNDED else (GLIDE_SHARE, GLIDE_S)
+    g = float(np.clip(share * dur, min(GLIDE_MIN_S, 0.5 * dur), top))
     m = p["end"] - g
     return [dict(p, end=m, vis=nucleus, part="nucleus"), dict(p, start=m, vis=glide, part="glide")]
+
+
+def bite(ph):
+    """a T or D right after a rounded offglide in its word is the teeth meeting."""
+    for p, q in zip(ph, ph[1:]):
+        if p.get("part") == "glide" and p["vis"] in ROUNDED and q["wi"] == p["wi"] and strip(q["p"]) in ("T", "D"):
+            q["vis"] = BITE
+    return ph
+
+
+def stretch_glide(ph):
+    """a rounded offglide shorter than GLIDE_MIN_S takes what it lacks from the consonant after it in its word, closures aside: a short "about" still reaches for the round."""
+    for p, q in zip(ph, ph[1:]):
+        if p.get("part") == "glide" and p["vis"] in ROUNDED and q["wi"] == p["wi"] and q["vis"] != "PP":
+            d = min(GLIDE_MIN_S - (p["end"] - p["start"]), q["end"] - q["start"] - MIN_LEFT)
+            if d > 0:
+                p["end"] += d
+                q["start"] += d
+    return ph
 
 
 def stretch_dental(ph):
@@ -171,7 +196,7 @@ def phones(align, drive=None, reduce=True, gate=False):
             else:
                 done.append(dict(p, vis=vowel_class(p), k=k))
         out += done
-    return stretch_dental(out) if reduce else out
+    return stretch_dental(stretch_glide(bite(out))) if reduce else out
 
 
 def open_of(v):

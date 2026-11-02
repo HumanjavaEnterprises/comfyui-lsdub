@@ -257,7 +257,7 @@ RECIPES = {
                 "--coart-phones",
                 "--coart-function-gate",
                 "--warp-round",
-                "0.4",
+                "0.6",
                 "--warp-contact",
                 "--warp-temporal",
                 "1.5",

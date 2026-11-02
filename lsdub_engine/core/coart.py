@@ -95,7 +95,7 @@ PLAN_OPEN = {
     "gi": (0.35, 0.75),
     "gu": (0.3, 0.65),
 }  # --coart-phones: the classes the library has no band for
-CONTACT_OPEN = {"FF": 0.04, "TH": 0.07}  # --warp-contact: the opening a dental gesture is planned at, in eye distances
+CONTACT_OPEN = {"FF": 0.04, "TH": 0.07, pl.BITE: 0.08}  # --warp-contact: the opening a dental gesture is planned at, in eye distances
 RANGE_ANCHORS = "neutral"  # the plan's range match: its p5 / p95 -> the take's, the neutral level (0) fixed
 
 
