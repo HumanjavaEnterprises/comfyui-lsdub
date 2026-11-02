@@ -22,7 +22,7 @@ from what is passed; `pass` adds it.
 
 read_sheet(...) -> {spans, words, lines}; honour(align, sheet) -> the alignment with the passed time taken out of it. Nothing here runs unless asked."""
 
-import argparse, difflib, json, os, re
+import argparse, difflib, json, re
 import numpy as np
 
 from . import vocal_retime as VR
@@ -366,7 +366,6 @@ def honour(align, S):
                 dict(w=frag, start=q["t0"], end=q["t1"], vocal=PASS, phones=[dict(p="SIL", start=q["t0"], end=q["t1"])], src="sung-only"),
             )
             continue
-        inside[0]["start"], inside[-1]["end"] = q["t0"], q["t1"]
         n = len(inside)
         for k, w in enumerate(inside):
             a, b = q["t0"] + (q["t1"] - q["t0"]) * k / n, q["t0"] + (q["t1"] - q["t0"]) * (k + 1) / n

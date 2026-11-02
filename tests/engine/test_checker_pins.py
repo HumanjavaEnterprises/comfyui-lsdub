@@ -125,7 +125,8 @@ def test_passed_time_stays_out_of_the_silence_reading(monkeypatch):
     assert a["open_in_silence"] > 0.5 > b["open_in_silence"]
 
 
-def test_mouth_mode_with_nothing_passed_is_the_unchanged_render(tmp_path):
+def test_mouth_mode_with_nothing_passed_is_the_unchanged_render(tmp_path, monkeypatch):
+    monkeypatch.setattr(VO, "find_spans", lambda *a: pytest.fail("mouth mode with nothing passed reads no spans"))
     T = tmp_path / "t.json"
     A = tmp_path / "a.json"
     A.write_text(json.dumps(dict(words=[word("a", ("AA", 0.0, 1.0))])))
