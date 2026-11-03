@@ -683,7 +683,7 @@ def window_fallback(clip, ck, win, ref, V, M, rnd, ctx, cands):
             and all(r["V"]["frames"][f]["verdict"] != "FAIL" for f in range(a0, a1 + 1))
             and all(RANK[r["V"]["frames"][j]["verdict"]] <= RANK[V["frames"][j]["verdict"]] for j in (c - 1, c, c + 1) if 0 <= j < n)
         )
-        tried.append(dict(cand=f"{key}:{CANDS[key][0]}", frame=c, energy=round(e1, 4), ok=ok))
+        tried.append(dict(cand=f"{key}:{CANDS[key][0]}", frame=c, energy=round(e1, 6), ok=ok))
         if ok and (best is None or e1 < best[0]):
             best = (e1, f"{key}:{CANDS[key][0]}", r)
         restore(ck, r["snap"])
@@ -700,7 +700,7 @@ def window_fallback_commit(clip, ck, win, ref, V, M, rnd, log, rec, ctx, cands):
         commit_run(clip, ck, r, name + " (slosh fallback)", rnd)
         M2 = ck.metrics()
         V2 = ck.verdict(M2, ref)
-        rec["fallback"].update(chosen=name, energy_after=round(slosh_energy(V2, M2, a0, a1), 4))
+        rec["fallback"].update(chosen=name, energy_after=round(slosh_energy(V2, M2, a0, a1), 6))
         log.append(rec)
         return V2, M2, True
     log.append(rec)
@@ -712,7 +712,8 @@ def repair_window(clip, ck, win, ref, V, M, rnd, log, ctx=None, cands=()):
     a0, a1 = win["frames"]
     lo = next((j for j in range(a0, -1, -1) if V["frames"][j]["verdict"] == "PASS"), None)
     hi = next((j for j in range(a1, n) if V["frames"][j]["verdict"] == "PASS"), None)
-    rec = dict(window=[int(a0), int(a1)], round=rnd, energy_before=round(slosh_energy(V, M, a0, a1), 4))
+    e_keep = round(slosh_energy(V, M, a0, a1), 4)  # the fit's keep test reads the 4-place energy, as it always has
+    rec = dict(window=[int(a0), int(a1)], round=rnd, energy_before=round(slosh_energy(V, M, a0, a1), 6))
     if lo is None and hi is not None and a0 == 0:
         lo = 0  # the clip's first / last frame anchors a window
     if hi is None and lo is not None and a1 == n - 1:
@@ -771,9 +772,9 @@ def repair_window(clip, ck, win, ref, V, M, rnd, log, ctx=None, cands=()):
         tolV = max(0.05, float(ref.get("viseme", (0.0, 0.05))[1]))
         okV = all(np.nan_to_num(np.asarray(M1["viseme"], float)[f]) <= vis0.get(f, 0) + tolV for f in frames) if vis is not None else True
         okF = all(V1["frames"][f]["verdict"] != "FAIL" for f in range(max(0, lo), min(n, hi + 1)))
-        cand = dict(deg=deg, energy=round(e1, 4), structure=okS, viseme=okV, no_fail=okF)
+        cand = dict(deg=deg, energy=round(e1, 6), structure=okS, viseme=okV, no_fail=okF)
         rec.setdefault("tried", []).append(cand)
-        if okS and okV and okF and e1 < rec["energy_before"] - 1e-6 and (best is None or e1 < best[0]):
+        if okS and okV and okF and e1 < e_keep - 1e-6 and (best is None or e1 < best[0]):
             best = (e1, deg, res, V1, M1, interior)
         restore(ck, snaps)
     if best is None:
@@ -791,7 +792,7 @@ def repair_window(clip, ck, win, ref, V, M, rnd, log, ctx=None, cands=()):
     M2 = ck.metrics()
     V2 = ck.verdict(M2, ref)
     rec.update(
-        chosen="g:slosh_fit", deg=deg, anchors=[int(x) for x in anc], frames=frames, energy_after=round(slosh_energy(V2, M2, a0, a1), 4)
+        chosen="g:slosh_fit", deg=deg, anchors=[int(x) for x in anc], frames=frames, energy_after=round(slosh_energy(V2, M2, a0, a1), 6)
     )
     log.append(rec)
     return V2, M2, True
