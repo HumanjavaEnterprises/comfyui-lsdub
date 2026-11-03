@@ -26,7 +26,7 @@ step, for EVERY sung shot). CPU.
 
 from ..io import ff
 import argparse, csv, json, os, sys, tempfile, time
-from . import paint_api, steps
+from . import paint_api, spaces as SP, steps
 from .cpu_env import thread_report
 import cv2, numpy as np
 
@@ -125,6 +125,12 @@ def mic_near_lips(crop, face_px, thr=0.08):
     return round(s, 3), s > thr
 
 
+def occluders_cmd(work):
+    """the line that makes work/occ.npz on the crop sing paints (GPU)."""
+    crop, occ = os.path.join(work, "crop.mp4"), os.path.join(work, "occ.npz")
+    return f"python -m lsdub_engine.cli occluders --video {crop} --out {occ} --phrase microphone --review {occ[:-4]}_review.mp4"
+
+
 # ---------------------------------------------------------------------------------------------------- run
 def run(
     take,
@@ -203,14 +209,16 @@ def run(
     steps.call("sung_dyn", sd, quiet=True)
     steps.call("visemes", vs, quiet=True)
     tm["plan"] = round(time.perf_counter() - t_, 3)
-    # 3. occluders: a mic near the lips -> the GPU command (written, not run); an existing mask is used
+    # 3. occluders: a mic near the lips -> the GPU command (written, not run); an existing mask is used. It must be made on the
+    # crop this paints (n * m square frames); any other shape stops here, before a paint runs
     occ = os.path.join(work, "occ.npz")
+    mask = SP.Occluder.open(occ, n * m, how=occluders_cmd(work)) if os.path.exists(occ) else None
     pa = paint_api.flags(
         user_overrides=paint_args,
         operational=[
             *paint_api.coart_dyn(paint_args, dyn),
             *(snap_paint(paint_args, m) if snap else ()),
-            *(("--occluder-mask", occ) if os.path.exists(occ) else ()),
+            *(("--occluder-mask", occ) if mask else ()),
         ],
     )
     t_plan = plan_t0(t0, paint_args, fps * m)  # the plan moved: the gate reads the same curve
@@ -234,15 +242,21 @@ def run(
         **({"lossless": True} if lossless else {}),
     )
     tm.update(R.get("timings", {}))
+    native_occ = ()
+    if mask:
+        mask = mask.bind(SP.CropSpace.from_report(R, m))  # the side must be the crop's
+        info["occluder"] = {"space": "crop", "frames": n * m}
+        if auto:  # the native paint gets the same mask, mapped back to the take, with the grow in take px
+            native_occ = SP.native_occluder(mask, n, F[0].shape[:2], paint_args, os.path.join(work, "occ_native.npz"))
+            info["occluder"]["native"] = {"mask": native_occ[1], "grow": int(native_occ[3])}
     crop0 = MED.read(os.path.join(work, "crop.mp4"), 1)[0][0]
     share, near = mic_near_lips(crop0, face_target)
     info["mic_share"] = share
     if near and not os.path.exists(occ):
-        crop = os.path.join(work, "crop.mp4")
         open(os.path.join(work, "gpu_occluders.sh"), "w").write(
             "#!/usr/bin/env bash\n# lsdub sing: a mic sits near the lips on this crop. Occluder masks need a GPU (Florence-2 + SAM 2).\n"
             "# Run this on a GPU, then re-run the same `sing` (it picks up occ.npz).\n"
-            f"python -m lsdub_engine.cli occluders --video {crop} --out {occ} --phrase microphone --review {occ[:-4]}_review.mp4\n"
+            f"{occluders_cmd(work)}\n"
         )
         info["gpu_todo"] = os.path.join(work, "gpu_occluders.sh")
     # 5. the measured gate on the delivered pixels
@@ -252,7 +266,11 @@ def run(
     info.update(gate(out, R, target, vocal, align, t0, fps, work=work, warp_json=sing_json), warp_json=sing_json)
     tm["gate"], t_ = round(time.perf_counter() - t_, 3), time.perf_counter()
     if auto:
-        info.update(auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, info, t_plan=t_plan))
+        info.update(
+            auto_select(
+                take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, info, t_plan=t_plan, native_occ=native_occ
+            )
+        )
         tm["native"] = round(time.perf_counter() - t_, 3)
     info["timings"] = tm
     info["medium"] = {k: R[k] for k in ("face_h_px", "zoom", "crop_px", "outside_max_preencode", "not_pasted", "picked")}
@@ -282,10 +300,11 @@ def pick_paint(s, n):
     return "native" if (n_c[0] > s_c[0] + 0.02) or (abs(n_c[0] - s_c[0]) <= 0.02 and n_c[1] > s_c[1]) else "sing"
 
 
-def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info, t_plan=None):
+def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info, t_plan=None, native_occ=()):
     """Per-shot auto-selection: also run the native warp (lsdub paint on the full take at the frame rate, the pre-sing
     recipe) and keep pick_paint's choice of the two.
-    Both are kept: <out>_sing.mp4 and <out>_native.mp4; <out> is the winner."""
+    Both are kept: <out>_sing.mp4 and <out>_native.mp4; <out> is the winner. native_occ: the native paint's occluder flags
+    (spaces.native_occluder), passed through as they are."""
     import shutil
 
     trk1 = os.path.join(work, "track_1x.json")
@@ -313,7 +332,7 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
         trk1,
         n,
         user_overrides=paint_args,
-        operational=paint_api.coart_dyn(paint_args, dyn),
+        operational=[*paint_api.coart_dyn(paint_args, dyn), *native_occ],
         out=nat,
         warp_json=os.path.join(work, "native_warp.json"),
     )
