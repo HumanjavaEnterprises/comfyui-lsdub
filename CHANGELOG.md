@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6 (2026-11-03)
+
+- LSDub Save Cut works on a machine with ffmpeg and no ffprobe (Comfy Cloud, or an install with ffmpeg only). The watermark counts the video's frames, and LSDub's stand-in for ffprobe now answers that count; before, Save Cut failed with `invalid literal for int()`.
+- The Registry description now says what LSDub does.
+
 ## 0.1.5 (2026-11-03)
 
 - LSDub Dub with a mic mask (LSDub Occluders): both paint paths now keep the mic. With `auto` on, the full-frame paint used to run without the mask and could win, dragging the mic up into the lips; it now gets the same mask, mapped from the crop, with its grow scaled to the frame.
