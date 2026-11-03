@@ -4,7 +4,7 @@ scripts/make_workflows.py
 .github/
 scripts/make_readme_nodes.py
 scripts/check_models_md.py
-scripts/cleanroom_allowlist.txt
 comfy-build.yaml
 constraints-hosted.txt
 *.zip
+assets/before-after.gif

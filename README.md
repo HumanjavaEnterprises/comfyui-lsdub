@@ -11,6 +11,13 @@ throws away what was already good. So LSDub repaints only what it needs (the mou
 
 **See it:** [the 2-minute demo](https://lsdub.vidbnch.app/demo.html) and [the before/after clip](https://lsdub.vidbnch.app/#qa) on [lsdub.vidbnch.app](https://lsdub.vidbnch.app). LSDub is our entry in Comfy's [Open Source Higgsfield](https://comfy.org/open-source-higgsfield) challenge (#OpenSourceHiggsfield). Open weights only.
 
+![The original take next to the LSDub re-sync, with the vocal and the mouth-opening curves](assets/before-after.gif)
+
+**What's new:** generative lip-sync, such as LTX's LipDub IC-LoRA or a talking-head model, makes new frames from the
+audio. LSDub keeps the shot's own pixels: it warps the singer's real lips, teeth and tongue to the new words, leaves
+the rest of the frame alone, and scores every shot so you know which ones worked. Follow the build on X:
+[@vveerrgg](https://x.com/vveerrgg).
+
 ## How it fits together
 
 Three lanes feed one check.

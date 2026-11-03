@@ -45,7 +45,7 @@ def test_models_known_agrees_with_the_build_yaml(pack):
 
 def test_comfyignore_drops_the_dev_scripts():
     ig = open(os.path.join(ROOT, '.comfyignore')).read().split()
-    assert {'scripts/make_readme_nodes.py', 'scripts/check_models_md.py', 'scripts/cleanroom_allowlist.txt', 'comfy-build.yaml'} <= set(ig)
+    assert {'scripts/make_readme_nodes.py', 'scripts/check_models_md.py', 'comfy-build.yaml'} <= set(ig)
     assert 'scripts/fetch_demo.py' not in ig and 'scripts/' not in ig
 
 
