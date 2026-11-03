@@ -195,6 +195,20 @@ def _exact_duration(ff, path, info):
     return f"{max(good):.6f}" if good else d
 
 
+def _packets(ff, path, s):
+    """`-count_packets` / stream=nb_read_packets: the stream's packets, counted. A stream copy into the framecrc muxer
+    writes one line per packet and decodes nothing (a copy into the null muxer prints no frame count)."""
+    r = subprocess.run(
+        [ff, "-v", "error", "-nostdin", "-i", path, "-map", f"0:{s['index']}", "-c", "copy", "-f", "framecrc", "-"],
+        capture_output=True,
+        text=True,  # noqa: S603
+        encoding="utf-8",
+        errors="replace",
+        shell=False,
+    )
+    return sum(1 for ln in r.stdout.splitlines() if ln and not ln.startswith("#"))
+
+
 def _opt(argv, flag):
     return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else None
 
@@ -230,6 +244,9 @@ def probe(argv, capture_output=False, text=False, check=False, stdout=None, stde
                 ss = [s for s in ss if s["_k"] == kind]
                 if n:
                     ss = ss[int(n) : int(n) + 1]
+            if "nb_read_packets" in keys:
+                for s in ss:
+                    s["nb_read_packets"] = _packets(ff, path, s)
             rows = [{k: s[k] for k in keys if k in s} for s in ss]
             if of.startswith("json"):
                 out = json.dumps({"streams": rows}, indent=4) + "\n"

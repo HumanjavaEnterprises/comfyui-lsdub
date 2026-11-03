@@ -1,4 +1,4 @@
-pack_version: 0.1.5
+pack_version: 0.1.6
 uncommitted: 0
-tree_sha256: b1b822d1d1ef6cfac2a18507a4659c69b720611602586041e18617ec6862e45d
-tests_sha256: ad5fb3ae7fc5df0e85ff08e8bc41bc219f98c4e1f0eaabbab7fc8cb5518bd5bc
+tree_sha256: 7f87816546420cae8844ba939ec0b566ff688a1cbb4de460754a24fc75616cc0
+tests_sha256: 045629c0857f8a757a1a9fc8148a21c7eeb05edf2c0d73a3bcf2b12c1ca8554f
