@@ -9,6 +9,8 @@ Why: generated video gets you actors who look the part but don't actually sing t
 throws away what was already good. So LSDub repaints only what it needs (the mouth) with what the shot already has
 (the singer's own face). It respects the shot, then measures every shot instead of asking you to trust it.
 
+**See it:** [the 2-minute demo](https://lsdub.vidbnch.app/demo.html) and [the before/after clip](https://lsdub.vidbnch.app/#qa) on [lsdub.vidbnch.app](https://lsdub.vidbnch.app). LSDub is our entry in Comfy's [Open Source Higgsfield](https://comfy.org/open-source-higgsfield) challenge (#OpenSourceHiggsfield). Open weights only.
+
 ## How it fits together
 
 Three lanes feed one check.
@@ -45,7 +47,7 @@ git clone https://github.com/HumanjavaEnterprises/comfyui-lsdub
 ```
 Use the Python that runs ComfyUI (its venv, or `python_embeded/python.exe` in the Windows portable build).
 
-**Once the pack is approved in the Comfy Registry:**
+**From the Comfy Registry (new versions are in review):**
 - ComfyUI Manager: search for **LSDub** and install it.
 - comfy-cli: `comfy node install lsdub`
 
