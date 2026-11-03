@@ -76,7 +76,24 @@ def _probe(path):
 
 
 def _frames(path):
-    """the video stream's frames, counted."""
+    """the video stream's frames, counted: ffprobe's packet count, else (an ffprobe that prints nothing or fails, as on
+    some hosted images) ffmpeg copying the stream into the framecrc muxer, one line per packet."""
+    try:
+        n = _probe_packets(path)
+    except (OSError, ValueError, ff.CalledProcessError):
+        n = ""
+    if n.isdigit():
+        return int(n)
+    out = ff.run(
+        ["ffmpeg", "-v", "error", "-nostdin", "-i", path, "-map", "0:v:0", "-c", "copy", "-f", "framecrc", "-"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return sum(1 for ln in out.splitlines() if ln and not ln.startswith("#"))
+
+
+def _probe_packets(path):
     out = ff.run(
         [
             "ffprobe",
@@ -95,7 +112,7 @@ def _frames(path):
         text=True,
         check=True,
     ).stdout
-    return int(out.strip().split(",")[0])
+    return out.strip().split(",")[0]
 
 
 def apply(src, dst, key=KEY, strength=3.0, crf=14):

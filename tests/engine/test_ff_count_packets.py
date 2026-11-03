@@ -75,3 +75,38 @@ def test_watermark_frames_without_ffprobe(clips, monkeypatch):
     while cap.read()[0]:
         n += 1
     assert watermark._frames(clips["plain"]) == n == 25
+
+
+def test_watermark_frames_when_ffprobe_prints_nothing(clips, monkeypatch):
+    """a hosted image whose ffprobe answers -count_packets with an empty line (LiveTry on Comfy Cloud): count with ffmpeg."""
+    cv2 = pytest.importorskip("cv2")
+    from lsdub_engine import watermark
+
+    real_run = ff.run
+
+    def run(argv, **kw):
+        if argv and argv[0] == "ffprobe" and "-count_packets" in argv:
+            return subprocess.CompletedProcess(argv, 0, "\n", "")
+        return real_run(argv, **kw)
+
+    monkeypatch.setattr(watermark.ff, "run", run)
+    for name in ("plain", "bframes"):
+        cap, n = cv2.VideoCapture(clips[name]), 0
+        while cap.read()[0]:
+            n += 1
+        assert watermark._frames(clips[name]) == n > 0
+
+
+def test_watermark_frames_when_ffprobe_fails(clips, monkeypatch):
+    pytest.importorskip("cv2")
+    from lsdub_engine import watermark
+
+    real_run = ff.run
+
+    def run(argv, **kw):
+        if argv and argv[0] == "ffprobe" and "-count_packets" in argv:
+            raise ff.CalledProcessError(1, argv, "", "boom")
+        return real_run(argv, **kw)
+
+    monkeypatch.setattr(watermark.ff, "run", run)
+    assert watermark._frames(clips["plain"]) == 25
