@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7 (2026-11-03)
+
+- LSDub Save Cut works where ffprobe answers the frame count with nothing (seen on Comfy Cloud): the watermark then counts the frames with ffmpeg. 0.1.6 covered machines with no ffprobe at all; this covers an ffprobe that is there but silent.
+
 ## 0.1.6 (2026-11-03)
 
 - LSDub Save Cut works on a machine with ffmpeg and no ffprobe (Comfy Cloud, or an install with ffmpeg only). The watermark counts the video's frames, and LSDub's stand-in for ffprobe now answers that count; before, Save Cut failed with `invalid literal for int()`.
