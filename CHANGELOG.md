@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.4 (2026-11-02)
 
+- Workflow 4 uses `layers_shape`, with `retime_to_vocal` and `lead_sheet` on.
+- `layers_shape`: the nose and its base hold still while the mouth moves. The warp's field falls to zero under the nose, so the nose no longer wiggles with the lips.
+- `layers_shape`: an F or V closes the lower lip only so far toward the upper teeth from where the take has it, and p, b, m reach a full seal.
+- LSDub Dub at 2x: a picked frame never comes from before its own time, so no frame shows the skin of the frame before it.
 - LSDub Verify reports the nose base against the shot's take on delivered frames (`nose_off`, `nose_step`, `nose_ok`). A reading only: it moves no band and fails nothing.
 - `retime_to_vocal` no longer drops a long held vowel past a clip's end; a word the clip really cuts stays past it. LSDub Verify lists p, b, m sounds past the clip's end or lost by the retime (`closures_lost`), and its sync curve reads the phones the dub read.
 - LSDub Dub: when one of its two paint rates passes the sync gate and the other fails, the one that passes is used; the shot used to fall back to source on the failing one's better sync.

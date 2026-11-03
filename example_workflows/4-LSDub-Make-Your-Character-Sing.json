@@ -75,7 +75,7 @@
     "fixed",
     "",
     "local",
-    "layers_interior"
+    "layers_shape"
    ],
    "color": "#335",
    "title": "LSDub Project"
@@ -485,7 +485,7 @@
    ],
    "size": [
     340,
-    242
+    320
    ],
    "flags": {},
    "order": 10,
@@ -535,7 +535,10 @@
    "widgets_values": [
     "",
     "large-v3",
-    "lsdub_demo_alr_stt.json"
+    "lsdub_demo_alr_stt.json",
+    true,
+    true,
+    ""
    ],
    "color": "#523",
    "title": "LSDub Align"
@@ -619,7 +622,7 @@
    "type": "LSDubBuildLipKit",
    "pos": [
     520,
-    866
+    918
    ],
    "size": [
     340,
@@ -673,7 +676,7 @@
    "type": "LSDubDub",
    "pos": [
     900,
-    866
+    918
    ],
    "size": [
     340,
@@ -775,7 +778,7 @@
    "type": "LSDubVerify",
    "pos": [
     520,
-    1482
+    1534
    ],
    "size": [
     340,
@@ -846,7 +849,7 @@
    "type": "PreviewAny",
    "pos": [
     900,
-    1482
+    1534
    ],
    "size": [
     300,
@@ -885,7 +888,7 @@
    "type": "LSDubFixIt",
    "pos": [
     1240,
-    1482
+    1534
    ],
    "size": [
     340,
@@ -951,7 +954,7 @@
    "type": "PreviewAny",
    "pos": [
     1620,
-    1482
+    1534
    ],
    "size": [
     300,
@@ -990,7 +993,7 @@
    "type": "LSDubSaveCut",
    "pos": [
     1960,
-    1482
+    1534
    ],
    "size": [
     340,
@@ -1040,7 +1043,7 @@
    "type": "LSDubTweaks",
    "pos": [
     1280,
-    866
+    918
    ],
    "size": [
     340,
@@ -1435,7 +1438,7 @@
     500,
     408,
     2260,
-    348
+    400
    ],
    "color": "#8A8",
    "font_size": 28,
@@ -1445,7 +1448,7 @@
    "title": "MOUTH",
    "bounding": [
     500,
-    816,
+    868,
     780,
     556
    ],
@@ -1457,7 +1460,7 @@
    "title": "QA",
    "bounding": [
     500,
-    1432,
+    1484,
     1840,
     296
    ],
