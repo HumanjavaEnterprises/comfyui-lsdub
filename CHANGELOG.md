@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5 (2026-11-03)
+
+- LSDub Dub with a mic mask (LSDub Occluders): both paint paths now keep the mic. With `auto` on, the full-frame paint used to run without the mask and could win, dragging the mic up into the lips; it now gets the same mask, mapped from the crop, with its grow scaled to the frame.
+- A mask made for a different crop or frame count is refused with its shape named, before anything is painted, instead of being stretched to fit.
+
 ## 0.1.4 (2026-11-02)
 
 - Workflow 4 uses `layers_shape`, with `retime_to_vocal` and `lead_sheet` on.
