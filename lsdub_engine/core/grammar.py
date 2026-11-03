@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """grammar.py: `lsdub grammar`, the shot-grammar gate. Every sung word must land on a shot where its singer's face is
-big enough for the kind of line it is (research: "Sync the singers by shot size", recommendation 1).
+big enough for the kind of line it is.
 
   tiers   singer face height: close-up >= 300, medium 120-300, wide 25-120, none (< 25 or no singer face).
-          Basis (--px-basis): native (DEFAULT) = delivered-frame px, as the research report's tier table states it;
+          Basis (--px-basis): native (DEFAULT) = delivered-frame px, the tiers above as stated;
           1080 = cast face_px, 1080-normalised. The warp's own 300 px dub-safe gate (cast.SAFE_PX) is on the 1080
           basis: on a 768-px delivery a 300 px@1080 face is only 213 delivered px.
   needs   hook / key chorus line, exposed solo lyric (a **X sings** beat)  -> a close-up of the OWNING singer
@@ -449,7 +449,7 @@ def main(argv=None):
         "--px-basis",
         choices=["native", "1080"],
         default="native",
-        help="native (default) = delivered-frame px, the research report's tier table; 1080 = cast face_px, "
+        help="native (default) = delivered-frame px, the tiers as stated; 1080 = cast face_px, "
         "1080-normalised, the basis of the warp's 300 px dub-safe gate (cast.SAFE_PX)",
     )
     ap.add_argument("--cu-px", type=float, default=CU_PX, help="close-up line in the chosen basis (default 240 delivered px)")

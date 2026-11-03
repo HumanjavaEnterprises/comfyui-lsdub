@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""medium.py: `lsdub medium`, the tier-2 dub for a singer face of ~120-300 px (research "Sync the singers by shot size",
-recommendation 4). CPU.
+"""medium.py: `lsdub medium`, the tier-2 dub for a singer face of ~120-300 px. CPU.
 
   track     YuNet + MediaPipe faces per frame (cast.Faces) -> IoU tracks (cast.link) -> the singer's track (--box hint,
             or the biggest/longest) -> gaps interpolated -> zero-phase smoothed centre and ONE crop size per shot
@@ -412,7 +411,7 @@ def main(argv=None):
     ap.add_argument("--crop-mult", type=float, default=2.2, help="crop side, x the median face height")
     ap.add_argument("--smooth", type=float, default=2.0, help="zero-phase gaussian (frames) on the crop centre")
     ap.add_argument("--grow", type=float, help="mask dilation, source px (default max(2, 4%% of the face))")
-    ap.add_argument("--feather", type=float, default=4.0, help="mask feather sigma, source px (research: 3-6)")
+    ap.add_argument("--feather", type=float, default=4.0, help="mask feather sigma, source px (3-6 works)")
     ap.add_argument("--frames", type=int, default=0)
     ap.add_argument("--crf", type=int, default=12)
     ap.add_argument("--work")

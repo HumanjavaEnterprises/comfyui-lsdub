@@ -230,11 +230,11 @@ def test_sync_phrases_off_keeps_the_tweaks_hash(pack):
     assert N.execute(*base).args[0].hash != N.execute(*base, '', 0.0, True).args[0].hash
 
 
-def test_workflow_four_uses_the_interior_stack_and_old_workflows_keep_plain():
+def test_workflow_four_uses_the_shape_stack_and_old_workflows_keep_plain():
     import glob
     import json
     import os
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for f in sorted(glob.glob(os.path.join(root, 'example_workflows', '*.json'))):
         n = next(x for x in json.load(open(f))['nodes'] if x['type'] == 'LSDubProject')
-        assert ('layers_interior' in n['widgets_values']) == os.path.basename(f).startswith('4-')
+        assert ('layers_shape' in n['widgets_values']) == os.path.basename(f).startswith('4-')
