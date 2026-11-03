@@ -563,6 +563,7 @@ def spare_frames(gap, pp, prom=0.15, ease=1.0):
 CONTACT_UP = -0.012  # --warp-contact: the upper inner lip this far above the upper incisal edge, eye distances: the incisors show
 CONTACT_LO = {"FF": 0.008, "TH": 0.055}  # ... and the lower inner lip this far below it: on the edge for F / V, a tongue's room for TH
 CONTACT_MAX = 0.1  # the most either lip is moved for it, eye distances
+CONTACT_REACH = 0.04  # ... with --warp-contact-reach: on a wide take F eases toward the teeth, it is not forced
 ROUND_EASE = 1.0  # --warp-round: frames, the corners' levelling over time
 ROUND_IN, ROUND_IN_INNER, ROUND_FULL = (
     0.13,
@@ -593,6 +594,21 @@ def lip_rows():
         up[j] = k in UPPER
         lo[j] = 1.0 if k in LOWER_LIP else 0.5 if k in CHIN_C else 0.0
     return up, lo
+
+
+SHUT_BANK = (
+    0.5  # --warp-shut-bank: a closure needing more than this share of the take's range is taken from a frame of the take nearer shut
+)
+SHUT_SIZE = 0.05  # ... from a frame of about this face's size
+SHUT_REACH = 3  # ... and the frames this close to it, so the swap sits inside the closing
+
+
+def shut_reach(n, closures):
+    """the frames at or next to a closure."""
+    return {k for c in closures for k in range(max(0, c - SHUT_REACH), min(n, c + SHUT_REACH + 1))}
+
+
+NOSE_LOCK = [1, 4, 5, 2, 94, 98, 327, 64, 294, 97, 326, 49, 279]  # --warp-nose-lock: tip, base, wings, nostrils
 
 
 def closed_frames(n, pp, frames=()):
@@ -648,8 +664,10 @@ class MouthBank:
     def __init__(self, face_id, F, Xc, pose, S2):
         self.face_id, self.F, self.Xc, self.pose, self.S2 = face_id, F, Xc, pose, S2
 
-    def nearest(self, i, ft, scale, pose_w=2.0, exclude=2, prev=-1):
+    def nearest(self, i, ft, scale, pose_w=2.0, exclude=2, prev=-1, near_size=None):
         cost = np.max(np.abs(self.F - ft) / scale, axis=1) + pose_w * np.linalg.norm(self.pose - self.pose[i], axis=1)
+        if near_size is not None:  # another size of face is another head on this frame's neck: never a source
+            cost = cost + 9.0 * (np.abs(near_size / max(near_size[i], 1e-6) - 1.0) > SHUT_SIZE)
         cost = cost + 9.0 * (np.abs(np.arange(len(self.F)) - i) <= exclude)
         if prev >= 0:
             cost[prev] -= 0.05  # stickiness: fewer donor switches
@@ -1448,12 +1466,14 @@ class WarpClip:
         # when it is much closer to the target than this frame is (and this frame needs a big correction)
         choice = np.array(["a"] * n, object)
         src_j = np.full(n, -1)
+        reach_shut = shut_reach(n, vars(a).get("coart_closures", ())) if vars(a).get("warp_shut_bank", False) else ()
+        size_of = np.linalg.norm(S[:, 33, :2] - S[:, 263, :2], axis=1)
         prevb = -1
         for i in range(n):
             need = float(np.max(np.abs(dFe[i]) / scale))
-            if a.warp_bank and need > a.warp_bank_thr:
-                j, dj = bank.nearest(i, Fe[i], scale, a.warp_pose_w, prev=prevb)
-                if dj < need - 0.15:
+            if (a.warp_bank or (i in reach_shut and need > SHUT_BANK)) and need > (a.warp_bank_thr if a.warp_bank else SHUT_BANK):
+                j, dj = bank.nearest(i, Fe[i], scale, a.warp_pose_w, prev=prevb, near_size=size_of if reach_shut else None)
+                if dj < need - 0.15 and (not reach_shut or abs(size_of[j] / max(size_of[i], 1e-6) - 1.0) <= SHUT_SIZE):
                     choice[i] = "b"
                     src_j[i] = prevb = j
         # donor choice for the interior: nearest in (gap, pose) among the take's frames. r2: ONE donor per opening segment
@@ -1518,7 +1538,10 @@ class WarpClip:
     def geometry(self, i, src, dst, ell=None):
         ell = self.ell if ell is None else ell
         if ell is not None:
-            return ell.anchors(self.pl, i), ell.weight(self.pl, i, (self.H, self.W))
+            ring = ell.anchors(self.pl, i)
+            if vars(self.a).get("warp_nose_lock", False):
+                ring = np.vstack([ring, self.S[i][NOSE_LOCK, :2]])  # zero displacement there: the field dies out below the nose
+            return ring, ell.weight(self.pl, i, (self.H, self.W))
         mc = self.S[i][[13, 14, 61, 291]].mean(0)[:2]
         return ring_anchors(np.vstack([src, dst]), mc, self.ring_f), None
 
@@ -1579,10 +1602,11 @@ class WarpClip:
             move_px=0.0,
         )
         dst_i = None
+        shut = vars(self.a).get("warp_shut_bank", False)
         for k, wk in msrc[i].items():
             if k >= 0:  # bank entry k: its canonical shape corrected to the target by J, projected with THIS frame's pose
                 Xt = C[k, CTRL] + model.delta(Fe_i - F[k])
-                dst = pl.rigid(i, Xt) - pl.rigid(i, C[i, CTRL]) + src
+                dst = pl.rigid(i, Xt) - pl.rigid(i, C[i, CTRL]) + src + (self.shape_at(i) if shut else 0.0)
                 if getattr(self, "yc", None) is not None:
                     dst = self.yc.apply(i, src, dst, ent)
                 anchors, wmap = self.geometry(i, src, dst, ell)
@@ -1620,7 +1644,9 @@ class WarpClip:
                         out, sa = seal_fill(out, dst[iin], (Fe_i[0] - model.rng["g_lo"]) / scale[0], a.warp_seal, g("warp_seal_grow", 1.6))
                         ent["seal"] = round(sa, 2)
             ent["move_px"] = max(ent["move_px"], round(float(np.abs(dst - src).max()), 2))
-            if k < 0:
+            if k < 0 or (
+                shut and (dst_i is None or wk == max(msrc[i].values()))
+            ):  # the lips are where the source that carries the frame puts them
                 dst_i = dst
             acc += wk * out.astype(np.float32)
             wacc += wk * w
@@ -2164,12 +2190,13 @@ class WarpClip:
             self.shape_px = np.zeros((n, len(CTRL), 2))
         up_w, lo_w = lip_rows()
         cx = self.S[:, CTRL, 0]
+        reach = CONTACT_REACH if getattr(getattr(self, "a", None), "warp_contact_reach", False) else CONTACT_MAX
         for i in np.flatnonzero((e["FF"] > 0.02) | (e["TH"] > 0.02)):
             k = "FF" if e["FF"][i] >= e["TH"][i] else "TH"
             w = float(e[k][i])
             dn, up, lo, io = comp.lips_to_edge(int(i), self.P_out[i])
-            dy_up = np.clip(CONTACT_UP - up, -CONTACT_MAX, CONTACT_MAX) * io * w
-            dy_lo = np.clip(CONTACT_LO[k] - lo, -CONTACT_MAX, CONTACT_MAX) * io * w
+            dy_up = np.clip(CONTACT_UP - up, -reach, reach) * io * w
+            dy_lo = np.clip(CONTACT_LO[k] - lo, -reach, reach) * io * w
             mid = 0.5 * (self.S[i, 61, 0] + self.S[i, 291, 0])
             hw = max(1.0, 0.5 * abs(self.S[i, 291, 0] - self.S[i, 61, 0]))
             bow = np.clip(1.0 - ((cx[i] - mid) / hw) ** 2, 0.0, 1.0)[:, None] ** 0.5

@@ -259,6 +259,8 @@ RECIPES = {
                 "--warp-round",
                 "0.6",
                 "--warp-contact",
+                "--warp-contact-reach",
+                "--warp-nose-lock",
                 "--warp-temporal",
                 "1.5",
                 "--warp-temporal-spare",

@@ -96,6 +96,18 @@ PLAN_OPEN = {
     "gu": (0.3, 0.65),
 }  # --coart-phones: the classes the library has no band for
 CONTACT_OPEN = {"FF": 0.04, "TH": 0.07, pl.BITE: 0.08}  # --warp-contact: the opening a dental gesture is planned at, in eye distances
+KEEP_OPEN = {  # --coart-keep-take: what a sound allows of the opening, take units. A range and not a value: the take inside it is right as it is
+    "aa": (0.5, 1.1), "ae": (0.5, 1.1), "ah": (0.4, 1.05), "ax": (0.1, 0.8), "ix": (0.1, 0.8), "E": (0.35, 1.05), "ih": (0.2, 0.95), "oh": (0.4, 1.05), "ou": (0.12, 0.75),
+    "gi": (0.3, 1.0), "gu": (0.3, 0.9), "RR": (0.1, 0.75), "CH": (0.08, 0.7), "SS": (0.05, 0.7), "DD": (0.08, 0.8), "kk": (0.08, 0.8), "nn": (0.08, 0.8),
+}  # fmt: skip
+KEEP_WIDE = {
+    "ou": (-mw.INF, -0.3),
+    "gu": (-mw.INF, -0.3),
+    "oh": (-mw.INF, -0.15),
+}  # rounding is a required shape; a spread take may stay spread on the rest
+KEEP_QUIET = 0.25  # the track's openness under which the take's shape stops counting, fully back at twice it
+KEEP_EASE = 0.04  # s: the ranges between phones, so nothing flips on and off
+CONTACT_PULL = 0.12  # --warp-contact-reach: the most a dental closes from the take's own opening, eye distances: what the skin takes
 RANGE_ANCHORS = "neutral"  # the plan's range match: its p5 / p95 -> the take's, the neutral level (0) fixed
 
 
@@ -785,7 +797,13 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     for s in segs:
         if s["v"] in held_open:
             for k in core_frames(s, tc):
-                caps[k] = min(caps.get(k, np.inf), held_open[s["v"]])
+                cap = held_open[s["v"]]
+                if vars(a).get("warp_contact_reach", False):
+                    cap = max(
+                        cap,
+                        float(Ft_u[k, 0]) - CONTACT_PULL * a.warp_contact_iod[0] / max(1e-6, a.warp_contact_iod[2] - a.warp_contact_iod[1]),
+                    )
+                caps[k] = min(caps.get(k, np.inf), cap)
         elif s["v"] in CLOSURES:
             for k in core_frames(s, tc):
                 caps[k] = min(caps.get(k, np.inf), s["T"][0], p5)
@@ -855,6 +873,9 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
     if vars(a).get("coart_phones", False) or contact or vars(a).get("warp_round", 0.0):
         marks = [dict(vis=s["v"], start=s["a"], end=s["b"]) for s in segs]
         a.coart_events = dict(pl.event_frames(marks, tc, ("FF", "TH")), round=pl.rounding(marks, tc))
+    keep_k = float(vars(a).get("coart_keep_take", 0.0) or 0.0)
+    if keep_k > 0:
+        x = keep_take(x, Ft_u, segs, n, fps, keep_k, lim, [fr_t[min(i, len(fr_t) - 1)].get("open", 1.0) for i in range(n)])
     rng_ratio = lambda X: [
         float(np.ptp(np.percentile(X[:, d], [5, 95])) / max(1e-6, np.ptp(np.percentile(Ft_u[keep, d], [5, 95])))) for d in range(2)
     ]
@@ -907,6 +928,32 @@ def plan(u, fr_t, fps, t0, neutral=None, bands=None, a=None, align=None, lead_sh
 
 class _Args:
     pass
+
+
+def keep_take(x, take, segs, n, fps, k, caps, level=None):
+    """--coart-keep-take: do no harm. Per frame the sound's range (KEEP_OPEN, KEEP_WIDE, eased between phones); the take clipped into it is where the mouth can stay, and the
+    plan keeps 1 - k of its way from there, for timing, inside the range. Frames with no range (rests, closures, contacts) keep the plan. caps: the closures' limits still hold."""
+    x, take = np.array(x, float), np.asarray(take, float)
+    lo, hi = np.full((n, 2), -mw.INF), np.full((n, 2), mw.INF)
+    on = np.zeros(n)
+    for s in segs:
+        if s["v"] in KEEP_OPEN and s["frames"]:
+            f = s["frames"]
+            lo[f, 0], hi[f, 0] = KEEP_OPEN[s["v"]]
+            lo[f, 1], hi[f, 1] = KEEP_WIDE.get(s["v"], (-mw.INF, mw.INF))
+            on[f] = 1.0
+    sig = KEEP_EASE * fps
+    near = lambda v: gaussian_filter1d(np.nan_to_num(v, posinf=9.0, neginf=-9.0), sig, axis=0, mode="nearest")
+    lo_, hi_ = near(lo), near(hi)
+    want = np.clip(take, lo_, hi_)
+    y = want + (1.0 - k) * np.clip(x - want, lo_ - want, hi_ - want)
+    if level is not None:  # no sound to fit: the take's shape has nothing to be right about, the plan's silence stands
+        on = on * smootherstep((np.asarray(level, float) - KEEP_QUIET) / KEEP_QUIET)
+    w = gaussian_filter1d(on, sig, mode="nearest")[:, None]
+    y = (1.0 - w) * x + w * y
+    for f, c in caps.items():
+        y[f, 0] = min(y[f, 0], c)
+    return y
 
 
 def plan_phones(a, align):

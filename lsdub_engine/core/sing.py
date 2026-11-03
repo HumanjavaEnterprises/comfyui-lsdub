@@ -59,14 +59,15 @@ def snap_paint(paint_args, m):
 # ---------------------------------------------------------------------------------------------------- pick
 def pick_extremes(egap_hi, target, m):
     """egap_hi: the warp's planned opening per INTERNAL frame (n * m); target: the audio opening per OUTPUT frame (n).
-    -> internal index per output frame: around k*m (+-m//2), the most-closed where the audio is at a local minimum,
-    the most-open at a local maximum, else k*m. Keeps the hard closures and peaks a plain decimation smears."""
+    -> internal index per output frame: from k*m to k*m+m//2, the most-closed where the audio is at a local minimum,
+    the most-open at a local maximum, else k*m. Keeps the hard closures and peaks a plain decimation smears. Never below
+    k*m: the internal frames there hold the source frame before, and pasting one puts old skin and an old nose in this frame."""
     e = np.asarray(egap_hi, float)
     t = np.asarray(target, float)
     n = len(t)
     out = []
     for k in range(n):
-        c = [j for j in range(k * m - m // 2, k * m + m // 2 + 1) if 0 <= j < len(e)] or [min(len(e) - 1, k * m)]
+        c = [j for j in range(k * m, k * m + m // 2 + 1) if 0 <= j < len(e)] or [min(len(e) - 1, k * m)]
         a, b = t[max(0, k - 1)], t[min(n - 1, k + 1)]
         lo = t[k] <= a and t[k] < b  # the bottom of a closure (where it starts to rise)
         hi = t[k] >= a and t[k] > b  # the top of an opening (where it starts to fall)

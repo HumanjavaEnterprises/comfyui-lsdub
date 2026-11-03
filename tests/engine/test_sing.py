@@ -3,6 +3,7 @@
 """lsdub sing + snap: frame picking keeps closures and peaks, the mic check, and the snap metrics (synthetic, no models)."""
 
 import numpy as np
+import pytest
 
 from lsdub_engine.core import sing as S
 from lsdub_engine.audits import snap as SN
@@ -17,6 +18,21 @@ def test_pick_extremes_keeps_the_closure_and_the_peak():
     assert idx[5] == 11 and e[idx[5]] == 12  # the most-open near k=5
     assert idx[0] == 0 and idx[3] == 6 and len(idx) == 8  # elsewhere: the on-time frame k*m
     assert S.pick_extremes(e[::2], t, 1) == list(range(8))
+
+
+@pytest.mark.parametrize("m", [2, 3])
+def test_pick_extremes_never_reaches_the_source_frame_before(m):
+    n = 40
+    rng = np.random.default_rng(m)
+    e, t = rng.random(n * m), rng.random(n)
+    idx = S.pick_extremes(e, t, m)
+    assert all(k * m <= j <= k * m + m // 2 for k, j in enumerate(idx))
+    assert any(j > k * m for k, j in enumerate(idx))
+    closure = np.ones(n * m)
+    closure[6 * m - 1] = 0  # the deepest internal frame sits just before k=6: the closure stays out of reach, the pick holds on time
+    dip = np.ones(n)
+    dip[6] = 0
+    assert S.pick_extremes(closure, dip, m)[6] == 6 * m
 
 
 def test_mic_near_lips():

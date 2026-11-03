@@ -947,6 +947,25 @@ def _parser():
         help="warp (coart): the lips round on rounded phones, corners in and lips fuller, this share of the full gesture, on top of the planned width (0 = off)",
     )
     ap.add_argument(
+        "--warp-contact-reach",
+        action="store_true",
+        help="warp (coart, layers): --warp-contact limited to what the skin takes from the take's opening; a wide take eases toward the teeth",
+    )
+    ap.add_argument(
+        "--warp-nose-lock", action="store_true", help="warp: the nose and its base hold still, the field falls to zero under them"
+    )
+    ap.add_argument(
+        "--warp-shut-bank",
+        action="store_true",
+        help="warp (coart): a closure too far from the take for the skin comes from a frame of the take nearer shut, cross-faded",
+    )
+    ap.add_argument(
+        "--coart-keep-take",
+        type=_not_negative,
+        default=0.0,
+        help="warp (coart): do no harm: where the take's shape fits the sound's range the plan keeps this share nearer the take, and outside it goes only as far as the range's edge; closures and contacts are required shapes (0 = off)",
+    )
+    ap.add_argument(
         "--warp-contact",
         action="store_true",
         help="warp (coart, layers): F / V lift the upper lip off the teeth and bring the lower lip to their edge, TH shows the tongue tip under them",
