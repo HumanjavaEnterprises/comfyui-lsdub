@@ -680,7 +680,7 @@
    ],
    "size": [
     340,
-    476
+    502
    ],
    "flags": {},
    "order": 13,
@@ -758,6 +758,12 @@
      "type": "VIDEO",
      "links": [],
      "slot_index": 1
+    },
+    {
+     "name": "card_video",
+     "type": "VIDEO",
+     "links": [],
+     "slot_index": 2
     }
    ],
    "properties": {
@@ -768,7 +774,8 @@
     18,
     "source",
     "song",
-    "mouth"
+    "mouth",
+    false
    ],
    "color": "#532",
    "title": "LSDub Dub"
@@ -778,7 +785,7 @@
    "type": "LSDubVerify",
    "pos": [
     520,
-    1534
+    1560
    ],
    "size": [
     340,
@@ -849,7 +856,7 @@
    "type": "PreviewAny",
    "pos": [
     900,
-    1534
+    1560
    ],
    "size": [
     300,
@@ -888,7 +895,7 @@
    "type": "LSDubFixIt",
    "pos": [
     1240,
-    1534
+    1560
    ],
    "size": [
     340,
@@ -954,7 +961,7 @@
    "type": "PreviewAny",
    "pos": [
     1620,
-    1534
+    1560
    ],
    "size": [
     300,
@@ -993,7 +1000,7 @@
    "type": "LSDubSaveCut",
    "pos": [
     1960,
-    1534
+    1560
    ],
    "size": [
     340,
@@ -1450,7 +1457,7 @@
     500,
     868,
     780,
-    556
+    582
    ],
    "color": "#b06634",
    "font_size": 28,
@@ -1460,7 +1467,7 @@
    "title": "QA",
    "bounding": [
     500,
-    1484,
+    1510,
     1840,
     296
    ],
