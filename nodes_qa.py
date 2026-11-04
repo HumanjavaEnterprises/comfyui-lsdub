@@ -276,6 +276,10 @@ FIXES = [
     ('too short', 'Shorter than the minimum shot: leave it.'),
     ('identity drift', 'The face changed: lower face_target or turn auto off in LSDub Mouth Tweaks (a tweak change re-dubs the shot).'),
     ('mouth off the vocal', 'Sync is off: try lead 0.03-0.10 in LSDub Mouth Tweaks (check the words in the lyric check first).'),
+    ('does not follow the vocal', 'The mouth does not follow the song: check the lead vocal is the dry lead and the words in the lyric '
+                                  'check, then force the shot.'),
+    ('trails the vocal', 'The mouth is late against the song: raise lead (0.08-0.12) in LSDub Mouth Tweaks and force the shot.'),
+    ('leads the vocal', 'The mouth is early against the song: lower lead (0.0-0.03) in LSDub Mouth Tweaks and force the shot.'),
     ('open in the silences', 'Mouth open in the gaps: raise word_close (0.08-0.12) in LSDub Mouth Tweaks.'),
     ('soft attacks', 'Attacks are soft: keep snap on and lower lead a little.'),
     ('barely moves', 'Held gape or mumble: raise word_close, and check the vocal is the dry lead.'),

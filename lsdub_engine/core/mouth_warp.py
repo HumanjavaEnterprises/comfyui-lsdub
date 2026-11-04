@@ -229,14 +229,19 @@ def _to_band(u, lo, hi, centre):
     return e + centre * (mid - e)
 
 
-def target_features(fr_t, F, rng, open_gain=1.0, width_gain=1.0, sigma=1.0, bands=None, centre=0.0, width_mix="switch", close_depth=0.0):
+def target_features(
+    fr_t, F, rng, open_gain=1.0, width_gain=1.0, sigma=1.0, bands=None, centre=0.0, width_mix="switch", close_depth=0.0, follow=0.0
+):
     """per-frame target (gap, width): the observed features F (T x 2) clipped into the viseme's band (vis/vis2 mixed),
     bands in the take's own range; vowels' lower bound is raised by the audio's openness (A2F jaw / envelope).
     centre (0..1): a shape outside its band is moved past the band edge toward the band centre (0 = edge, r1 behaviour).
     width_mix: 'switch' (r2) = the width band of vis2 once mix >= 0.5, even when vis2 has none (a spread E whose vis2 is
     sil / aa then loses its width target mid-vowel); 'primary' = vis's band unless vis2 has its own band and mix > 0.5.
     close_depth: PP targets this far BELOW the take's shut gap (units of its range): a press, not a touch, so the closure
-    survives the field's smoothing and reads shut."""
+    survives the field's smoothing and reads shut.
+    follow (> 0): the opening band of every frame but a closure is also held within +-follow of the track's planned opening (its
+    `open`, 0..1 of the take's range), so the take's own mouth passes only that near the plan. 0 (the default): a take's mouth
+    anywhere inside the viseme's band is kept as it is, with its own timing, which is not the song's."""
     n = len(F)
     go, gs = rng["g_lo"], max(1e-6, rng["g_hi"] - rng["g_lo"])
     uo = (F[:, 0] - go) / gs
@@ -257,6 +262,10 @@ def target_features(fr_t, F, rng, open_gain=1.0, width_gain=1.0, sigma=1.0, band
             lo = max(lo, min(hi, 0.8 * float(f.get("open", 0))))
         if v1 == "PP":
             lo, hi = -close_depth, 0.03 - close_depth
+        elif follow > 0:
+            u = float(f.get("open", 0.0))
+            a, b = max(lo, u - follow), min(hi, u + follow)
+            lo, hi = (a, b) if a <= b else (max(0.0, u - follow), u + follow)  # the band lags the plan (a held vowel's band): the plan
         to[i] = _to_band(uo[i], lo * open_gain if lo > 0 else lo, hi * max(1.0, open_gain) if hi > 0 else hi, centre)
         w1, w2 = VW.get(v1, (-INF, INF)), VW.get(v2, (-INF, INF))
         if width_mix == "primary":
@@ -1334,6 +1343,7 @@ class WarpClip:
                 g("warp_centre", 0.0),
                 g("warp_width_mix", "switch"),
                 g("warp_close_depth", 0.0),
+                g("warp_follow", 0.0),
             )
         # ---- end coart
         dl = np.array([np.linalg.norm(S[i][33, :2] - S[i][168, :2]) for i in range(n)])

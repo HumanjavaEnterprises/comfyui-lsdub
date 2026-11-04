@@ -11,13 +11,17 @@ step, for EVERY sung shot). CPU.
               crop they are built at 512, not native. A mic near the lips (chrome in the lower face of the crop) writes
               the occluder command for the GPU agent (`lsdub occluders`, Florence-2 + SAM 2) to work/gpu_occluders.sh;
               an existing work/occ.npz is used (`--occluder-mask`).
-  4 warp      SNAP: the viseme track and the crop at --fps-mult (2) x the frame rate, with between-word closures
+  4 plan      the alignment's words and phones re-read off the vocal (vocal_retime, anchored to the aligner's times) ->
+              work/align_vocal.json, which every step below plans from (--no-vocal-retime: the alignment as it is)
+    warp      SNAP: the viseme track and the crop at --fps-mult (2) x the frame rate, with between-word closures
               (--word-close), a shorter vocal attack (sung_dyn --attack-ms) and less smoothing in frame units; then
               one internal frame per output frame, keeping the extremes: at a closure the most-closed, at a peak the
               most-open, else the on-time frame (pick_extremes)
   5 composite the tier-2 paste (lsdub medium): area down, Lab match, grain, feathered nose-to-chin mask, the rest of the
-              frame bit-exact; then the MEASURED gate: rendered-mouth corr vs the audio opening >= 0.5 and
-              open-in-silence <= 0.35, plus snap numbers (rise_ms, closure_hit) -> --json
+              frame bit-exact; then the MEASURED gate on the delivered mouth: against the VOCAL itself (sync_truth: audio
+              sync >= 0.30 at lag 0, the mouth no more than ~1 frame late) and open-in-silence <= 0.35; the corr against the
+              alignment-built opening (>= 0.5 before) is reported as a diagnostic, and decides only when the vocal has nothing
+              to read; plus snap numbers (rise_ms, closure_hit) -> --json
 
   lsdub sing --take take.mp4 --align align.json --vocal lead.wav --t0 64.3 --out sung.mp4 --work dir
              [--char singer_a --cast-db cast_db.npz | --box x0,y0,x1,y1] [--face-target 512] [--fps-mult 2]
@@ -33,10 +37,17 @@ import cv2, numpy as np
 from . import medium as MED
 
 GATE_CORR, GATE_SILENCE = 0.5, 0.35
-GATE_KEYS = ("corr", "corr_all", "best", "lag_ms", "corr_pm1", "open_in_silence", "rise_ms", "closure_hit", "pass", "vocal_frac")
+GATE_KEYS = (
+    "corr", "corr_all", "best", "lag_ms", "corr_pm1", "open_in_silence", "rise_ms", "closure_hit", "pass", "vocal_frac",
+    "truth", "truth_lag_ms", "truth_best", "truth_level", "truth_events", "truth_pass", "truth_kept", "truth_kept_lag_ms",
+)  # fmt: skip
+AUTO_KEYS = ("truth", "truth_lag_ms", "corr", "best", "open_in_silence", "rise_ms", "closure_hit", "pass")
 SNAP = dict(
-    lead=0.06, word_close=0.06, attack_ms=15.0, paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05"]
-)
+    lead=0.06,
+    word_close=0.06,
+    attack_ms=15.0,
+    paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15"],
+)  # --warp-follow: the plain target holds the opening near the plan, so a take's own mouth timing does not ride through
 
 
 def snap_paint(paint_args, m):
@@ -83,6 +94,49 @@ def pick_extremes(egap_hi, target, m):
 def dyn_target(dyn_csv, n, t0, fps, dt=0.0):
     R = list(csv.DictReader(open(dyn_csv)))
     return np.interp(np.arange(n) / fps + dt, np.array([float(r["time_s"]) for r in R]) - t0, np.array([float(r["geo_gap_cm"]) for r in R]))
+
+
+RETIME_CAP = 0.25  # s: no word moves further than this off the aligner (and no ad-lib moves at all)
+RETIME_MARGIN = 0.02  # the retimed plan's audio sync must beat the aligner's by this much: a smaller gain is not a reading
+
+
+def retimed_align(align, vocal, work, t0=None, n=None, fps=25.0, lead=0.06, word_close=0.06):
+    """the alignment with its words and phones re-read off the vocal (vocal_retime, the walk anchored to the aligner's times and held to
+    +-RETIME_CAP; ad-libs keep their times, so the spans handed back to the take do not move), kept only when it is better on this
+    shot: the viseme plan's opening (viseme_track at fps over the shot's n frames from t0) read against the vocal (sync_truth) must
+    rise by RETIME_MARGIN. -> (the alignment's path, a note {used, plan_truth: [aligned, retimed]}); the retimed one is work/align_vocal.json. No
+    alignment or vocal file to read: the alignment as given (the plan's own steps then say what is missing)."""
+    from ..audits import sync_truth as ST
+    from . import viseme_track as VT, vocal_retime as VR
+
+    if not (os.path.exists(align) and os.path.exists(vocal)):
+        return align, {"used": False, "why": "nothing to read"}
+    A = json.load(open(align))
+    x = VR.read_mono(vocal)
+    R = VR.retime(A, vocal, x=x, cap=RETIME_CAP)
+    note = {"used": False, "cap_s": RETIME_CAP}
+    if t0 is not None and n:
+        oc = VT.envelope_open(vocal, t0, n, fps)
+        clip = x[int(round(max(0.0, t0) * VR.SR)) :]
+        plan = lambda al: np.array(
+            [f["open"] for f in VT.build(al, t0, n, fps, lead=lead, min_hold=3, open_curve=oc, word_close=word_close)]
+        )
+        t = [ST.read(plan(al), clip, fps)["truth"] for al in (A, R)]
+        note["plan_truth"] = t
+        if t[0] is not None and t[1] is not None and t[1] < t[0] + RETIME_MARGIN:
+            return align, note  # the vocal's times do not make this shot's plan clearly better: the aligner's stand
+    out = os.path.join(work, "align_vocal.json")
+    json.dump(R, open(out, "w"), indent=0)
+    note["used"] = True
+    return out, note
+
+
+def compressed_vocal(vocal, work):
+    """the lead stem levelled for the drive (ffmpeg acompressor, then a peak normaliser) -> work/vocal_drive.wav."""
+    out = os.path.join(work, "vocal_drive.wav")
+    af = "acompressor=threshold=-24dB:ratio=4:attack=5:release=80:makeup=2,alimiter=limit=0.9"
+    ff.run(["ffmpeg", "-v", "error", "-y", "-i", vocal, "-af", af, out], check=True)
+    return out
 
 
 def plan_t0(t0, paint_args, rate):
@@ -153,8 +207,14 @@ def run(
     auto=False,
     preset=None,
     lossless=False,
+    vocal_retime=True,
+    pump=None,
+    drive_comp=False,
 ):
     os.makedirs(work, exist_ok=True)
+    again = dict(paint_args=paint_args, char=char, db=db, box=box, face_target=face_target, fps_mult=fps_mult, snap=snap, a2f=a2f,
+                 lead=lead, word_close=word_close, auto=auto, preset=preset, lossless=lossless, pump=pump, drive_comp=drive_comp)  # fmt: skip
+    align0 = align
     if not a2f:
         wt = paint_api.target(paint_args)
         by = (
@@ -173,6 +233,9 @@ def run(
     n = len(F)
     m = max(1, int(fps_mult)) if snap else 1
     info = {"take": take, "t0": t0, "frames": n, "fps": fps, "face_target": face_target, "fps_mult": m, "snap": snap, "threads": threads}
+    if vocal_retime:
+        align, info["retime"] = retimed_align(align, vocal, work, t0, n, fps, lead, word_close)
+    info["align"] = align
     tm, t_ = {}, time.perf_counter()  # seconds per stage, into `info`; nothing reads them back
     if char and db:
         box, t = singer_box(take, char, db, preset=preset)
@@ -181,7 +244,8 @@ def run(
     # 4a. tracks: the audio opening (sung_dyn) and the viseme track at the internal rate
     dyn = os.path.join(work, "dyn.csv")
     trk = os.path.join(work, "track.json")
-    sd = ["--align", align, "--audio", vocal, "--t0", str(t0), "--dur", str(n / fps + 0.5), "--out", dyn]
+    drive = compressed_vocal(vocal, work) if drive_comp else vocal  # the stem the plan opens to; the gate always reads `vocal`
+    sd = ["--align", align, "--audio", drive, "--t0", str(t0), "--dur", str(n / fps + 0.5), "--out", dyn]
     vs = [
         "--align",
         align,
@@ -192,12 +256,16 @@ def run(
         "--fps",
         str(fps * m),
         "--audio",
-        vocal,
+        drive,
         "--lead",
         str(lead),
         "--out",
         trk,
     ]
+    if pump:  # (gate, ratio): the drive's gate + compressor (sung_dyn.pump) on both curves
+        pf = ["--pump-gate", str(pump[0]), "--pump-ratio", str(pump[1])]
+        sd += pf
+        vs += pf
     if a2f:
         sd += ["--a2f-csv", a2f]
         vs += ["--a2f-csv", a2f]
@@ -274,15 +342,18 @@ def run(
         tm["native"] = round(time.perf_counter() - t_, 3)
     info["timings"] = tm
     info["medium"] = {k: R[k] for k in ("face_h_px", "zoom", "crop_px", "outside_max_preencode", "not_pasted", "picked")}
+    if (info.get("retime") or {}).get("used"):
+        info = travel_guard(info, take, align0, vocal, t0, out, work, R, again)
     if report:
         json.dump(info, open(report, "w"), indent=1)
     g = info
     print(
-        f"sing {out}: face {R['face_h_px']:.0f}px x{R['zoom']:.2f} @{m}x fps; MEASURED corr {g['corr']} (best {g['best']} at "
+        f"sing {out}: face {R['face_h_px']:.0f}px x{R['zoom']:.2f} @{m}x fps; MEASURED audio sync {g.get('truth')} (mouth "
+        f"{g.get('truth_lag_ms')} ms vs the vocal), plan corr {g['corr']} (best {g['best']} at "
         f"{g['lag_ms']} ms), open-in-silence {g['open_in_silence']}, rise {g['rise_ms']} ms, closures {g['closure_hit']} "
         f"-> {'PASS' if g['pass'] else 'FAIL'}"
         + (
-            f"; auto -> {g['auto']['winner']} (sing {g['auto']['sing']['corr']}, native {g['auto']['native']['corr']})"
+            f"; auto -> {g['auto']['winner']} (sing {g['auto']['sing']['truth']}, native {g['auto']['native']['truth']})"
             if g.get("auto")
             else ""
         )
@@ -292,8 +363,10 @@ def run(
 
 
 def pick_paint(s, n):
-    """the rate that wins, by their gates: one that passes beats one that fails, else the better sync, within 0.02 the quieter silences. Unmeasured silence is the worst."""
-    key = lambda g: (g["corr"] if g["corr"] is not None else -9, -(g["open_in_silence"] if g.get("open_in_silence") is not None else 9))
+    """the rate that wins, by their gates: one that passes beats one that fails, else the better sync, within 0.02 the quieter silences. Unmeasured silence is the worst.
+    The sync is the audio sync (truth) when both gates read it, else the plan corr."""
+    k = "truth" if s.get("truth") is not None and n.get("truth") is not None else "corr"
+    key = lambda g: (g[k] if g[k] is not None else -9, -(g["open_in_silence"] if g.get("open_in_silence") is not None else 9))
     if bool(s.get("pass")) != bool(n.get("pass")):
         return "native" if n.get("pass") else "sing"
     s_c, n_c = key(s), key(n)
@@ -347,8 +420,8 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
     return {
         "auto": {
             "winner": win,
-            "sing": {k: sing_info.get(k) for k in ("corr", "best", "open_in_silence", "rise_ms", "closure_hit", "pass")},
-            "native": {k: g_n.get(k) for k in ("corr", "best", "open_in_silence", "rise_ms", "closure_hit", "pass")},
+            "sing": {k: sing_info.get(k) for k in AUTO_KEYS},
+            "native": {k: g_n.get(k) for k in AUTO_KEYS},
         },
         **(
             {
@@ -363,20 +436,17 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
 
 def gate(video, R, target, vocal, align, t0, fps, roi_pad=1.0, work=None, warp_json=None):
     work = work or tempfile.mkdtemp(prefix="lsdub_gate_")
-    """measured corr (sync-qa's measured_opening on a face box around the composite) + snap; pass = corr >= GATE_CORR
-    (best within +-1 frame, as the round-4 gate) and open-in-silence <= GATE_SILENCE. warp_json: the frames a vocalisation span
-    took out of the audio's hands (--vocalisations skip | rest) are left out of the corr; vocal_frac reports their share."""
-    from ..audits import sync_qa as Q, snap as SN
+    """the mouth measured on the delivered pixels (sync-qa's measured_opening on a face box around the composite), read against
+    the vocal itself (sync_truth: truth, truth_lag_ms) and against the alignment-built opening (corr, best within +-1 frame as
+    the round-4 gate: a diagnostic) + snap. pass = sync_truth passes and open-in-silence <= GATE_SILENCE; a vocal sync_truth
+    cannot read falls back to corr >= GATE_CORR. warp_json: the frames a vocalisation span took out of the audio's hands
+    (--vocalisations skip | rest) are left out of both readings; vocal_frac reports their share."""
+    from ..audits import sync_qa as Q, snap as SN, sync_truth as ST
     from . import vocalisations as VOC
 
     os.makedirs(work, exist_ok=True)
     B, _ = MED.read(video, len(target))
-    cx = np.median([f["centre"][0] for f in R["per_frame"]])
-    cy = np.median([f["centre"][1] for f in R["per_frame"]])
-    s = R["face_h_px"] * 1.6 * roi_pad
-    H, W = B[0].shape[:2]
-    roi = [int(max(0, cy - s / 2)), int(min(H, cy + s / 2)), int(max(0, cx - s / 2)), int(min(W, cx + s / 2))]
-    op, cover = Q.measured_opening(B, roi, fps)
+    op, cover = Q.measured_opening(B, face_roi(R, B[0].shape, roi_pad), fps)
     if op is None:
         return {
             "corr": None,
@@ -389,6 +459,7 @@ def gate(video, R, target, vocal, align, t0, fps, roi_pad=1.0, work=None, warp_j
             "closure_hit": None,
             "pass": False,
             "vocal_frac": 0.0,
+            **dict.fromkeys(ST.KEYS),
         }  # same keys as a measured gate (run() prints them)
     keep, vocal_frac = VOC.scored_frames(warp_json, len(op))
     c0, cb, lag = Q.tracking(op, target, fps, keep=keep)
@@ -398,9 +469,10 @@ def gate(video, R, target, vocal, align, t0, fps, roi_pad=1.0, work=None, warp_j
 
     A = json.load(open(align))
     words = logged_words(A["words"], warp_json)
+    vox = vocal_clip(vocal, t0, len(target) / fps, work)
     sn = SN.snap_metrics(
         op,
-        vocal_clip(vocal, t0, len(target) / fps, work),
+        vox,
         words,
         t0,
         fps,
@@ -408,10 +480,134 @@ def gate(video, R, target, vocal, align, t0, fps, roi_pad=1.0, work=None, warp_j
         keep=keep if A.get("pass_over") else None,
     )
     np.save(os.path.join(work, "measured_open.npy"), op)
-    ok = c1 >= GATE_CORR and (sn["open_in_silence"] is None or sn["open_in_silence"] <= GATE_SILENCE)
+    tr = ST.read_wav(op, vox, fps, keep)
+    synced = tr["truth_pass"] if tr["truth_pass"] is not None else c1 >= GATE_CORR
+    ok = synced and (sn["open_in_silence"] is None or sn["open_in_silence"] <= GATE_SILENCE)
     return dict(
-        corr=round(c0, 3), best=round(cb, 3), lag_ms=lag, corr_pm1=round(c1, 3), cover=round(cover, 3), **sn, **extra, **{"pass": bool(ok)}
+        corr=round(c0, 3),
+        best=round(cb, 3),
+        lag_ms=lag,
+        corr_pm1=round(c1, 3),
+        cover=round(cover, 3),
+        **sn,
+        **extra,
+        **tr,
+        **{"pass": bool(ok)},
     )
+
+
+def face_roi(R, shape, roi_pad=1.0):
+    """the gate's box on the composite: the paste's median centre, 1.6 face heights a side."""
+    cx = np.median([f["centre"][0] for f in R["per_frame"]])
+    cy = np.median([f["centre"][1] for f in R["per_frame"]])
+    s = R["face_h_px"] * 1.6 * roi_pad
+    H, W = shape[:2]
+    return [int(max(0, cy - s / 2)), int(min(H, cy + s / 2)), int(max(0, cx - s / 2)), int(min(W, cx + s / 2))]
+
+
+REPAIR_DROP = 0.03  # a continuity repair that costs the audio sync more than this is not delivered
+
+
+def mouth_open(video, R, n):
+    """the mouth opening of a shot video on the gate's box (sync_qa.measured_opening), n frames."""
+    from ..audits import sync_qa as Q
+
+    B, fps = MED.read(video, n)
+    return Q.measured_opening(B, face_roi(R, B[0].shape), fps)[0]
+
+
+def travel(op):
+    return None if op is None else round(float(np.percentile(op, 95) - np.percentile(op, 5)), 4)
+
+
+def travel_guard(info, take, align, vocal, t0, out, work, R, again):
+    """a retimed shot whose delivered mouth is a held gape against its own take (scorecard.held_gape: under 0.10 of travel and under
+    TRAVEL_KEEP of the take's, or under the floor) is rendered again from the aligner's times (work/aligner); when that one passes and
+    is not a held gape, it is delivered instead. The retime can shorten the plan's openings in a way the plan's own reading does not
+    show. -> the info of what is delivered, with the readings under retime.guard."""
+    import shutil
+
+    from ..audits import scorecard as SC
+
+    n = info["frames"]
+    t_take, t_out = travel(mouth_open(take, R, n)), travel(mouth_open(out, R, n))
+    held = lambda t: t is not None and t_take is not None and SC.held_gape(dict(mouth_range=t, before=dict(mouth_range=t_take)))
+    guard = {"take_travel": t_take, "retimed_travel": t_out, "held": held(t_out)}
+    if not guard["held"]:
+        info["retime"]["guard"] = guard
+        return info
+    alt_work = os.path.join(work, "aligner")
+    alt_out = os.path.join(alt_work, os.path.basename(out))
+    os.makedirs(alt_work, exist_ok=True)
+    if os.path.exists(os.path.join(work, "occ.npz")):  # the occluder mask (a mic at the lips) goes with the shot
+        shutil.copyfile(os.path.join(work, "occ.npz"), os.path.join(alt_work, "occ.npz"))
+    alt = run(take, align, vocal, t0, alt_out, alt_work, vocal_retime=False, report=None, **again)
+    guard["aligner_travel"] = travel(mouth_open(alt_out, R, n))
+    guard["aligner_pass"] = bool(alt.get("pass"))
+    if alt.get("pass") and not held(guard["aligner_travel"]):
+        shutil.copyfile(alt_out, out)
+        alt["retime"] = dict(info["retime"], used=False, guard=dict(guard, delivered="aligner"))
+        return alt
+    info["retime"]["guard"] = dict(guard, delivered="retimed")
+    return info
+
+
+def delivered_truth(video, info, work):
+    """sync_truth of a finished shot video on the gate's box, against the gate's vocal clip (work/vox.wav) and frames."""
+    from ..audits import sync_qa as Q, sync_truth as ST
+    from . import vocalisations as VOC
+
+    R = json.load(open(os.path.join(work, "medium.json")))
+    B, fps = MED.read(video, info["frames"])
+    op, _ = Q.measured_opening(B, face_roi(R, B[0].shape), fps)
+    if op is None:
+        return dict.fromkeys(ST.KEYS)
+    return ST.read_wav(op, os.path.join(work, "vox.wav"), fps, VOC.scored_frames(info.get("warp_json"), len(op))[0])
+
+
+def repaired_silence(video, info, work):
+    """the gate's open-in-silence (snap) on a finished shot video: its mouth on the gate's box, the gate's vocal clip, the plan's moves."""
+    from ..audits import snap as SN
+    from .coart import logged_offsets
+
+    R = json.load(open(os.path.join(work, "medium.json")))
+    op = mouth_open(video, R, info["frames"])
+    vox = os.path.join(work, "vox.wav")
+    if op is None or not os.path.exists(vox):
+        return None
+    dt = logged_offsets(info.get("warp_json"), len(op), info["fps"])
+    return SN.snap_metrics(op, vox, [], info["t0"], info["fps"], dt=dt)["open_in_silence"]
+
+
+def repair(take, sung, out, info, work, report=None):
+    """the continuity repair (single-frame pops against the take) on a sung shot, delivered only when the repaired mouth still follows
+    the vocal: it puts take frames back, and a take's mouth is not on the song. A repair that costs more than REPAIR_DROP of the audio
+    sync, turns a passing shot into a failing one, or puts its open-in-silence over GATE_SILENCE, is undone (out = the sung shot).
+    -> the reading, into the gate's info."""
+    import shutil
+
+    from . import continuity as CONT
+
+    CONT.run(take, sung, out, report=report)
+    if info.get("truth") is None or not os.path.exists(os.path.join(work, "medium.json")):
+        return {"repair": "kept"}
+    t = delivered_truth(out, info, work)
+    sil = repaired_silence(out, info, work)
+    over = sil is not None and sil > GATE_SILENCE and (info.get("open_in_silence") is None or info["open_in_silence"] <= GATE_SILENCE)
+    if over or (
+        t.get("truth") is not None and (t["truth"] < info["truth"] - REPAIR_DROP or (info.get("truth_pass") and not t["truth_pass"]))
+    ):
+        shutil.copyfile(sung, out)
+        if report and os.path.exists(report):  # the report says what was delivered: the sung shot, its repairs not applied
+            rep = json.load(open(report))
+            rep.update(
+                undone=True,
+                delivered="sung",
+                undone_why=f"audio sync {info['truth']} -> {t['truth']}, open in silence {info.get('open_in_silence')} -> {sil} with the repairs",
+            )
+            json.dump(rep, open(report, "w"), indent=1)
+        return {"repair": "undone", "repair_truth": t["truth"], "repair_silence": sil}
+    return {"repair": "kept", "repair_truth": t.get("truth"), "repair_silence": sil}
 
 
 def vocal_clip(vocal, t0, dur, work):
@@ -450,10 +646,24 @@ def main(argv=None):
     )
     ap.add_argument("--word-close", type=float, help="between-word closure, s (default 0.06 with snap)")
     ap.add_argument(
+        "--drive-pump",
+        type=float,
+        help="the drive's gate + 4:1 compressor (sung_dyn.pump) at this gate, on the viseme envelope and the sung_dyn curve; off by "
+        "default",
+    )
+    ap.add_argument("--drive-comp", action="store_true", help="the drive opens to a level-compressed copy of the lead stem; off by default")
+    ap.add_argument(
+        "--no-vocal-retime",
+        dest="vocal_retime",
+        action="store_false",
+        help="plan from the alignment's own times; by default its words and phones are first re-read off the vocal (vocal_retime)",
+    )
+    ap.add_argument(
         "--auto",
         action="store_true",
         help="also run the native warp (full frame, frame rate, --lead 0.1, no word-close: the pre-sing recipe) and keep "
-        "the higher measured corr; open-in-silence breaks a tie within 0.02 (an unmeasured silence counts as the worst)",
+        "the one whose gate passes, else the higher audio sync (the plan corr when the vocal reads nothing); open-in-silence "
+        "breaks a tie within 0.02 (an unmeasured silence counts as the worst)",
     )
     a = ap.parse_args(argv)
     info = run(
@@ -477,6 +687,9 @@ def main(argv=None):
         auto=a.auto,
         preset=a.preset,
         lossless=a.lossless_intermediates,
+        vocal_retime=a.vocal_retime,
+        pump=(a.drive_pump, 4.0) if a.drive_pump else None,
+        drive_comp=a.drive_comp,
     )
     return 0 if info["pass"] else 1
 

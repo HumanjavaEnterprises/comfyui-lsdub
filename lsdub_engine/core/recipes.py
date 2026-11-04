@@ -167,7 +167,11 @@ RULES = (
         "read only with the coart planner's phones, no --warp-target coart here",
         lambda a: a.warp_target != "coart",
     ),
-    Rule(("--warp-sigma",), "read only by the plain targets, not under this --warp-target", lambda a: a.warp_target in ("coart", "own")),
+    Rule(
+        ("--warp-sigma", "--warp-follow"),
+        "read only by the plain targets, not under this --warp-target",
+        lambda a: a.warp_target in ("coart", "own"),
+    ),
     Rule(
         ("--warp-tongue",),
         "--warp-reg single zeroes the vowel part of the tongue's pose (rise, tip, retraction: plan_single, tg = 0); the tongue is still "

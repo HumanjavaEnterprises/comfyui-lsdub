@@ -417,6 +417,13 @@ def _parser():
         "gap (x the take's range): a lip press that survives the field smoothing; 0 = touch (r2)",
     )
     ap.add_argument(
+        "--warp-follow",
+        type=float,
+        default=0.0,
+        help="warp (plain targets): hold each frame's opening within +-this (x the take's range) of the track's planned opening, so "
+        "the take's own mouth, with its own timing, passes only near the plan; 0 = anywhere inside the viseme's band",
+    )
+    ap.add_argument(
         "--warp-jaw-gain", type=float, default=1.0, help="warp: gain on the soft chin's share of an opening / closing (jaw drop / raise)"
     )
     ap.add_argument(

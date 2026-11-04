@@ -88,6 +88,7 @@ SHIP = {
     "strip": "audits.sync_strip",
     "cadence": "audits.cadence",
     "sync-qa": "audits.sync_qa",
+    "sync-truth": "audits.sync_truth",
     "retime": "core.retime",
     "occluders": "core.occluders",
     "continuity": "core.continuity",

@@ -344,7 +344,7 @@ def verdict(s, has_refs):
 
 # ---------------------------------------------------------------------------------------------------- verify
 def verify(video, vocal, shots_json, before=None, align=None, model=None, work=None, emb=None):
-    from . import sync_qa as Q, snap as SN, scorecard as SC
+    from . import sync_qa as Q, snap as SN, scorecard as SC, sync_truth as ST
     from ..core import cast as C
 
     J = json.load(open(shots_json))
@@ -367,12 +367,15 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
         if s["verdict"] not in ("DUB", "DUB-MEDIUM"):
             continue
         r = {k: s.get(k) for k in ("shot", "f0", "f1", "start", "end", "verdict", "target", "px1080")}
-        r.update(measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q, SN))
-        r.update(vocal_reading(words, vocal_words, s, offset, heard))
+        al = shot_align(s, align)  # the alignment this shot's dub planned from: closures and the plan curve are read against it
+        w_ = words if al == align else json.load(open(al))["words"]
+        r["align_read"] = "dub's retimed" if al != align else "project"
+        r.update(measure_shot(video, s, fps, offset, vocal, act, al, w_, faces, work, Q, SN))
+        r.update(vocal_reading(w_, vocal_words, s, offset, heard))
         r.update(path_reading(s))
         if before:
-            b = measure_shot(before, s, fps, offset, vocal, act, align, words, faces, os.path.join(work, "before"), Q, SN)
-            r["before"] = {k: b.get(k) for k in ("corr", "mouth_range", "open_in_silence", "mouth_visible")}
+            b = measure_shot(before, s, fps, offset, vocal, act, al, w_, faces, os.path.join(work, "before"), Q, SN)
+            r["before"] = {k: b.get(k) for k in ("corr", "mouth_range", "open_in_silence", "mouth_visible", *ST.KEYS)}
             r["identity_cos"] = identity_cos(video, before, s, emb)
             r["mouth_identity_cos"] = identity_cos(video, before, s, emb, lower_face)
         rows.append(r)
@@ -381,7 +384,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
     for r in rows:
         score_row(r, smed, SC)
         if "before" in r:
-            b = dict(r, **r["before"])
+            b = {k: v for k, v in dict(r, **r["before"]).items() if k != "before"}  # the source on its own: no take of its own to read
             b["corr_pm1"] = b.get("corr")
             score_row(b, smed, SC)
             r["before"]["score"] = b["score"]
@@ -393,6 +396,24 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
     meta = {"video": video, "shots_json": shots_json, "before": before, "bands": {"PASS": PASS_BAND, "REVIEW": REVIEW_BAND}}
     meta["closures_lost"] = SN.lost_closures(words, n / fps - offset)
     return meta, rows
+
+
+def shot_align(s, align):
+    """the alignment a shot's dub planned from: the sing work dir's align_vocal.json when its gate kept the retime (gate.json, the
+    folder above the warp log's work dir), else the project's alignment."""
+    wj = s.get("warp_json")
+    if not align or not wj or s.get("used") == "source":
+        return align
+    work = os.path.dirname(wj)
+    rv = os.path.join(work, "align_vocal.json")
+    gate = os.path.join(os.path.dirname(work), "gate.json")
+    if not os.path.exists(rv) or not os.path.exists(gate):
+        return align
+    try:
+        G = json.load(open(gate))
+    except (OSError, ValueError):
+        return align
+    return rv if (G.get("retime") or {}).get("used") and G.get("align") == rv else align
 
 
 def shape_readings(shape, warp_json, words, t0, fps, SN):
@@ -493,6 +514,7 @@ def nose_of(F, s):
 
 def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q, SN):
     from ..core.coart import logged_dyn_flags, logged_offsets, logged_words
+    from . import sync_truth as ST
 
     os.makedirs(work, exist_ok=True)
     F = Q.read_span(video, s["f0"], s["f1"] + 1)
@@ -536,6 +558,7 @@ def measure_shot(video, s, fps, offset, vocal, act, align, words, faces, work, Q
             out["vocal_frac"] = vocal_frac
             ec, eb, el = Q.tracking(op, np.asarray(env[: len(op)], float), fps, keep=keep)  # no alignment in this reading
             out.update(env_corr=round(ec, 3), env_best=round(eb, 3), env_lag_ms=el)
+            out.update(ST.read_wav(op, vox, fps, keep))  # the vocal itself: what decides the sync
             if keep is not None:
                 out["corr_all"] = round(Q.tracking(op, tg, fps)[0], 3)
             out.update(
@@ -622,12 +645,30 @@ def score_row(r, smed, SC):
     elif r["class"] == "COVERAGE":
         r["band"] = "REVIEW"
     else:
+        truth_cap(r)
         r["band"] = "PASS" if r["score"] >= PASS_BAND else "REVIEW" if r["score"] >= REVIEW_BAND else "FAIL"
     if (r.get("vocal_frac") or 0) >= VOCAL_NOTE and r["band"] in ("REVIEW", "FAIL"):
         r["reason"] = f"vocalisation spans cover {r['vocal_frac']:.0%} of the shot; " + r["reason"]
     if r.get("identity_cos") is not None and r["identity_cos"] < ID_DRIFT:
         r["band"] = "FAIL" if r["band"] == "FAIL" else "REVIEW"
         r["reason"] = f"identity drift (cos {r['identity_cos']:.2f}); " + r["reason"]
+    return r
+
+
+def truth_cap(r):
+    """the vocal decides the sync: a PERF shot whose mouth does not follow the vocal, or trails it, cannot PASS (score capped under
+    PASS_BAND); one that follows it no better than an unsynced take (truth < TRUTH_FAIL) FAILS (capped under REVIEW_BAND). A row with
+    no truth reading is left as it is."""
+    from . import sync_truth as ST
+
+    if r.get("truth") is None or r.get("score") is None or ST.passes(r):
+        return r
+    cap = REVIEW_BAND - 1 if r["truth"] < ST.TRUTH_FAIL else PASS_BAND - 1
+    if r["score"] > cap:
+        r["score"] = float(cap)
+        r["reason"] = ST.why(r)
+    else:
+        r["reason"] = f"{ST.why(r)}; {r['reason']}"
     return r
 
 
@@ -688,6 +729,9 @@ def write_triage(meta, shots, out):
 
 
 def _audio_cell(r):
+    if r.get("truth") is not None:
+        kept = f" (kept frames {r['truth_kept']:+.2f})" if r.get("truth_kept") is not None and r.get("vocal_frac") else ""
+        return f"{r['truth']:+.2f}, {r['truth_lag_ms']:+.0f} ms{kept}"
     return "" if r.get("env_best") is None else f"{r['env_best']:+.2f} @ {r['env_lag_ms']:+.0f}"
 
 
@@ -707,6 +751,8 @@ def _path_cell(r):
 
 
 def write_verify(meta, rows, out):
+    from . import sync_truth as ST
+
     order = sorted(
         rows,
         key=lambda r: ({"FAIL": 0, "REVIEW": 1, "PASS": 2, "N/A": 3, "n/a": 3}[r["band"]], r["score"] if r["score"] is not None else 0),
@@ -763,8 +809,12 @@ def write_verify(meta, rows, out):
         f"Likely-success score 0-100 per dubbed shot: PASS >= {PASS_BAND:.0f}, REVIEW >= {REVIEW_BAND:.0f}, else FAIL. "
         f"COVERAGE (no readable target) = REVIEW, n/a; no voice = n/a; N/A = left as source. Identity drift = DINOv2 cosine vs --before < {ID_DRIFT}.",
         "`sync corr` reads the mouth against the opening built from the alignment, the curve the dub itself was painted from: a high "
-        "number says the render followed its plan, and cannot see a wrong alignment. `audio` reads it against the vocal's "
-        "loudness with no alignment, best lag in ms (+ = the mouth trails): reported, it moves no band.",
+        "number says the render followed its plan, and cannot see a wrong alignment: reported, a diagnostic. `audio` reads it "
+        "against the vocal itself with no alignment (its level and open voiced sound, levels and events, at lag 0), "
+        "on every frame of the shot, then the mouth's lag in ms (+ = the mouth trails): it decides the sync; with vocalisation "
+        "spans handed to the take, the same reading on the other frames follows in brackets, reported only. Under "
+        f"{ST.TRUTH_MIN} or more than {ST.LATE_MS:.0f} ms late (or {ST.EARLY_MS:.0f} ms early) a shot cannot PASS; under "
+        f"{ST.TRUTH_FAIL} it FAILS.",
         "`shape` is reported and moves no band: height contrast (1 = the delivered heights follow the card's, 0 = every class the same "
         "height), then p / b / m phones with the lips really shut (gap under a share of the eye distance), then the width travel, then "
         "the darkest reading at the lips' corners on closures (no calibrated threshold: compare to the take's).",

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.8 (2026-11-04)
+
+- LSDub Dub's sync gate now reads the dubbed mouth against the lead vocal itself, on every frame of the shot.
+  - The mouth must follow the song (audio sync 0.30 or more).
+  - It must be no more than about a frame late (50 ms) and no more than 80 ms early.
+  - The mouth must still be shut enough in the silences, as before.
+  - How closely the render follows the plan it was painted from is still reported, and decides only when the vocal has nothing to read.
+  - `auto` keeps whichever paint rate follows the vocal better.
+- LSDub Dub, faces with no stack of their own (`mouth_stack` plain): the mouth is held near the planned opening. The take's own mouth, with its own timing, no longer shows through a held vowel.
+- LSDub Dub re-reads the word timings off the lead vocal before it plans each shot.
+  - No word moves more than a quarter second from the aligner's time.
+  - Sung sounds that are not words stay where they were.
+  - The re-read is used only on a shot whose plan it makes follow the vocal clearly better (by 0.02 of audio sync).
+  - If the re-read leaves a shot's mouth moving much less than its own take, the shot is rendered again from the aligner's timings, and that render is delivered when it passes and moves like the take.
+- LSDub Dub's continuity repair is kept only when the repaired shot still follows the vocal and keeps its mouth shut enough in the silences. Otherwise the shot is delivered unrepaired, and `continuity.json` says so. `gate.json` records what was delivered.
+- LSDub Verify:
+  - The `audio` column shows the audio sync and the mouth's lag, read on every frame. The reading on the frames handed back to the take is shown beside it, in brackets.
+  - This reading decides the sync. A shot that does not follow the vocal, or trails it, cannot PASS. A shot that follows it no better than a mouth that ignores the song FAILS.
+  - A mouth that keeps its own take's range is no longer marked as barely moving. One whose travel is under 0.05 always is.
+- LSDub Verify reads a shot's closures and plan curve against the timings its dub planned from (the re-read ones, where the Dub used them).
+- LSDub Verify scores change for the same video: the sync part of the score now comes from the audio sync, and the travel rule reads against the shot's own take. Re-run Verify before comparing with an older report.
+
 ## 0.1.7 (2026-11-03)
 
 - LSDub Save Cut works where ffprobe answers the frame count with nothing (seen on Comfy Cloud): the watermark then counts the frames with ffmpeg. 0.1.6 covered machines with no ffprobe at all; this covers an ffprobe that is there but silent.

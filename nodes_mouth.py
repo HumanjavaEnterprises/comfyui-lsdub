@@ -440,7 +440,7 @@ class LSDubDub(io.ComfyNode):
 
     @classmethod
     def run_shot(cls, project, source, s, song, align, kit, tw, masks, cast, st, vocalisations='skip'):
-        from .lsdub_engine.core import sing as SING, continuity as CONT
+        from .lsdub_engine.core import sing as SING
         work = st.path('work')
         os.makedirs(work, exist_ok=True)
         take = extract_shot(source.path, s['f0'], s['f1'], st.path('take.mp4'))
@@ -457,7 +457,8 @@ class LSDubDub(io.ComfyNode):
                         preset=project.preset)
         render = st.path('render.mp4')
         if f.get('continuity', True):
-            CONT.run(take, st.path('sung.mp4'), render, report=st.path('continuity.json'))
+            info.update(SING.repair(take, st.path('sung.mp4'), render, info, work, report=st.path('continuity.json')))
+            json.dump(info, open(st.path('gate.json'), 'w'), indent=1)   # the gate's record carries what the cut delivers
         else:
             shutil.copyfile(st.path('sung.mp4'), render)
         if note: info['mask_note'] = note
@@ -490,7 +491,8 @@ class LSDubDub(io.ComfyNode):
                     if os.path.exists(st.path('gate.json')): os.remove(st.path('gate.json'))   # never a stale gate
                     render, info = cls.run_shot(project, source, s, song, align, cls._kit_for(s, kits), tw, masks, cast, st,
                                                 vocalisations)
-                    reason = '' if info.get('pass') else (f"{_vocal_note(info)}sync gate failed: measured corr {info.get('corr')} "
+                    reason = '' if info.get('pass') else (f"{_vocal_note(info)}sync gate failed: audio sync {info.get('truth')} "
+                                                           f"(mouth {info.get('truth_lag_ms')} ms vs the vocal), plan corr {info.get('corr')} "
                                                            f"(open in silence {info.get('open_in_silence')})")
                     st.mark_done(bool(info.get('pass')), time.perf_counter() - t0, time.process_time() - c0,
                                  corr=info.get('corr'), auto=(info.get('auto') or {}).get('winner'),

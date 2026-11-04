@@ -21,7 +21,8 @@ WEIGHTS (sung cut / unsung cut):
   motion 6 / 25, flicker 8 / 25, sharpness 4 / 20
   and a sung shot's score is then multiplied by (0.5 + 0.5 x sync): a shot that does not sync cannot score well.
 Component values:
-  sync      clip((corr_pm1 - 0.2) / 0.6)            corr 0.2 -> 0, 0.8 -> 1 (corr_pm1 = best within +-1 frame)
+  sync      clip((corr_pm1 - 0.2) / 0.6)            corr 0.2 -> 0, 0.8 -> 1 (corr_pm1 = best within +-1 frame); a row that
+            carries the audio sync (sync_truth, verify) takes clip((truth - 0.15) / 0.15) instead
   silence   1 - clip((open_in_silence - 0.15) / 0.4)
   snap      mean of: closure_hit, 1 - clip((rise_ms - 40) / 160)   (whichever are measurable)
   travel    clip((p95 - p5 of the opening - 0.04) / 0.10): how far the mouth moves (catches a held gape)
@@ -29,7 +30,8 @@ Component values:
   mouth     the singer's mouth-visible share (cast landmarks, no occlusion, no mic at the lips)
   canon     clip((similarity - 0.45) / 0.25) of the singer's face, or else the largest face >= 80 px; an 'unknown'
             face >= 100 px on a SUNG cut -> 0.3 (an extra in an insert is not scored)
-CLASSES: PERF (sung, singer medium or closer, mouth visible >= 50%): scored, a mouth travel < 0.10 caps at 55;
+CLASSES: PERF (sung, singer medium or closer, mouth visible >= 50%): scored, a mouth travel < 0.10 caps at 55 (with the source
+  take's travel known, only when the dub also keeps under 75% of it, or travels under 0.05: the dub cannot open past its take);
   COVERAGE (sung, no readable singer): n/a, reason no face -> too small -> mouth hidden; INSERT (unsung): capped at 90.
   motion    clip(median frame diff / 0.8)            (0..255 grey levels at 1/4 size)
   flicker   1 - clip(pops / 3)
@@ -202,6 +204,8 @@ def components(row, film_sharp_med, sharpness_mode="floor"):
     c = {}
     if row["sung"] and row.get("corr") is not None:
         c["sync"] = clip01((max(row["corr"], row.get("corr_pm1") or row["corr"]) - 0.2) / 0.6)
+        if _fin(row.get("truth")):  # the vocal itself (sync_truth), when read, is the sync; the plan corr stays a diagnostic
+            c["sync"] = clip01((row["truth"] - TRUTH_SYNC[0]) / (TRUTH_SYNC[1] - TRUTH_SYNC[0]))
         if row.get("open_in_silence") is not None:
             c["silence"] = 1 - clip01((row["open_in_silence"] - 0.15) / 0.4)
         sn = [
@@ -242,6 +246,10 @@ def components(row, film_sharp_med, sharpness_mode="floor"):
 
 
 TRAVEL_CAP, TRAVEL_CAP_SCORE, INSERT_CAP = 0.10, 55.0, 90.0
+TRAVEL_KEEP = 0.75  # a dub that keeps this share of its source take's own travel is not a held gape: it cannot open past the take
+TRUTH_SYNC = (0.15, 0.30)  # sync_truth -> the sync component: 0.15 (a mouth that ignores the song) reads 0; the pass line 0.30 and up
+# reads 1, so a shot that follows the vocal is not marked down for following it less tightly than another
+TRAVEL_FLOOR = 0.05  # a travel under this is a held gape whatever the take does
 CLASSES = ("PERF", "COVERAGE", "INSERT")
 
 
@@ -303,7 +311,7 @@ def reason(row, worst):
         return ""
     v = row["components"][worst]
     extra = {
-        "sync": f" (corr {row.get('corr')})",
+        "sync": f" (audio sync {row['truth']})" if _fin(row.get("truth")) else f" (corr {row.get('corr')})",
         "silence": f" ({row.get('open_in_silence')})",
         "tier": f" ({row.get('tier')} {row.get('owner_px')} px, needs {row.get('need')})",
         "canon": f" ({row.get('canon_char')} {row.get('canon_sim')})",
@@ -315,6 +323,18 @@ def reason(row, worst):
         "travel": f" (p5-p95 {row.get('mouth_range')})",
     }
     return f"{REASON[worst]}{extra.get(worst, '')} [{v:.2f}]"
+
+
+def held_gape(r):
+    """a mouth travel under TRAVEL_CAP; with the source take's own travel read (verify --before), only when the dub also moves less than
+    TRAVEL_KEEP of it: the warp opens within the take's own range, so a take that barely opens is not the dub holding a gape."""
+    m = r.get("mouth_range")
+    if m is None or not _fin(m) or m >= TRAVEL_CAP:
+        return False
+    if m < TRAVEL_FLOOR:
+        return True
+    ref = (r.get("before") or {}).get("mouth_range")
+    return not (_fin(ref) and ref > 0 and m >= TRAVEL_KEEP * ref)
 
 
 def finalize(r, smed, sharpness_mode="floor"):
@@ -330,7 +350,7 @@ def finalize(r, smed, sharpness_mode="floor"):
         r["score"] = None if s is None else min(INSERT_CAP, s)
         r["reason"] = reason(r, worst) or "pass"
     else:
-        if r.get("mouth_range") is not None and r["mouth_range"] < TRAVEL_CAP and s is not None and s > TRAVEL_CAP_SCORE:
+        if held_gape(r) and s is not None and s > TRAVEL_CAP_SCORE:
             s = TRAVEL_CAP_SCORE
             worst = "travel"  # a held gape cannot rank as a performance
         r["score"] = s

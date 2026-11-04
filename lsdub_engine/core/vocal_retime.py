@@ -150,7 +150,7 @@ def sequence(words, free=False):
     return out
 
 
-def walk(seq, em, t0=0.0, band=BAND, closed=None, home=None):
+def walk(seq, em, t0=0.0, band=BAND, closed=None, home=None, outside=OUTSIDE):
     """Viterbi over the frames, each phone's chain of shortest-stay states then a held state; a gap may be skipped, and an open gap before
     the first phone and after the last takes what the lyric does not, so the walk starts and stops anywhere. A consonant the vocal never
     sounds may be skipped at a price. It may also stop mid-lyric at the last
@@ -166,7 +166,7 @@ def walk(seq, em, t0=0.0, band=BAND, closed=None, home=None):
     a = np.array([s[4] for s in seq])
     b = np.array([s[5] for s in seq])
     move = np.array([MOVE[s[2]] for s in seq])
-    E = E - OUTSIDE * ((tt[:, None] < a - band) | (tt[:, None] > b + band))
+    E = E - outside * ((tt[:, None] < a - band) | (tt[:, None] > b + band))
     if closed is not None:
         hold = np.array([s[2] in "QO" for s in seq])
         E[closed] = np.where(hold, 0.0, -CLOSED)
@@ -228,9 +228,12 @@ def walk(seq, em, t0=0.0, band=BAND, closed=None, home=None):
     return span[1:-1]
 
 
-def retime(align, audio, x=None, free=False):
+def retime(align, audio, x=None, free=False, cap=None):
     """the alignment with its phones' and words' times read off the vocal. Words without phones keep theirs. free: the lyric alone is walked, no
-    time of the alignment's used, for a reading of a plan that must not lean on the plan."""
+    time of the alignment's used, for a reading of a plan that must not lean on the plan.
+    cap (s): a bounded retime for planning. Every phone is held to its aligned span +-cap (a hard band, not a charge); a word whose start
+    or end still moves past cap, and every vocalisation (an ad-lib: da, ooh, la), keeps the aligner's times, and its neighbours are
+    trimmed off it. So an ad-lib span stays where the aligner put it and cannot grow across a silence."""
     x = read_mono(audio) if x is None else np.asarray(x, float)
     fx = features(x)
     n = len(fx["db"])
@@ -246,7 +249,10 @@ def retime(align, audio, x=None, free=False):
             closed |= (tt >= a) & (tt < b)
     if free:
         seq = [(*q[:4], -1e6, 1e6) for q in seq]
-    span = walk(seq, emissions(fx), closed=closed, home=0.0 if free else HOME)
+    if cap is not None and not free:
+        span = walk(seq, emissions(fx), band=cap, closed=closed, home=HOME, outside=CLOSED)
+    else:
+        span = walk(seq, emissions(fx), closed=closed, home=0.0 if free else HOME)
     end = len(x) / SR
     edge = lambda k: 0.0 if k == 0 else end if k == n else k * HOP + (WIN - HOP) / 2  # frame k's window centres at k * HOP + WIN / 2
     times = {}
@@ -272,10 +278,58 @@ def retime(align, audio, x=None, free=False):
                 t = (cur, cur)
             cur = max(cur, t[1])
             ph.append(dict(p, start=round(t[0], 3), end=round(t[1], 3)))
-        new.append(dict(w, start=ph[0]["start"], end=ph[-1]["end"], start0=w["start"], end0=w["end"], phones=ph))
+        new.append(
+            dict(
+                w,
+                start=ph[0]["start"],
+                end=ph[-1]["end"],
+                start0=w["start"],
+                end0=w["end"],
+                phones=ph,
+                **({"phones_aligned": [dict(p, start0=p["start"], end0=p["end"]) for p in w["phones"]]} if cap is not None else {}),
+            )
+        )
         k += 1
-    out["words"] = new
+    out["words"] = bounded(new, cap) if cap is not None and not free else new
     return out
+
+
+def bounded(words, cap):
+    """the cap of retime(): a moved word past cap, and every vocalisation, back at its aligned times (start0 / end0, its phones shifted
+    with it as the aligner had them); the words beside it trimmed so none overlaps it."""
+    from .vocalisations import token_class
+
+    out = [dict(w) for w in words]
+    keep = []
+    for i, w in enumerate(out):
+        if "start0" not in w:
+            continue
+        far = abs(float(w["start"]) - float(w["start0"])) > cap + 1e-6 or abs(float(w["end"]) - float(w["end0"])) > cap + 1e-6
+        if far or token_class(w.get("w", "")) == "v":
+            keep.append(i)
+    for i in keep:
+        w = out[i]
+        a, b = float(w["start0"]), float(w["end0"])
+        w["phones"] = [dict(p, start=p["start0"], end=p["end0"]) for p in w.get("phones_aligned") or []] or w["phones"]
+        w.update(start=a, end=b, held_back=True)
+    for i in keep:
+        a, b = float(out[i]["start"]), float(out[i]["end"])
+        for j in range(i - 1, -1, -1):  # the words before end where it starts
+            if j in keep or float(out[j]["end"]) <= a:
+                break
+            out[j] = _trim(out[j], hi=a)
+        for j in range(i + 1, len(out)):  # the words after start where it ends
+            if j in keep or float(out[j]["start"]) >= b:
+                break
+            out[j] = _trim(out[j], lo=b)
+    return out
+
+
+def _trim(w, lo=-np.inf, hi=np.inf):
+    """a word's times and its phones' clipped into [lo, hi]."""
+    c = lambda t: round(float(min(max(float(t), lo), hi)), 3)
+    ph = [dict(p, start=c(p["start"]), end=c(p["end"])) for p in w.get("phones") or ()]
+    return dict(w, start=c(w["start"]), end=c(w["end"]), phones=ph)
 
 
 def plan_hits(words, x, t0, t1, fx=None):

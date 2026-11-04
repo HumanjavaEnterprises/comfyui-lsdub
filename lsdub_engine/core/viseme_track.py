@@ -376,6 +376,15 @@ def main(argv=None):
     ap.add_argument("--frames", type=int, required=True)
     ap.add_argument("--fps", type=float, default=25)
     ap.add_argument("--audio", help="vocal stem for openness (envelope)")
+    ap.add_argument(
+        "--pump-gate",
+        type=float,
+        default=0.0,
+        help="the envelope through sung_dyn.pump (gate + compressor): below this the opening shuts, above it phrases squash toward "
+        "full; 0 = off",
+    )
+    ap.add_argument("--pump-ratio", type=float, default=4.0)
+    ap.add_argument("--pump-hold-ms", type=float, default=60.0)
     ap.add_argument("--a2f-csv", help="A2F curves; jawOpen used for openness")
     ap.add_argument("--lead", type=float, default=0.06)
     ap.add_argument("--release", type=float, default=0.05)
@@ -411,6 +420,10 @@ def main(argv=None):
         oc = np.clip(j / max(1e-6, np.percentile(j, 95)), 0, 1.2)
     elif a.audio:
         oc = envelope_open(a.audio, a.t0, a.frames, a.fps)
+    if oc is not None and a.pump_gate > 0:
+        from .sung_dyn import pump
+
+        oc = pump(np.clip(oc, 0, 1), a.fps, a.pump_gate, a.pump_ratio, a.pump_hold_ms)[0]
     words = bool(a.words and align)
     fr = build(align, a.t0, a.frames, a.fps, a.lead, a.release, a.min_hold, oc, xp, word_index=words, word_close=a.word_close)
     T = {

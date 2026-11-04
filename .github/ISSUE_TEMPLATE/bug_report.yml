@@ -34,7 +34,7 @@ body:
     attributes:
       label: Versions
       description: LSDub version, ComfyUI version, ComfyUI Desktop or portable or git install.
-      placeholder: "LSDub 0.1.7, ComfyUI 0.3.x, Desktop on Windows"
+      placeholder: "LSDub 0.1.8, ComfyUI 0.3.x, Desktop on Windows"
     validations:
       required: true
   - type: input
