@@ -2,7 +2,8 @@
 name = "lsdub"
 description = "Open-weights lip-sync for music videos in ComfyUI. LSDub warps the singer's own mouth to the song (no new face, no face swap) and scores every shot, so you know which ones worked. Bring a clip and a song, or generate them with LTX-2.5, Qwen-Image-Edit and ACE-Step."
 version = "0.1.8"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.10"
 readme = "README.md"
 classifiers = [
