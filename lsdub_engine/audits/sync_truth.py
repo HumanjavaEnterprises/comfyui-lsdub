@@ -9,8 +9,11 @@ opening (sync_qa.measured_opening) against two curves taken from the vocal stem 
 
   loud   the vocal's level in dB under its p95, floored at max(p10, -45 dB) and clipped 0..1: a held sung note sits at the top for as long
          as it is held, so a mouth that stays open on it reads as following it (a raw RMS correlation punishes the note's swells instead)
-  open   open voiced sound: voicing x (1 - the level dip / nasal reading of vocal_retime.features). It falls on closures and hums inside a
+  open   open voiced sound: voicing x (1 - the level dip / nasal reading of judge_vocal.features). It falls on closures and hums inside a
          phrase, where the level alone may not
+
+The vocal readings are the judge's own (judge_vocal: a frozen copy of what the dub's vocal_retime read at 0.1.8), so a change to the dub's
+driver never moves this reference. tests/test_judge_frozen.py pins them.
 
 Both are averaged over each video frame's own interval [k/fps, (k+1)/fps) and low-passed at MOUTH_HZ (zero phase): a mouth does not
 follow vibrato. Four normalised cross-correlations over lags -max_lag..+max_lag frames, mouth against loud and against open, on the
@@ -32,6 +35,8 @@ read (silent, or a stem with no dips at all) or a shot under MIN_FRAMES reads No
 
 import argparse, json, os
 import numpy as np
+
+from . import judge_vocal as JV
 
 TRUTH_MIN = 0.30  # a mouth that follows the vocal reads from about here up; one moving on its own reads near 0
 TRUTH_FAIL = 0.15  # under this the mouth follows the song no better than a mouth that ignores it (verify: FAIL)
@@ -74,11 +79,9 @@ def per_frame(a, t, n, fps):
 
 
 def vocal_curves(x, n, fps):
-    """(loud, open) per video frame from the vocal's samples at vocal_retime.SR, frame 0 at sample 0."""
-    from ..core import vocal_retime as VR
-
-    fx = VR.features(np.asarray(x, float))
-    t = np.arange(len(fx["db"])) * VR.HOP + VR.WIN / 2
+    """(loud, open) per video frame from the vocal's samples at judge_vocal.SR, frame 0 at sample 0."""
+    fx = JV.features(np.asarray(x, float))
+    t = np.arange(len(fx["db"])) * JV.HOP + JV.WIN / 2
     db = fx["db"]
     floor = max(float(np.percentile(db, 10)), FLOOR_DB)
     loud = np.clip((db - floor) / max(1e-6, -floor), 0.0, 1.0)
@@ -127,7 +130,7 @@ def peak(c):
 
 
 def read(op, x, fps, keep=None, max_lag=MAX_LAG):
-    """the truth reading of a mouth opening series op (one per video frame) against the vocal samples x (vocal_retime.SR, starting at
+    """the truth reading of a mouth opening series op (one per video frame) against the vocal samples x (judge_vocal.SR, starting at
     frame 0). -> dict of KEYS; every value None when there is nothing to read."""
     none = dict.fromkeys(KEYS)
     if op is None:
@@ -180,13 +183,9 @@ def read_wav(op, wav, fps, keep=None):
     """read() on a vocal file, on EVERY frame: what the viewer sees, the frames a dub handed back to the take (vocalisation spans)
     included, so a shot cannot pass by handing more of itself back. keep (those spans' complement), when given, adds the same reading
     on the kept frames as truth_kept / truth_kept_lag_ms: reported, it decides nothing. No file to read: every value None."""
-    import os
-
-    from ..core.vocal_retime import read_mono
-
     if not wav or not os.path.exists(wav):
         return dict.fromkeys(KEYS + (KEPT_KEYS if keep is not None else ()))
-    x = read_mono(wav)
+    x = JV.read_mono(wav)
     r = read(op, x, fps)
     if keep is not None:
         k = read(op, x, fps, keep)
@@ -215,9 +214,7 @@ def main(argv=None):
         a.fps = fps or a.fps
         h, w = F[0].shape[:2]
         if a.work:
-            from ..core.sing import face_roi
-
-            roi = face_roi(json.load(open(os.path.join(a.work, "medium.json"))), F[0].shape)
+            roi = JV.gate_box(json.load(open(os.path.join(a.work, "medium.json"))), F[0].shape)
         else:
             roi = [0, h, 0, w]
         op, _ = Q.measured_opening(F, roi, a.fps)

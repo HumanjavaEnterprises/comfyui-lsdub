@@ -168,7 +168,7 @@ RULES = (
         lambda a: a.warp_target != "coart",
     ),
     Rule(
-        ("--warp-sigma", "--warp-follow"),
+        ("--warp-sigma", "--warp-follow", "--warp-aperture", "--warp-shape", "--warp-lead-gate"),
         "read only by the plain targets, not under this --warp-target",
         lambda a: a.warp_target in ("coart", "own"),
     ),

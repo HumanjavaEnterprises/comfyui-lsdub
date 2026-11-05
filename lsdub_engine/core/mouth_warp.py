@@ -1315,6 +1315,9 @@ class WarpClip:
         # pixel motion, and a residual computed from raw F would re-inject it into the field (the r1 slosh). The take's own
         # small motion stays in its pixels; only the smooth (target - shape) correction is added on top.
         Fs = gaussian_filter1d(F, g("warp_feat_smooth", 0.0), axis=0, mode="nearest") if g("warp_feat_smooth", 0.0) > 0 else F
+        self.drive_info = {}
+        if g("warp_target", "v9") not in ("coart", "own"):  # (opt-in) the drive chain's stages before the aperture: lead gate, then shape
+            fr_t = self.drive_stages(a, fr_t, Fs, model, float(T.get("fps", 25)))
         pp = np.array([fr_t[min(i, len(fr_t) - 1)]["vis"] == "PP" for i in range(n)])
         # (opt-in): --warp-target coart = the coarticulation planner (lsdub/core/coart.py) instead of the per-frame
         # step targets: one planned trajectory (dominance-blended phone targets, duration undershoot, fitted to the take's own
@@ -1332,8 +1335,14 @@ class WarpClip:
         elif g("warp_target", "v9") == "own":  # the null build: the plan IS the take's mouth
             Ft = Fs.copy()
         else:
+            fr_plan = fr_t
+            if vars(a).get("warp_aperture", "off") != "off":  # (opt-in) stage: aperture map (lsdub/core/aperture.py)
+                from . import aperture
+
+                fr_plan, self.aperture_gain = aperture.mapped(fr_t)
+                print(f"aperture map: the track's opening x{self.aperture_gain:.2f} (its p{aperture.Q:.0f} -> a full opening)")
             Ft = target_features(
-                fr_t,
+                fr_plan,
                 Fs,
                 model.rng,
                 a.warp_open_gain,
@@ -1540,6 +1549,22 @@ class WarpClip:
             [None] * n,
             [None] * n,
         )
+
+    def drive_stages(self, a, fr_t, Fs, model, fps):
+        """--warp-lead-gate (lsdub/core/lead_gate.py: the take's own shut, still mouth holds the drive down) then --warp-shape
+        (lsdub/core/drive_shape.py: bilabial closures kept, closing edges early) on the track's frames. Both off: the frames as they are."""
+        if vars(a).get("warp_lead_gate", "off") == "on":
+            from . import lead_gate
+
+            u = (Fs[:, 0] - model.rng["g_lo"]) / max(1e-6, model.rng["g_hi"] - model.rng["g_lo"])
+            fr_t, self.drive_info["lead_gate"] = lead_gate.gated(fr_t, u, fps)
+            print(f"lead gate: {self.drive_info['lead_gate']['frames']} frames held down, runs {self.drive_info['lead_gate']['runs']}")
+        if vars(a).get("warp_shape", "off") != "off":
+            from . import drive_shape
+
+            fr_t, self.drive_info["shape"] = drive_shape.shaped(fr_t, fps, a.warp_shape)
+            print(f"drive shape ({a.warp_shape}): closures added at {self.drive_info['shape']['closures_added']}")
+        return fr_t
 
     # ------------------------------------------------------------------------------------------------ geometry --
     def shape_at(self, i):
@@ -2310,11 +2335,18 @@ def run(a):
         vx.after_batch(clip)
     # --- (end)
     extra = None
+    if vars(a).get("warp_aperture", "off") == "loop" and vars(a).get("warp_target", "v9") not in ("coart", "own"):
+        # (opt-in) stage: the aperture loop, the rendered opening corrected toward what was asked (lsdub/core/aperture.py)
+        from . import aperture
+
+        extra = {"aperture": dict(aperture.close_loop(clip), gain=getattr(clip, "aperture_gain", None))}
     if getattr(a, "warp_gate", "off") not in (None, "off"):
         # the per-frame maker / checker / confirmation gate (lsdub/core/frame_gate.py)
         from . import frame_gate
 
-        extra = frame_gate.gate(clip, a)
+        extra = dict(extra or {}, **(frame_gate.gate(clip, a) or {}))
+    if getattr(clip, "drive_info", None):
+        extra = dict(extra or {}, drive=clip.drive_info)
     if vx:
         extra = vx.finish(clip, extra)
     if getattr(a, "occluder_mask", None):

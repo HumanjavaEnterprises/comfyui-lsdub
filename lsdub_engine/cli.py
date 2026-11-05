@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""lsdub — photoreal sung lip-sync from words: forced alignment -> visemes -> a mouth library -> paint -> refine.
+"""lsdub — photoreal sung lip-sync from words: forced alignment -> visemes -> a lip kit -> warp and paste -> QA.
 
 `lsdub --help` lists the commands. SHIP is what every build carries, DEV is the workbench (a vendored build has none of it)."""
 
@@ -26,6 +26,13 @@ HELP_SHIP = """
   lsdub frame-gate   per-frame checker: every frame vs its neighbours and the take (PASS / SOFT / FAIL + causes, slosh windows)
   lsdub track     skip = mark a viseme track's vocalisations (uh uh, ah, da da, mm, hey) for the warp; scan = list a song's spans
   lsdub annotate  per-frame card in a corner: the sung word, its mouth shape (a line glyph), openness, the next second of visemes
+  lsdub strip     sync strip: the vocal waveform scrolling under the video past a fixed playhead, to judge lips vs voice by eye
+  lsdub sync-qa   mouth sync QA: measured mouth vs the opening the aligned vocal asks for (corr, best lag) + a review video
+  lsdub sync-truth  the mouth read against the vocal alone (loudness + open-voiced curves, levels and events), no alignment in between
+  lsdub cadence   motion cadence checker: held / skipped frames (a generator stall) measured on the shot's own motion
+  lsdub retime    motion cadence maker: re-spaces the frames around each hitch the cadence checker flags, so the motion is even
+  lsdub occluders masks of what sits in front of the mouth (a mic, a hand) from plain words, followed through the shot (GPU)
+  lsdub continuity  repairs single-frame pops in a painted mouth against the take, checked against the frames before it
   lsdub skull-lock  put the mouth back on the skull: one midline, mouth line parallel to the pupils, rigid upper lip  [watermarked]
   lsdub constraints anatomy-rule violations per video vs the character's own take
   lsdub skull-audit midline / axis / teeth-plane alignment metrics
@@ -52,7 +59,7 @@ HELP_SHIP = """
   lsdub dry       how to get a dry vocal
 
 Output of the [watermarked] commands carries an invisible watermark and a metadata tag. --no-watermark turns it off
-and prints a responsible-use warning. `lips` is a short alias.
+and prints a responsible-use warning. `lsd` is a short alias.
 """
 HELP_DEV = ""
 HELP = HELP_SHIP + HELP_DEV

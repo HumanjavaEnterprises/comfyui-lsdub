@@ -1,8 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.9 (2026-11-04)
 
 - LSDub Dub has a `mouth_card` toggle (off by default) and a `card_video` output: a QA view of each dubbed shot with the mouth card in a corner, never over a face. The card shows the sung word between its neighbours, its mouth shape, the openness and the next second of mouth shapes; uncertain words carry a `?` and the reason, and a word heard differently from the lyric shows both. Each shot's card video and lyric check sit beside its render. The clean cut, the renders and what Save Cut writes do not change, and turning the card on dubs nothing again.
+- LSDub Verify's audio-sync reading now uses its own copy of the vocal readings, so later changes to how the dub drives the mouth cannot move the score. Readings are unchanged from 0.1.8.
+- The engine's `--help` lists every shipped command. A test fails if a command is added without it.
+- Dubbed output is unchanged from 0.1.8.
 
 ## 0.1.8 (2026-11-04)
 

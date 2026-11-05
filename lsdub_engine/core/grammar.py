@@ -4,7 +4,7 @@
 """grammar.py: `lsdub grammar`, the shot-grammar gate. Every sung word must land on a shot where its singer's face is
 big enough for the kind of line it is.
 
-  tiers   singer face height: close-up >= 300, medium 120-300, wide 25-120, none (< 25 or no singer face).
+  tiers   singer face height: close-up >= 240 (--cu-px), medium 120-240, wide 25-120, none (< 25 or no singer face).
           Basis (--px-basis): native (DEFAULT) = delivered-frame px, the tiers above as stated;
           1080 = cast face_px, 1080-normalised. The warp's own 300 px dub-safe gate (cast.SAFE_PX) is on the 1080
           basis: on a 768-px delivery a 300 px@1080 face is only 213 delivered px.

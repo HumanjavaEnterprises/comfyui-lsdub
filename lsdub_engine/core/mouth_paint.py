@@ -424,6 +424,28 @@ def _parser():
         "the take's own mouth, with its own timing, passes only near the plan; 0 = anywhere inside the viseme's band",
     )
     ap.add_argument(
+        "--warp-lead-gate",
+        choices=["off", "on"],
+        default="off",
+        help="warp (plain targets): hold the drive down where the take's own mouth stays shut and still while the stem asks it to open "
+        "(a voice the singer on screen does not sing; lsdub/core/lead_gate.py)",
+    )
+    ap.add_argument(
+        "--warp-shape",
+        choices=["off", "closures", "asym"],
+        default="off",
+        help="warp (plain targets): the drive's shape (lsdub/core/drive_shape.py). closures = every P / B / M of the alignment keeps a "
+        "shut frame; asym = closures, and closing edges 20 ms early while openings keep their time",
+    )
+    ap.add_argument(
+        "--warp-aperture",
+        choices=["off", "map", "loop"],
+        default="off",
+        help="warp (plain targets): how far the mouth opens (lsdub/core/aperture.py). map = the track's opening scaled per shot so its "
+        "p95 is a full opening of the take's range; loop = map, then the rendered opening measured and the frames rendered again toward "
+        "what was asked, within the fold guard; off = as planned",
+    )
+    ap.add_argument(
         "--warp-jaw-gain", type=float, default=1.0, help="warp: gain on the soft chin's share of an opening / closing (jaw drop / raise)"
     )
     ap.add_argument(
