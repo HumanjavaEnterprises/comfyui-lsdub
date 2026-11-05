@@ -373,6 +373,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
         r.update(measure_shot(video, s, fps, offset, vocal, act, al, w_, faces, work, Q, SN))
         r.update(vocal_reading(w_, vocal_words, s, offset, heard))
         r.update(path_reading(s))
+        r.update(asked_travel(s))
         if before:
             b = measure_shot(before, s, fps, offset, vocal, act, al, w_, faces, os.path.join(work, "before"), Q, SN)
             r["before"] = {k: b.get(k) for k in ("corr", "mouth_range", "open_in_silence", "mouth_visible", *ST.KEYS)}
@@ -490,6 +491,35 @@ def delivered(s):
         return "source", []
     wj = s.get("warp_json")
     return gate_reading(os.path.join(os.path.dirname(os.path.dirname(wj)), "gate.json") if wj else None)
+
+
+def asked_travel(s):
+    """{"asked_travel": the travel the shot's plan asked of the mouth, as a share of its take's own}: p5-p95 of the warp log's target
+    gap over p5-p95 of the take's gap, on the paint frames the shot delivered. The picks in medium.json beside the log are used only
+    when the log is that paint's (frames x fps_mult entries, every pick inside it); any other log (a native render's 1x log) is read on
+    every frame. The target follows the vocal inside the take's range, so a held line asks less travel than the take moves on its
+    own: the held-gape test reads the dub against this, not against the take. {} with no log, a shot left as source, or a reading
+    that is not a finite number."""
+    wj = s.get("warp_json")
+    if s.get("used") == "source" or not wj or not os.path.exists(wj):
+        return {}
+    try:
+        F = json.load(open(wj))["frames"]
+        gap = np.array([f["gap"] for f in F], float)
+        tgap = np.array([f["tgap"] for f in F], float)
+        md = os.path.join(os.path.dirname(wj), "medium.json")
+        M = json.load(open(md)) if os.path.exists(md) else {}
+        pk = np.asarray(M.get("picked") or [], int)
+        if len(pk) and len(F) == int(M.get("frames") or 0) * int(M.get("fps_mult") or 1) and pk.min() >= 0 and pk.max() < len(F):
+            gap, tgap = gap[pk], tgap[pk]
+        if len(gap) < 5:
+            return {}
+        rng = lambda a: float(np.percentile(a, 95) - np.percentile(a, 5))
+        take = rng(gap)
+        ask = rng(tgap) / take if take > 0 else float("nan")
+        return {"asked_travel": round(ask, 3)} if np.isfinite(ask) else {}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, OverflowError):  # a reading only: the take stays the reference
+        return {}
 
 
 def path_reading(s):
@@ -751,7 +781,7 @@ def _path_cell(r):
 
 
 def write_verify(meta, rows, out):
-    from . import sync_truth as ST
+    from . import scorecard as SC, sync_truth as ST
 
     order = sorted(
         rows,
@@ -775,6 +805,7 @@ def write_verify(meta, rows, out):
         "env_best",
         "env_lag_ms",
         "mouth_range",
+        "asked_travel",
         "open_in_silence",
         "mouth_visible",
         "owner_px",
@@ -823,6 +854,11 @@ def write_verify(meta, rows, out):
         "the shot, the worst word; a free walk, so a word it loses reads as off, and `lost` when a shot's words sit more than 0.6 s off, where the walk has run away on a long song: no reading), then the plan's phones read directly on the vocal's frames: "
         "hiss on hiss, closures on a dip or nasal, vowels on open sound, 0..1. Passed-over words (a lead sheet) are not read.",
         "`path` is reported and moves no band: the paint delivered, then the frames of it picked from before their own time, whose skin is a frame old.",
+        "`travel` is the mouth's travel (p5-p95 of the opening, in face heights), then the share of the take's own travel the song asks for "
+        "(read from the dub's warp log; a held line asks less than the take moves by itself). Under "
+        f"{SC.TRAVEL_CAP}, a shot that delivers less than {SC.TRAVEL_KEEP} of what it was asked (the take's travel x that share, at most 1; "
+        f"the take's travel when there is no reading), or under {SC.TRAVEL_FLOOR}, is a held gape: it scores at most "
+        f"{SC.TRAVEL_CAP_SCORE:.0f}, and its reason says what share it delivered.",
         "",
         "| shot | t (s) | band | score | Δ vs before | class | path | sync corr | audio | shape | vocal | travel | silence | mouth | identity | reason |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
@@ -831,7 +867,7 @@ def write_verify(meta, rows, out):
         L.append(
             f"| {r['shot']} | {r['start']:.2f}-{r['end']:.2f} | **{r['band']}** | {'-' if r['score'] is None else (format(r['score'], '.0f'))} | "
             f"{'' if r.get('delta') is None else (format(r['delta'], '+.0f'))} | {r['class']} | {_path_cell(r)} | {'' if r.get('corr') is None else (format(r['corr'], '+.2f'))} | "
-            f"{_audio_cell(r)} | {_shape_cell(r)} | {_vocal_cell(r)} | {r.get('mouth_range', '')} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
+            f"{_audio_cell(r)} | {_shape_cell(r)} | {_vocal_cell(r)} | {_travel_cell(r)} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
             f"{r['mouth_visible']:.0%} | {'' if r.get('identity_cos') is None else r['identity_cos']} | {r['reason']} |"
         )
     if meta.get("closures_lost"):
@@ -850,6 +886,13 @@ def write_verify(meta, rows, out):
         ],
         lambda r: f"{r['band']} {'' if r['score'] is None else int(r['score'])}",
     )
+
+
+def _travel_cell(r):
+    """the mouth's travel, then the share of the take's travel the song asked for (from the warp log), when it was read."""
+    m = r.get("mouth_range", "")
+    ask = r.get("asked_travel")
+    return f"{m}; song asks {ask:.2f} of the take's" if m != "" and m is not None and ask is not None else m
 
 
 def _vocal_cell(r):

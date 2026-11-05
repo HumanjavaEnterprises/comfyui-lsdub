@@ -38,7 +38,7 @@ CORE = {   # core nodes: (inputs [(name, type)], outputs [(name, type)], widgets
 
 # trailing optionals and sockets added after the example workflows were saved: left out of a workflow unless it sets them, so the
 # JSONs stay what they were and the frontend fills the default. Mirrors the PENDING lists in tests/test_example_workflows.py.
-PENDING = {'LSDubProject': ('mouth_stack',), 'LSDubScorecard': ('sharpness_mode',), 'LSDubTweaks': ('sync_phrases',), 'LSDubAlign': ('retime_to_vocal', 'lead_sheet', 'lead_overrides')}
+PENDING = {'LSDubProject': ('mouth_stack',), 'LSDubScorecard': ('sharpness_mode',), 'LSDubAlign': ('retime_to_vocal', 'lead_sheet', 'lead_overrides')}
 PENDING_SOCKETS = {'LSDubFixIt': ('scorecard', 'ruler')}
 
 

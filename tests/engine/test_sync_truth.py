@@ -159,6 +159,86 @@ def test_a_dub_that_keeps_its_takes_own_small_travel_is_not_a_held_gape():
     assert not SC.held_gape(dict(mouth_range=0.12, before=dict(mouth_range=0.5)))  # over the line: never
 
 
+def test_a_dub_that_delivers_the_travel_its_plan_asked_is_not_a_held_gape():
+    from lsdub_engine.audits import scorecard as SC
+
+    take = dict(mouth_range=0.12)
+    assert SC.held_gape(dict(mouth_range=0.07, before=take))  # 58% of the take, no plan read: held
+    assert not SC.held_gape(dict(mouth_range=0.07, before=take, asked_travel=0.6))  # the plan asked 60% of the take: delivered
+    assert SC.held_gape(dict(mouth_range=0.07, before=take, asked_travel=0.9))  # asked 90%, delivered 58%: held
+    assert not SC.held_gape(dict(mouth_range=0.095, before=take, asked_travel=1.4))  # keeps 79% of its take: an ask past it adds nothing
+    assert SC.held_gape(dict(mouth_range=0.04, before=take, asked_travel=0.2))  # under the floor: held whatever was asked
+
+
+def test_verify_reads_the_asked_travel_from_the_warp_log_on_the_delivered_frames(tmp_path):
+    import json
+
+    from lsdub_engine.audits import qa as QA
+
+    n = 40
+    gap = 10 + 10 * np.sin(np.arange(n) / 2.0)  # the take travels 20 px
+    tgap = 10 + 5 * np.sin(np.arange(n) / 2.0)  # the plan asks half of it
+    tgap[1::2] = tgap[0::2]  # the odd paint frames are never delivered
+    wj = tmp_path / "crop_painted_warp.json"
+    wj.write_text(json.dumps(dict(frames=[dict(gap=float(g), tgap=float(t)) for g, t in zip(gap, tgap)])))
+    (tmp_path / "medium.json").write_text(json.dumps(dict(frames=n // 2, fps_mult=2, picked=list(range(0, n, 2)))))
+    got = QA.asked_travel(dict(warp_json=str(wj)))["asked_travel"]
+    g, t = gap[0::2], tgap[0::2]
+    assert got == pytest.approx((np.percentile(t, 95) - np.percentile(t, 5)) / (np.percentile(g, 95) - np.percentile(g, 5)), abs=1e-3)
+    assert QA.asked_travel(dict(warp_json=str(wj), used="source")) == {}  # a shot left as source asks nothing
+    assert QA.asked_travel(dict(warp_json=str(tmp_path / "missing.json"))) == {}  # no log: the take stays the reference
+    (tmp_path / "empty.json").write_text(json.dumps(dict(frames=[])))
+    assert QA.asked_travel(dict(warp_json=str(tmp_path / "empty.json"))) == {}  # a log with no frames: the same
+
+
+def test_asked_travel_reads_a_1x_log_on_every_frame_not_the_sing_paints_picks(tmp_path):
+    import json
+
+    from lsdub_engine.audits import qa as QA
+
+    n = 30  # a native render's log: one entry per delivered frame
+    gap = 10 + 10 * np.sin(np.arange(n) / 2.0)
+    tgap = gap.copy()
+    tgap[: n // 2] = 10.0  # the first half is asked to hold: the sing paint's 2x picks would read mostly that half
+    d = tmp_path / "native"
+    d.mkdir()
+    wj = d / "native_warp.json"
+    wj.write_text(json.dumps(dict(frames=[dict(gap=float(g), tgap=float(t)) for g, t in zip(gap, tgap)])))
+    (d / "medium.json").write_text(json.dumps(dict(frames=n, fps_mult=2, picked=list(range(0, 2 * n, 2)))))
+    rng = lambda a: np.percentile(a, 95) - np.percentile(a, 5)
+    assert QA.asked_travel(dict(warp_json=str(wj)))["asked_travel"] == pytest.approx(rng(tgap) / rng(gap), abs=1e-3)
+    (d / "medium.json").write_text(json.dumps(dict(frames=n // 2, fps_mult=2, picked=[0, 2, 4, 6, 99])))  # a pick past the log
+    assert QA.asked_travel(dict(warp_json=str(wj)))["asked_travel"] == pytest.approx(rng(tgap) / rng(gap), abs=1e-3)
+
+
+@pytest.mark.parametrize("medium", [dict(picked=[float("inf")]), [1, 2, 3]])
+def test_asked_travel_leaves_a_malformed_picks_file_to_the_take(tmp_path, medium):
+    import json
+
+    from lsdub_engine.audits import qa as QA
+
+    wj = tmp_path / "w.json"
+    wj.write_text(json.dumps(dict(frames=[dict(gap=float(g), tgap=float(g)) for g in range(10)])))
+    (tmp_path / "medium.json").write_text(json.dumps(medium))
+    assert QA.asked_travel(dict(warp_json=str(wj))) == {}
+
+
+def test_asked_travel_gives_nothing_for_a_reading_that_is_not_a_number(tmp_path):
+    import json
+
+    from lsdub_engine.audits import qa as QA
+    from lsdub_engine.audits import scorecard as SC
+
+    wj = tmp_path / "w.json"
+    wj.write_text(json.dumps(dict(frames=[dict(gap=float(g), tgap=float("nan")) for g in range(10)])))
+    assert QA.asked_travel(dict(warp_json=str(wj))) == {}
+    take = dict(mouth_range=0.12)
+    for ask in (float("nan"), 0.0, -0.5, None):  # not a finite ask above 0: the take is the reference
+        assert SC.held_gape(dict(mouth_range=0.07, before=take, asked_travel=ask))
+    assert not SC.held_gape(dict(mouth_range=0.07, before=take, asked_travel=0.001))  # a tiny ask: only the floor holds
+    assert SC.held_gape(dict(mouth_range=0.045, before=take, asked_travel=0.001))
+
+
 def test_a_tie_between_peaks_takes_the_one_nearest_lag_0():
     c = np.array([-0.26, 0.03, 0.33, 0.51, 0.37, 0.17, 0.18, 0.33, 0.51, 0.47, 0.21, -0.05, -0.11, -0.01, 0.15, 0.18, 0.08])  # m = 8
     lag, v = ST.peak(c)

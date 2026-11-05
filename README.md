@@ -145,6 +145,12 @@ and `LSDub/qa`.
   from a close-up shot.
 - **LSDub Mouth Tweaks:** lead, word_close, face_target, snap, auto, continuity, raw warp flags, and the opt-in
   jaw-curve CSV, sync advance and sync phrases.
+  - `warp_shape` (`asym`): closes the lips 20 ms early and opens them on time. `off` is the 0.1.9 shape.
+  - `travel_guard` (`aligner`): a re-timed mouth that barely moves is swapped for the un-retimed render only when it also
+    moves less than that render. `take` is the 0.1.9 check, against the take alone.
+  - `coherence_charge` (`remade`): the continuity repair's budget counts only the frames it re-makes. `all` is 0.1.9's,
+    which counts every flagged run.
+  - Set all three to their second choice to dub as 0.1.9 did.
 - **LSDub Dub:** dubs each DUB and DUB-MEDIUM shot.
   - The shot is cropped to a 512 px face and warped at 2x the frame rate. The lower face is pasted back and a measured
     sync gate is applied.
@@ -158,10 +164,11 @@ and `LSDub/qa`.
     their original frames.
 - **LSDub Occluders:** masks a microphone or hand in front of the mouth, so the next dub keeps it in front. Uses
   Florence-2 and SAM 2.1.
-- **LSDub Continuity:** repairs chosen shots again with stricter settings.
+- **LSDub Continuity:** repairs chosen shots again with stricter settings. `coherence_charge` works as on Mouth Tweaks.
 
 **QA**
-- **LSDub Verify:** a likely-success score per dubbed shot (PASS, REVIEW or FAIL), compared with the source.
+- **LSDub Verify:** a likely-success score per dubbed shot (PASS, REVIEW or FAIL), compared with the source. A soft or
+  held line is judged against the mouth travel the song asks for, and the report shows that reading beside the travel.
 - **LSDub Scorecard:** every shot of the cut scored 0 to 100, worst first.
 - **LSDub Sync QA:** the measured mouth against the vocal (correlation and lag), with a review card that scrolls the
   vocal waveform past a playhead.

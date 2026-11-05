@@ -164,3 +164,48 @@ def test_finalize_caps():
     assert r["class"] == "INSERT" and r["score"] == SC.INSERT_CAP and r["reason"] == "pass"
     r = SC.finalize(dict(perf, tier="wide", owner_px=50), 100.0)
     assert r["class"] == "COVERAGE" and r["score"] is None and r["reason"].startswith("n/a: singer too small")
+
+
+def _held(**k):
+    row = {
+        "sung": True,
+        "corr": 0.9,
+        "corr_pm1": 0.9,
+        "open_in_silence": 0.1,
+        "rise_ms": 40,
+        "closure_hit": 1.0,
+        "need": "cu",
+        "tier": "cu",
+        "owner_px": 300,
+        "mouth_visible": 1.0,
+        "motion": 2.0,
+        "pops": 0,
+        "sharpness": 100.0,
+    }
+    return SC.finalize({**row, **k}, 100.0)
+
+
+def test_a_held_gape_says_in_plain_words_what_share_of_the_asked_travel_it_delivered():
+    r = _held(mouth_range=0.059, before={"mouth_range": 0.125}, asked_travel=0.8)  # asked 0.1 of travel, delivered 0.059
+    assert r["score"] == SC.TRAVEL_CAP_SCORE and r["reason"].startswith("mouth barely moves")
+    assert "delivered 0.59 of the travel the song asked" in r["reason"] and "p5-p95 0.059" in r["reason"]
+    r = _held(mouth_range=0.06, before={"mouth_range": 0.12})  # no warp log: the take is the reference
+    assert "delivered 0.50 of the take's own travel" in r["reason"]
+    r = _held(mouth_range=0.04, before={"mouth_range": 0.12}, asked_travel=0.2)  # under the floor whatever was asked
+    assert "under the 0.05 floor" in r["reason"]
+    r = _held(mouth_range=0.07)  # no reading of the take (the scorecard's case)
+    assert r["score"] == SC.TRAVEL_CAP_SCORE and "no reading of the take" in r["reason"]
+
+
+def test_a_dub_that_delivers_what_the_song_asked_keeps_its_reason():
+    r = _held(mouth_range=0.08, before={"mouth_range": 0.125}, asked_travel=0.8)  # 0.8 of the 0.1 asked: not held
+    assert r["score"] != SC.TRAVEL_CAP_SCORE or "delivered" not in r["reason"]
+    assert not SC.held_gape(r)
+
+
+def test_the_verify_table_shows_the_asked_travel_beside_the_travel():
+    from lsdub_engine.audits import qa
+
+    assert qa._travel_cell({"mouth_range": 0.071, "asked_travel": 0.801}) == "0.071; song asks 0.80 of the take's"
+    assert qa._travel_cell({"mouth_range": 0.071}) == 0.071  # no warp log: the travel alone, as before
+    assert qa._travel_cell({}) == ""
