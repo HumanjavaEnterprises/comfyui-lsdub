@@ -99,7 +99,7 @@ def test_the_check_catches_a_bad_widget_value(pack):
     S = schemas(pack)
     wf = json.load(open([p for p in WORKFLOWS if '4-' in os.path.basename(p)][0]))
     dub = next(n for n in wf['nodes'] if n['type'] == 'LSDubDub')
-    dub['widgets_values'][-1] = 'sing'                                                  # not a vocalisations option
+    dub['widgets_values'][dub['widgets_values'].index('mouth')] = 'sing'                # not a vocalisations option
     with pytest.raises(AssertionError, match='not in'):
         check_workflow(wf, S)
     dub['widgets_values'] = dub['widgets_values'][:-1]                                  # one widget value short

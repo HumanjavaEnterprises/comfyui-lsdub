@@ -6,7 +6,9 @@ LSDub Dub, per shot of the triage: DUB / DUB-MEDIUM -> `sing --auto` (crop to a 
 the lower face back, measured gate; the native full-frame warp is also run and the higher measured sync wins), then
 the continuity pass; WIDE / NO -> the source frames, untouched. Every shot is saved under shots/shot_###/<key>/ with a
 done.json, so an interrupted dub resumes and a re-run only redoes changed, failed or forced shots. The shots are then
-assembled into the cut with the source's audio, and the cut is watermarked."""
+assembled into the cut with the source's audio; LSDub Save Cut writes the watermarked final file. With mouth_card on,
+each dubbed shot also gets the engine's mouth card beside its render (the render is only read) and the card cut is
+assembled from those, a separate, watermarked QA file."""
 import json
 import os
 import shutil
@@ -333,6 +335,24 @@ def cut_render(project, source, shots, quality, audio, song, scope='LSDubDub/cut
     return T.Render(shots=shots, cut=cut, hash=ckey, audio=audio, song=song.to_json() if song and audio == 'song' else {}), failed
 
 
+def card_render(project, source, shots, quality, audio, song):
+    """the card cut: the clean cut with each dubbed shot's mouth-card video in its place (a card in a band below the
+    picture is scaled to the frame). Keyed on every shot's result and card; the clean cut is a different file."""
+    cards = {k: v['card'] for k, v in shots.items() if v.get('card') and os.path.exists(v['card'])}
+    ckey = stage_key('LSDubDub/card', {'shots': {k: [v.get('result'), v.get('used'), file_hash(cards[k]) if k in cards else '']
+                                                 for k, v in sorted(shots.items())}, 'crf': quality, 'audio': audio},
+                     [project.cache_key(), source.hash, song.cache_key() if (song and audio == 'song') else ''])
+    cst = project.stage('shots/_card', ckey)
+    cut = cst.path('card_cut.mp4')
+    if not cst.is_done():
+        from .lsdub_engine import watermark as WM
+        warn = assemble(source.path, {(shots[k]['f0'], shots[k]['f1']): p for k, p in cards.items()}, cut, source.fps, quality, audio,
+                        (song.mix if song else None), project.song_offset)
+        WM.apply_inplace(cut, crf=int(quality))                       # marked like the engine's paint --annotate card video
+        cst.mark_done(True, shots=sorted(cards), warnings=warn)
+    return cut
+
+
 class LSDubDub(io.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -366,10 +386,18 @@ class LSDubDub(io.ComfyNode):
                                        'there; rest = close the mouth; mouth = sing them like words (best for a scat chorus '
                                        'or a generated performance). The Dub finds these spans again from the word timings; '
                                        'the skip marks LSDub Align writes are not read here.'),
+                io.Boolean.Input('mouth_card', default=False, optional=True,
+                                 tooltip='Mouth card: a QA view of each dubbed shot with a per-frame card in a corner (never over '
+                                         'a face): the sung word, its mouth shape, openness and the next second of mouth '
+                                         'shapes; uncertain words marked with a ? and the reason. The clean cut and its '
+                                         'renders never change; the card cut comes out of card_video.'),
             ],
             outputs=[T.LSDubRender.Output(display_name='render', tooltip='Per-shot results (pass / fail and why), gates and '
                                                                          'the assembled cut.'),
-                     io.Video.Output(display_name='video', tooltip='The assembled cut.')],
+                     io.Video.Output(display_name='video', tooltip='The assembled cut.'),
+                     io.Video.Output(display_name='card_video', tooltip='The cut with the mouth card on each dubbed shot (QA '
+                                                                        'view, not saved by Save Cut). With mouth_card off: '
+                                                                        'the assembled cut.')],
         )
 
     @classmethod
@@ -417,10 +445,13 @@ class LSDubDub(io.ComfyNode):
 
     @classmethod
     def fingerprint_inputs(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None,
-                           cast=None, only_shots='', quality=18, on_fail='source', audio='source', vocalisations='skip'):
+                           cast=None, only_shots='', quality=18, on_fail='source', audio='source', vocalisations='skip',
+                           mouth_card=False):
         if project.mode == 'test_learn': return stage_key('LSDubDub', {'mode': 'test_learn'}, [source.hash])
         keys = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots, vocalisations)[0]
-        return stage_key('LSDubDub', {'shots': keys, 'force': list(project.force_shots), 'crf': quality, 'fail': on_fail, 'audio': audio})
+        card = {'card': True} if mouth_card else {}                          # absent when off: the fingerprint stays what it was
+        return stage_key('LSDubDub', {'shots': keys, 'force': list(project.force_shots), 'crf': quality, 'fail': on_fail, 'audio': audio,
+                                      **card})
 
     @classmethod
     def _mask_for(cls, masks, s, tw, n):
@@ -467,12 +498,13 @@ class LSDubDub(io.ComfyNode):
 
     @classmethod
     def execute(cls, project, source, shots, song, align, kit, kit_2=None, kit_3=None, tweaks=None, masks=None, cast=None,
-                only_shots='', quality=18, on_fail='source', audio='source', vocalisations='skip'):
+                only_shots='', quality=18, on_fail='source', audio='source', vocalisations='skip', mouth_card=False):
         from . import devices as _dev
         _dev.ensure_face_models()
         from .project import take_force
         if project.mode == 'test_learn':                              # analyse only: the cut is the source
-            return io.NodeOutput(T.Render(shots={}, cut=source.path, hash=source.hash), cls._video(source.path))
+            return io.NodeOutput(T.Render(shots={}, cut=source.path, hash=source.hash), cls._video(source.path),
+                                 cls._video(source.path))
         keys, plan, kits, tw = cls._keys(project, source, shots, song, align, kit, kit_2, kit_3, tweaks, masks, cast, only_shots,
                                          vocalisations)
         forced = take_force(project, 'dub')
@@ -510,6 +542,9 @@ class LSDubDub(io.ComfyNode):
                              else st.path('gate.json'), 'key': k,
                              'result': file_hash(r) if r else 'none',
                              'used': 'render' if r and (ok or on_fail == 'render') else 'source'}
+            if mouth_card and res[str(sid)]['used'] == 'render':
+                card = cls.shot_card(project, source, s, st, song, align, cls._kit_for(s, kits), tw, vocalisations, r)
+                if card: res[str(sid)]['card'] = card
             if pbar: pbar.update(1)
         from .project import parse_force_shots
         for sid, (s, msg) in cls._dropped(shots, kits, parse_force_shots(only_shots), cast).items():
@@ -519,7 +554,37 @@ class LSDubDub(io.ComfyNode):
         rec, failed = cut_render(project, source, res, quality, audio, song)
         rec.on_fail = on_fail
         if failed: _log(f'{len(failed)} shot(s) failed: {failed} (see LSDub Fix It)')
-        return io.NodeOutput(rec, cls._video(rec.cut))
+        card_cut = rec.cut
+        if mouth_card:
+            try:
+                card_cut = card_render(project, source, res, quality, audio, song)
+            except Exception as e:                                      # a QA view: never costs the dub
+                _log(f'mouth card cut failed ({type(e).__name__}: {e}); card_video is the clean cut')
+        return io.NodeOutput(rec, cls._video(rec.cut), cls._video(card_cut))
+
+    @classmethod
+    def shot_card(cls, project, source, s, st, song, align, kit, tw, vocalisations, render):
+        """the mouth card beside a dubbed shot's render (the engine's paint --annotate path, which only READS the render):
+        <render>_annotated.mp4 + its lyric check. Reused while newer than the render. A side product: a failure is logged,
+        the shot and the clean cut are unaffected. -> the annotated path, or ''."""
+        from types import SimpleNamespace
+        from .lsdub_engine.core import mouth_card as MC
+        ann = MC.annotated_path(render)
+        if os.path.exists(ann) and os.path.getmtime(ann) >= os.path.getmtime(render): return ann
+        gate = json.load(open(st.path('gate.json'))) if os.path.exists(st.path('gate.json')) else {}
+        al = gate.get('align') if gate.get('align') and os.path.exists(gate['align']) else align.align   # what the shot was painted from
+        f, n = tw.flags, s['f1'] - s['f0'] + 1
+        trk = st.path('card_track.json')
+        try:
+            call('visemes', ['--align', al, '--t0', s['start'] - project.song_offset, '--frames', n, '--fps', source.fps,
+                             '--audio', song.lead or song.mix, '--lead', f.get('lead', 0.06),
+                             *(('--word-close', f['word_close']) if f.get('word_close') else ()), '--out', trk], quiet=True)
+        except Exception as e:
+            _log(f"shot {s['shot']}: mouth card skipped ({type(e).__name__}: {e}); the render is unaffected")
+            return ''
+        a = SimpleNamespace(out=render, track=trk, mode='warp', vocalisations=vocalisations, annotate_corner='auto',
+                            vocal_align=al, lib=kit.dir if kit else None)
+        return MC.after_paint(a).get('annotated', '')
 
     @staticmethod
     def _video(path):

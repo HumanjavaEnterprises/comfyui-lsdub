@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- LSDub Dub has a `mouth_card` toggle (off by default) and a `card_video` output: a QA view of each dubbed shot with the mouth card in a corner, never over a face. The card shows the sung word between its neighbours, its mouth shape, the openness and the next second of mouth shapes; uncertain words carry a `?` and the reason, and a word heard differently from the lyric shows both. Each shot's card video and lyric check sit beside its render. The clean cut, the renders and what Save Cut writes do not change, and turning the card on dubs nothing again.
+
 ## 0.1.8 (2026-11-04)
 
 - LSDub Dub's sync gate now reads the dubbed mouth against the lead vocal itself, on every frame of the shot.

@@ -127,8 +127,8 @@ and `LSDub/qa`.
 - **LSDub Shot Split:** finds the cuts. Fades and flashes are not cuts.
 - **LSDub Cast:** enrolls the singers from reference pictures, a refs folder or a saved cast file, and names the faces
   in every shot.
-- **LSDub Triage:** labels every shot DUB, DUB-MEDIUM or NO, with the reason: face size, profile, mouth hidden, too
-  short, or no singing.
+- **LSDub Triage:** labels every shot DUB, DUB-MEDIUM or NO, with the first rule it failed: too short, no face, wrong
+  person, singer on screen for under half the shot, profile, mouth hidden, or face too small.
 
 **AUDIO lane**
 - **LSDub Song:** a finished song (plus an optional dry lead vocal), or a song generated from tags and your lyrics with
@@ -143,14 +143,17 @@ and `LSDub/qa`.
 **MOUTH lane**
 - **LSDub Lip Kit:** the singer's 13 mouth shapes, the "mouth LoRA" every dub needs. Bring a kit folder, or build one
   from a close-up shot.
-- **LSDub Mouth Tweaks:** lead, word_close, face_target, snap, auto, continuity, raw warp flags, and an optional
-  jaw-curve CSV.
+- **LSDub Mouth Tweaks:** lead, word_close, face_target, snap, auto, continuity, raw warp flags, and the opt-in
+  jaw-curve CSV, sync advance and sync phrases.
 - **LSDub Dub:** dubs each DUB and DUB-MEDIUM shot.
   - The shot is cropped to a 512 px face and warped at 2x the frame rate. The lower face is pasted back and a measured
     sync gate is applied.
   - With `auto`, the full-frame warp also runs, and the version with better measured sync is kept.
   - A continuity repair runs afterwards.
   - `vocalisations`: `skip` keeps the video's own mouth on ooh / da da, `rest` closes it, `mouth` sings them.
+  - `mouth_card` (off by default): a QA view of each dubbed shot with a card in a corner, never over a face: the sung
+    word, its mouth shape, openness and the next second of mouth shapes, with uncertain words marked `?` and the
+    reason. It comes out of `card_video`; the clean cut and Save Cut are unchanged.
   - Each shot is saved as it finishes, so the dub resumes. Failed shots are reported, and by default the cut keeps
     their original frames.
 - **LSDub Occluders:** masks a microphone or hand in front of the mouth, so the next dub keeps it in front. Uses
