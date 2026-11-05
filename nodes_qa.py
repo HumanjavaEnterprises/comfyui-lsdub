@@ -41,8 +41,9 @@ class LSDubVerify(io.ComfyNode):
         return io.Schema(
             node_id='LSDubVerify', display_name='LSDub Verify', category='LSDub/qa',
             description='How likely each dubbed shot is to have worked: a 0-100 score and PASS / REVIEW / FAIL, compared '
-                        'with the source (sync, mouth travel, silences, identity drift). A shot the dub left as source reads '
-                        'N/A. Frames in vocalisation spans are left out of the sync score.',
+                        'with the source (sync, mouth travel, silences, identity drift). A soft or held line is judged against '
+                        'the mouth travel the song asks for, not the take\'s own, and the report shows that reading. A shot the '
+                        'dub left as source reads N/A. Frames in vocalisation spans are left out of the sync score.',
             inputs=[
                 T.LSDubProject.Input('project', tooltip='The LSDub project.'),
                 T.LSDubSource.Input('source', tooltip='The video before the dub.'),
@@ -52,7 +53,9 @@ class LSDubVerify(io.ComfyNode):
                 T.LSDubAlign.Input('align', tooltip='The word timings.'),
             ],
             outputs=[T.LSDubReport.Output(display_name='report', tooltip='Per-shot band and score, the shots to fix.'),
-                     io.String.Output(display_name='md', tooltip='Markdown: worst first, with the reason.')],
+                     io.String.Output(display_name='md', tooltip='Markdown: worst first, with the reason. The travel column shows how '
+                                                                 'much of the take\'s mouth travel the song asks for; a mouth that barely '
+                                                                 'moves says what share of that it delivered.')],
         )
 
     @classmethod
@@ -282,7 +285,8 @@ FIXES = [
     ('leads the vocal', 'The mouth is early against the song: lower lead (0.0-0.03) in LSDub Mouth Tweaks and force the shot.'),
     ('open in the silences', 'Mouth open in the gaps: raise word_close (0.08-0.12) in LSDub Mouth Tweaks.'),
     ('soft attacks', 'Attacks are soft: keep snap on and lower lead a little.'),
-    ('barely moves', 'Held gape or mumble: raise word_close, and check the vocal is the dry lead.'),
+    ('barely moves', 'Held gape or mumble: the reason says how much of the asked travel the mouth delivered. Raise word_close, and '
+                     'check the vocal is the dry lead.'),
     ('temporal pops', 'Run LSDub Continuity on this shot with a lower z (3.0).'),
     ('off-model', 'The mouth does not match the face: rebuild or swap the lip kit for this singer.'),
     ('near-still', 'The shot barely moves: a still playing as video. Use a take with motion.'),

@@ -25,6 +25,16 @@ from .lsdub_engine.core.steps import call
 from .project import file_hash, shots_todo, stage_key, text_hash
 
 DUB_VERDICTS = ('DUB', 'DUB-MEDIUM')
+WARP_SHAPES = ('asym', 'off')                               # the first is the engine's default; the last is 0.1.9's
+TRAVEL_GUARDS = ('aligner', 'take')
+COHERENCE_CHARGES = ('remade', 'all')
+SWITCH_TIPS = dict(
+    warp_shape='Mouth shape on the snap warp: asym closes the lips 20 ms early and opens them on time; off is the 0.1.9 shape.',
+    travel_guard='A re-timed mouth that barely moves is swapped for the un-retimed render: aligner only when it also moves less than '
+                 'that render; take judges it against the take alone (0.1.9).',
+    coherence_charge='What the continuity repair\'s budget counts: remade only the frames it re-makes; all every flagged run (0.1.9), '
+                     'so less gets repaired.',
+)
 SING_EXTRA = ['--warp-track-mode', 'chain']                 # the standard sing recipe's track mode
 
 
@@ -59,11 +69,17 @@ def _phrases(tw, vocal):
     return ['--coart-sync-vocal', vocal] if vocal and (getattr(tw, 'flags', None) or {}).get('sync_phrases') else []
 
 
+def _shape(tw):
+    """the Tweaks' warp_shape as paint flags: nothing at asym (sing's own flag), --warp-shape off at off; settings come after it."""
+    return ['--warp-shape', 'off'] if (getattr(tw, 'flags', None) or {}).get('warp_shape', WARP_SHAPES[0]) == 'off' else []
+
+
 def _paint_flags(project, kit, tw, vocalisations, vocal=None):
     """the shot's flags for sing. --vocalisations is a user-level flag: settings can change it."""
     recipe, face = _stack(project, kit.identity)
     return paint_api.flags(recipe, lib=kit.dir, mode_mods=SING_EXTRA, face_overrides=face,
-                           user_overrides=['--vocalisations', vocalisations, *_advance(tw), *_phrases(tw, vocal), *paint_api.split_settings(tw.settings)])
+                           user_overrides=['--vocalisations', vocalisations, *_advance(tw), *_phrases(tw, vocal), *_shape(tw),
+                                           *paint_api.split_settings(tw.settings)])
 
 
 class LSDubBuildLipKit(io.ComfyNode):
@@ -190,12 +206,18 @@ class LSDubTweaks(io.ComfyNode):
                 io.Boolean.Input('sync_phrases', default=False, optional=True,
                                  tooltip='Lets each sung phrase land a little earlier or later, read from the vocal alone. It keeps the mouth\'s shapes '
                                          'and only changes when they land. Needs a layers mouth_stack.'),
+                io.Combo.Input('warp_shape', options=['asym', 'off'], default='asym', optional=True, tooltip=SWITCH_TIPS['warp_shape']),
+                io.Combo.Input('travel_guard', options=['aligner', 'take'], default='aligner', optional=True,
+                               tooltip=SWITCH_TIPS['travel_guard']),
+                io.Combo.Input('coherence_charge', options=['remade', 'all'], default='remade', optional=True,
+                               tooltip=SWITCH_TIPS['coherence_charge']),
             ],
             outputs=[T.LSDubTweaks.Output(display_name='tweaks', tooltip='The mouth controls.')],
         )
 
     @classmethod
-    def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv='', sync_advance_ms=0.0, sync_phrases=False):
+    def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv='', sync_advance_ms=0.0, sync_phrases=False,
+                warp_shape='asym', travel_guard='aligner', coherence_charge='remade'):
         try:
             paint_api.split_settings(settings)
         except ValueError as e:
@@ -208,6 +230,11 @@ class LSDubTweaks(io.ComfyNode):
             flags['sync_advance_ms'] = float(sync_advance_ms)
         if sync_phrases:  # the same: absent when off
             flags['sync_phrases'] = True
+        for name, value, options in (('warp_shape', warp_shape, WARP_SHAPES), ('travel_guard', travel_guard, TRAVEL_GUARDS),
+                                     ('coherence_charge', coherence_charge, COHERENCE_CHARGES)):
+            if value not in options: raise ValueError(f'LSDub Mouth Tweaks: {name} must be one of {", ".join(options)}, not {value!r}')
+            if value != options[0]:  # absent at the default, as above; a cached shot still re-dubs when the engine changes (its key
+                flags[name] = value  # carries the whole engine's version)
         return io.NodeOutput(T.Tweaks(flags=flags, settings=settings.strip(), hash=text_hash(json.dumps(flags, sort_keys=True) + settings)))
 
 
@@ -485,10 +512,11 @@ class LSDubDub(io.ComfyNode):
                         box=None if cast else s.get('box'), face_target=float(f.get('face_target', 512.0)),
                         snap=bool(f.get('snap', True)), report=st.path('gate.json'), lead=f.get('lead'),
                         word_close=f.get('word_close'), a2f=f.get('jaw_csv') or None, auto=bool(f.get('auto', True)),
-                        preset=project.preset)
+                        preset=project.preset, travel_ref=f.get('travel_guard', TRAVEL_GUARDS[0]))
         render = st.path('render.mp4')
         if f.get('continuity', True):
-            info.update(SING.repair(take, st.path('sung.mp4'), render, info, work, report=st.path('continuity.json')))
+            info.update(SING.repair(take, st.path('sung.mp4'), render, info, work, report=st.path('continuity.json'),
+                                    charge=f.get('coherence_charge', COHERENCE_CHARGES[0])))
             json.dump(info, open(st.path('gate.json'), 'w'), indent=1)   # the gate's record carries what the cut delivers
         else:
             shutil.copyfile(st.path('sung.mp4'), render)
@@ -675,29 +703,40 @@ class LSDubContinuity(io.ComfyNode):
                 io.Float.Input('z', default=3.5, min=1.5, max=8.0, step=0.1,
                                tooltip='How unusual a frame must be to be repaired; lower repairs more.'),
                 io.Int.Input('quality', default=18, min=10, max=30, optional=True, tooltip='Cut quality (x264 CRF).'),
+                io.Combo.Input('coherence_charge', options=['remade', 'all'], default='remade', optional=True,
+                               tooltip=SWITCH_TIPS['coherence_charge']),
             ],
             outputs=[T.LSDubRender.Output(display_name='render', tooltip='The dub with the repaired shots.'),
                      io.Video.Output(display_name='video', tooltip='The re-assembled cut.')],
         )
 
-    @classmethod
-    def fingerprint_inputs(cls, project, source, render, shot_ids='', z=3.5, quality=18):
-        return stage_key('LSDubContinuity', {'ids': shot_ids, 'z': z, 'q': quality}, [render.hash])
+    @staticmethod
+    def _charge(coherence_charge):
+        """absent at the default: the keys before the option."""
+        if coherence_charge not in COHERENCE_CHARGES:
+            raise ValueError(f'LSDub Continuity: coherence_charge must be one of {", ".join(COHERENCE_CHARGES)}, not {coherence_charge!r}')
+        return {} if coherence_charge == COHERENCE_CHARGES[0] else {'charge': coherence_charge}
 
     @classmethod
-    def execute(cls, project, source, render, shot_ids='', z=3.5, quality=18):
+    def fingerprint_inputs(cls, project, source, render, shot_ids='', z=3.5, quality=18, coherence_charge='remade'):
+        return stage_key('LSDubContinuity', {'ids': shot_ids, 'z': z, 'q': quality, **cls._charge(coherence_charge)}, [render.hash])
+
+    @classmethod
+    def execute(cls, project, source, render, shot_ids='', z=3.5, quality=18, coherence_charge='remade'):
         from .lsdub_engine.core import continuity as CONT
         from .project import parse_force_shots
         want = set(parse_force_shots(shot_ids))
+        charge = cls._charge(coherence_charge)
         shots = {}
         for sid, v in render.shots.items():
             v = dict(v)
             if v.get('render') and (not want or int(sid) in want):
                 d = os.path.dirname(v.get('gate') or v['render'])
-                st = project.stage('shots/_continuity', stage_key('LSDubContinuity', {'z': z}, [v['key'], v['result']]))
+                st = project.stage('shots/_continuity', stage_key('LSDubContinuity', {'z': z, **charge}, [v['key'], v['result']]))
                 out = st.path('render.mp4')
                 if not st.is_done():
-                    CONT.run(os.path.join(d, 'take.mp4'), os.path.join(d, 'sung.mp4'), out, z=z, report=st.path('continuity.json'))
+                    CONT.run(os.path.join(d, 'take.mp4'), os.path.join(d, 'sung.mp4'), out, z=z, report=st.path('continuity.json'),
+                             charge=coherence_charge)
                     st.mark_done(True)
                 v.update(render=out, result=file_hash(out))
             shots[sid] = v

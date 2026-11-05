@@ -231,6 +231,14 @@ def odd_frames(T, R, M, skip=(), z=2.0, ratio=1.0, floor=3.5, runs=tuple(range(1
     return out, one
 
 
+CHARGES = ("all", "remade")
+
+
+def kept_as_is(L, alts):
+    """remake leaves a run longer than a blip as it is when there is no alternate render to take it from."""
+    return L > 3 and not alts
+
+
 def remake(T, R, runs, M, alts=(), feather=5, only=None, desync=None):
     """the maker for odd runs: candidates are the flow interpolation from the two sides and every alternate render;
     each is scored on the same two-sided ruler and the most coherent one is blended in over the mouth. -> (frames, log)."""
@@ -242,7 +250,7 @@ def remake(T, R, runs, M, alts=(), feather=5, only=None, desync=None):
         cands = {}  # a blip (<= 3) is blended from its sides; a longer run is
         if L <= 3 or not alts:  # a held state (teeth in a smile) unless a re-render beats it
             cands["interp"] = [interp(R[a], R[b], (t - a) / (b - a), _dis()) for t in range(i, i + L)]
-        if L > 3 and not alts:
+        if kept_as_is(L, alts):
             log.append(dict(start=i, length=L, dev=d, used="kept", dev_after=d))
             continue
         for k, A in enumerate(alts):
@@ -491,7 +499,13 @@ def run(
     squeeze=True,
     plan_tol=0.12,
     max_frac=0.10,
+    charge="remade",
 ):
+    """charge: what the coherence pass's max_frac share is charged with. "remade" (default): only runs it can re-make; a run it would
+    keep as it is (longer than a blip, no alternate render) changes no frame, so it spends none of the share. "all": every run it lets
+    through, re-made or not."""
+    if charge not in CHARGES:
+        raise ValueError(f"charge {charge!r}")
     T, fps = _read(take)
     R, _ = _read(render)
     n = min(len(T), len(R))
@@ -544,6 +558,8 @@ def run(
             w = (np.arange(i, i + L) - (i - 1)) / (L + 1)
             if np.max(np.abs(plan[i : i + L] - ((1 - w) * plan[i - 1] + w * plan[i + L]))) > plan_tol * rng:
                 return False
+        if charge == "remade" and kept_as_is(L, alts):
+            return True
         new = set(range(i, i + L)) - touched
         if len(touched) + len(new) > budget:
             return False
@@ -664,6 +680,12 @@ def main(argv=None):
         help="a run whose planned opening moves more than this x the shot's range is real singing: never re-made",
     )
     ap.add_argument("--max-frac", type=float, default=0.10, help="the coherence pass touches at most this share of the shot")
+    ap.add_argument(
+        "--coherence-charge",
+        choices=CHARGES,
+        default="remade",
+        help="what --max-frac is charged with: only runs that are re-made (remade, default), or every run let through (all)",
+    )
     ap.add_argument("--json")
     ap.add_argument("--strip", help="png of take | before | after for every flagged frame")
     a = ap.parse_args(argv)
@@ -683,6 +705,7 @@ def main(argv=None):
         squeeze=not a.no_squeeze,
         plan_tol=a.plan_tol,
         max_frac=a.max_frac,
+        charge=a.coherence_charge,
     )
 
 

@@ -14,7 +14,8 @@ step, for EVERY sung shot). CPU.
   4 plan      the alignment's words and phones re-read off the vocal (vocal_retime, anchored to the aligner's times) ->
               work/align_vocal.json, which every step below plans from (--no-vocal-retime: the alignment as it is)
     warp      SNAP: the viseme track and the crop at --fps-mult (2) x the frame rate, with between-word closures
-              (--word-close), a shorter vocal attack (sung_dyn --attack-ms) and less smoothing in frame units; then
+              (--word-close), a shorter vocal attack (sung_dyn --attack-ms), less smoothing in frame units and closing
+              edges 20 ms early (--warp-shape asym); then
               one internal frame per output frame, keeping the extremes: at a closure the most-closed, at a peak the
               most-open, else the on-time frame (pick_extremes)
   5 composite the tier-2 paste (lsdub medium): area down, Lab match, grain, feathered nose-to-chin mask, the rest of the
@@ -46,15 +47,20 @@ SNAP = dict(
     lead=0.06,
     word_close=0.06,
     attack_ms=15.0,
-    paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15"],
-)  # --warp-follow: the plain target holds the opening near the plan, so a take's own mouth timing does not ride through
+    paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15", "--warp-shape", "asym"],
+)  # --warp-follow: the plain target holds the opening near the plan, so a take's own mouth timing does not ride through.
+# --warp-shape asym: closing edges 20 ms early, openings on time (lsdub/core/drive_shape.py); a --warp-shape in the caller's flags wins
 
 
 def snap_paint(paint_args, m):
     """SNAP's paint flags. A --warp-temporal in the caller's flags, in output frames, holds here at the internal rate (x m); it
     never goes under SNAP's own. --warp-temporal-width, in output frames too, the same, and --warp-temporal-spare eases over one output
-    frame. Named by nobody: SNAP's flags unchanged."""
+    frame. A --warp-shape in the caller's flags replaces SNAP's (--warp-shape off: the drive as it was before asym). Named by nobody:
+    SNAP's flags unchanged."""
     p = list(SNAP["paint"])
+    if any(str(x) == "--warp-shape" or str(x).startswith("--warp-shape=") for x in paint_args):
+        i = p.index("--warp-shape")
+        del p[i : i + 2]
     t = paint_api.temporal(paint_args)
     if t is not None:
         i = p.index("--warp-temporal") + 1
@@ -210,6 +216,7 @@ def run(
     vocal_retime=True,
     pump=None,
     drive_comp=False,
+    travel_ref="aligner",
 ):
     os.makedirs(work, exist_ok=True)
     again = dict(paint_args=paint_args, char=char, db=db, box=box, face_target=face_target, fps_mult=fps_mult, snap=snap, a2f=a2f,
@@ -343,7 +350,7 @@ def run(
     info["timings"] = tm
     info["medium"] = {k: R[k] for k in ("face_h_px", "zoom", "crop_px", "outside_max_preencode", "not_pasted", "picked")}
     if (info.get("retime") or {}).get("used"):
-        info = travel_guard(info, take, align0, vocal, t0, out, work, R, again)
+        info = travel_guard(info, take, align0, vocal, t0, out, work, R, again, ref=travel_ref)
     if report:
         json.dump(info, open(report, "w"), indent=1)
     g = info
@@ -520,15 +527,24 @@ def travel(op):
     return None if op is None else round(float(np.percentile(op, 95) - np.percentile(op, 5)), 4)
 
 
-def travel_guard(info, take, align, vocal, t0, out, work, R, again):
+TRAVEL_REFS = ("take", "aligner")
+
+
+def travel_guard(info, take, align, vocal, t0, out, work, R, again, ref="take"):
     """a retimed shot whose delivered mouth is a held gape against its own take (scorecard.held_gape: under 0.10 of travel and under
     TRAVEL_KEEP of the take's, or under the floor) is rendered again from the aligner's times (work/aligner); when that one passes and
     is not a held gape, it is delivered instead. The retime can shorten the plan's openings in a way the plan's own reading does not
-    show. -> the info of what is delivered, with the readings under retime.guard."""
+    show. -> the info of what is delivered, with the readings under retime.guard.
+
+    ref: what the retimed mouth's travel is read against before it is swapped. "take": the take's alone. "aligner": also the
+    aligner's render, the same shot painted without the retime; a retimed mouth that keeps TRAVEL_KEEP of that render's travel was
+    not shortened by the retime (its low travel is the shot's own, e.g. a take that rests half open), so it stays."""
     import shutil
 
     from ..audits import scorecard as SC
 
+    if ref not in TRAVEL_REFS:
+        raise ValueError(f"travel ref {ref!r}")
     n = info["frames"]
     t_take, t_out = travel(mouth_open(take, R, n)), travel(mouth_open(out, R, n))
     held = lambda t: t is not None and t_take is not None and SC.held_gape(dict(mouth_range=t, before=dict(mouth_range=t_take)))
@@ -544,6 +560,11 @@ def travel_guard(info, take, align, vocal, t0, out, work, R, again):
     alt = run(take, align, vocal, t0, alt_out, alt_work, vocal_retime=False, report=None, **again)
     guard["aligner_travel"] = travel(mouth_open(alt_out, R, n))
     guard["aligner_pass"] = bool(alt.get("pass"))
+    if ref == "aligner" and t_out is not None and guard["aligner_travel"] is not None:
+        guard["shortened"] = bool(SC.held_gape(dict(mouth_range=t_out, before=dict(mouth_range=guard["aligner_travel"]))))
+        if not guard["shortened"]:
+            info["retime"]["guard"] = dict(guard, delivered="retimed")
+            return info
     if alt.get("pass") and not held(guard["aligner_travel"]):
         shutil.copyfile(alt_out, out)
         alt["retime"] = dict(info["retime"], used=False, guard=dict(guard, delivered="aligner"))
@@ -579,16 +600,17 @@ def repaired_silence(video, info, work):
     return SN.snap_metrics(op, vox, [], info["t0"], info["fps"], dt=dt)["open_in_silence"]
 
 
-def repair(take, sung, out, info, work, report=None):
+def repair(take, sung, out, info, work, report=None, charge="remade"):
     """the continuity repair (single-frame pops against the take) on a sung shot, delivered only when the repaired mouth still follows
     the vocal: it puts take frames back, and a take's mouth is not on the song. A repair that costs more than REPAIR_DROP of the audio
     sync, turns a passing shot into a failing one, or puts its open-in-silence over GATE_SILENCE, is undone (out = the sung shot).
+    charge: what the continuity pass's coherence share is charged with (continuity.run's charge: "remade", the default, or "all").
     -> the reading, into the gate's info."""
     import shutil
 
     from . import continuity as CONT
 
-    CONT.run(take, sung, out, report=report)
+    CONT.run(take, sung, out, report=report, charge=charge)
     if info.get("truth") is None or not os.path.exists(os.path.join(work, "medium.json")):
         return {"repair": "kept"}
     t = delivered_truth(out, info, work)
@@ -665,6 +687,13 @@ def main(argv=None):
         "the one whose gate passes, else the higher audio sync (the plan corr when the vocal reads nothing); open-in-silence "
         "breaks a tie within 0.02 (an unmeasured silence counts as the worst)",
     )
+    ap.add_argument(
+        "--travel-guard",
+        choices=TRAVEL_REFS,
+        default="aligner",
+        help="a retimed mouth read as a held gape is swapped for the aligner's render; 'aligner' (default): only when the retime "
+        "shortened it against that render too; 'take': on the take's reading alone",
+    )
     a = ap.parse_args(argv)
     info = run(
         a.take,
@@ -690,6 +719,7 @@ def main(argv=None):
         vocal_retime=a.vocal_retime,
         pump=(a.drive_pump, 4.0) if a.drive_pump else None,
         drive_comp=a.drive_comp,
+        travel_ref=a.travel_guard,
     )
     return 0 if info["pass"] else 1
 

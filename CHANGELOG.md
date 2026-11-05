@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.10 (2026-11-05)
+
+- LSDub Dub has a sharper mouth and two repair fixes, now on by default:
+  - The lips close a touch early (20 ms) at the end of a sound and open on time.
+  - A re-timed mouth that barely moves is swapped for the un-retimed render only when that render really moves more.
+  - The continuity repair's budget counts only the frames it re-makes, so it can repair more of a shot.
+- LSDub Mouth Tweaks has three new switches for these, each with the old behaviour one choice away:
+  - `warp_shape`: `asym` (new) or `off` (0.1.9).
+  - `travel_guard`: `aligner` (new) or `take` (0.1.9).
+  - `coherence_charge`: `remade` (new) or `all` (0.1.9).
+  - Set all three to the second choice to dub as 0.1.9 did.
+- LSDub Continuity has the same `coherence_charge` switch.
+- LSDub Verify no longer marks a soft or held line REVIEW when the dub moves as much as the song asks for. It used to compare the mouth with the take's own movement, which a held line does not ask for.
+  - The travel column shows how much of the take's movement the song asks for, beside the mouth's travel.
+  - A shot still held at REVIEW says why in plain words, for example "delivered 0.59 of the travel the song asked".
+- Projects dubbed with 0.1.9 dub their shots again with this release, so no shot keeps an old render under the new defaults.
+
 ## 0.1.9 (2026-11-04)
 
 - LSDub Dub has a `mouth_card` toggle (off by default) and a `card_video` output: a QA view of each dubbed shot with the mouth card in a corner, never over a face. The card shows the sung word between its neighbours, its mouth shape, the openness and the next second of mouth shapes; uncertain words carry a `?` and the reason, and a word heard differently from the lyric shows both. Each shot's card video and lyric check sit beside its render. The clean cut, the renders and what Save Cut writes do not change, and turning the card on dubs nothing again.

@@ -141,7 +141,7 @@ def test_run_hands_the_retimed_alignment_on_and_can_be_told_not_to(monkeypatch, 
     monkeypatch.setattr(S.steps, "call", lambda step, argv, **k: calls.append((step, list(argv))))
     monkeypatch.setattr(S, "dyn_target", lambda *a: np.zeros(4))
     monkeypatch.setattr(S, "retimed_align", lambda align, vocal, work, *a: (work + "/align_vocal.json", {"used": True}))
-    monkeypatch.setattr(S, "travel_guard", lambda info, *a: info)  # its own tests below
+    monkeypatch.setattr(S, "travel_guard", lambda info, *a, **k: info)  # its own tests below
     gated = []
     g = dict(corr=0.9, best=0.9, lag_ms=0, open_in_silence=0.1, rise_ms=10, closure_hit=1, **{"pass": True})
     monkeypatch.setattr(S, "gate", lambda v, R, t, vocal, align, *a, **k: gated.append(align) or g)
@@ -162,7 +162,7 @@ def _repair(monkeypatch, tmp_path, before, after, silence=0.2):
     sung.write_bytes(b"sung")
     from lsdub_engine.core import continuity as CONT
 
-    monkeypatch.setattr(CONT, "run", lambda take, a, b, report=None: open(b, "wb").write(b"repaired"))
+    monkeypatch.setattr(CONT, "run", lambda take, a, b, report=None, **k: open(b, "wb").write(b"repaired"))
     monkeypatch.setattr(S, "delivered_truth", lambda v, info, work: after)
     monkeypatch.setattr(S, "repaired_silence", lambda v, info, work: silence)
     r = S.repair("take.mp4", str(sung), str(out), before, str(tmp_path))

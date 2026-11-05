@@ -91,7 +91,7 @@ def test_dub_passes_the_vocalisations_mode(pack, tmp_path, monkeypatch):
         return {"pass": True, "corr": 0.9}
 
     monkeypatch.setattr(sing, "run", fake_run)
-    monkeypatch.setattr(continuity, "run", lambda take, sung, render, report=None: open(render, "w").write("x"))
+    monkeypatch.setattr(continuity, "run", lambda take, sung, render, report=None, **k: open(render, "w").write("x"))
     monkeypatch.setattr(M, "extract_shot", lambda src, f0, f1, out: out)
     p = P.Project(root=str(tmp_path), name="cut").ensure()
     s = {"shot": 1, "f0": 0, "f1": 9, "start": 0.0, "verdict": "DUB", "target": "a", "box": [0, 0, 10, 10]}
