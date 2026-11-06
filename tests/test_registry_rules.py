@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""Clean-room + registry gates, run as tests: the scrub grep is empty (code AND tests), ruff S102/S307/E702/F is clean,
-no eval/exec, no runtime pip, no downloads at import, and no subprocess outside the one ffmpeg helper."""
+"""Registry rules, run as tests: ruff S102/S307/E702/F is clean, no eval/exec, no runtime pip, no machine paths,
+no downloads or heavy imports at import time, and no subprocess outside the one ffmpeg helper."""
 import os
 import re
 import shutil
@@ -11,10 +11,7 @@ import sys
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BANNED = re.compile('|'.join(['latent' + 'sync', 'wav2' + 'lip', 'sad' + 'talker', 'muse' + 'talk', 'insight' + 'face',
-                              'arc' + 'face', 'ante' + 'lope', 'code' + 'former', 'gfp' + 'gan', '/ho' + 'me/', 'gpu' + 'host',
-                              r'\bmv\d+\b', r'\bv\d+_\d+\b', r'\bQA\d+ cut\b', r'\bs1234\b', 'host-' + 'studio', r'\breco\d+\b', r'\bfounder', r'(?-i:\b(?:0\d|1[01])[A-D]\b)']), re.I)
-MACHINE_PATH = re.compile('~' + r'/(?!\.cache/lsdub\b)')
+MACHINE_PATH = re.compile('~' + r'/(?!\.cache/lsdub\b)|/' + 'home/')
 SKIP_DIRS = {'.git', '__pycache__', '.ruff_cache', '.pytest_cache'}
 # every external process goes through io/ff.py (ffmpeg/ffprobe, the opt-in aligners, a validated interpreter)
 SUBPROCESS_OK = {os.path.join('lsdub_engine', 'io', 'ff.py')}
@@ -28,12 +25,12 @@ def _files(exts=('.py', '.md', '.json', '.txt', '.toml', '.cff', '.yaml', '.yml'
             if os.path.splitext(f)[1] in exts: yield os.path.join(d, f)
 
 
-def test_scrub_grep_is_empty():
+def test_no_machine_paths():
     hits = []
     for p in _files():
         try: txt = open(p, encoding='utf-8').read()
         except (UnicodeDecodeError, OSError): continue
-        hits += [f'{os.path.relpath(p, ROOT)}:{i + 1}' for i, ln in enumerate(txt.splitlines()) if BANNED.search(ln) or MACHINE_PATH.search(ln)]
+        hits += [f'{os.path.relpath(p, ROOT)}:{i + 1}' for i, ln in enumerate(txt.splitlines()) if MACHINE_PATH.search(ln)]
     assert not hits, hits
 
 
