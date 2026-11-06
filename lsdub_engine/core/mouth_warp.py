@@ -1319,7 +1319,7 @@ class WarpClip:
         if g("warp_target", "v9") not in ("coart", "own"):  # (opt-in) the drive chain's stages before the aperture: lead gate, then shape
             fr_t = self.drive_stages(a, fr_t, Fs, model, float(T.get("fps", 25)))
         pp = np.array([fr_t[min(i, len(fr_t) - 1)]["vis"] == "PP" for i in range(n)])
-        # (opt-in): --warp-target coart = the coarticulation planner (lsdub/core/coart.py) instead of the per-frame
+        # (opt-in): --warp-target coart = the coarticulation planner (core/coart.py) instead of the per-frame
         # step targets: one planned trajectory (dominance-blended phone targets, duration undershoot, fitted to the take's own
         # motion statistics and shape manifold, closures hard; the jaw / lip split set on model.J); pp = its closure frames
         if g("warp_target", "v9") == "coart":
@@ -1336,7 +1336,7 @@ class WarpClip:
             Ft = Fs.copy()
         else:
             fr_plan = fr_t
-            if vars(a).get("warp_aperture", "off") != "off":  # (opt-in) stage: aperture map (lsdub/core/aperture.py)
+            if vars(a).get("warp_aperture", "off") != "off":  # (opt-in) stage: aperture map (core/aperture.py)
                 from . import aperture
 
                 fr_plan, self.aperture_gain = aperture.mapped(fr_t)
@@ -1361,7 +1361,7 @@ class WarpClip:
         if g("warp_yaw_width", 0.0) > 0:
             # the planned width follows the head turn. A turned head shows its mouth foreshortened; the plan's width
             # comes from the take's whole-clip range, so on a near-profile frame it asked for the frontal width and the far
-            # corner went onto the cheek (sky B f61-63). Per frame the foreshortening = the eyes' balance about the nose
+            # corner went onto the cheek. Per frame the foreshortening = the eyes' balance about the nose
             # bridge (1 frontal, -> 0 in profile), relative to the clip's median; the width target is scaled by it.
             fs = self.fs
             k = np.clip(fs / np.median(fs), 0.6, 1.0) ** g("warp_yaw_width", 1.0)
@@ -1424,7 +1424,7 @@ class WarpClip:
         n = len(frames)
         self.mic_frames = None
         if getattr(a, "occluder_plate", False) and getattr(a, "occluder_mask", None):
-            # the warp never sees the mic: it runs on a mic-free plate, and the take's mic goes back last (lsdub/core/occluders.py)
+            # the warp never sees the mic: it runs on a mic-free plate, and the take's mic goes back last (core/occluders.py)
             from . import occluders
 
             self.mic_frames = frames
@@ -1551,8 +1551,8 @@ class WarpClip:
         )
 
     def drive_stages(self, a, fr_t, Fs, model, fps):
-        """--warp-lead-gate (lsdub/core/lead_gate.py: the take's own shut, still mouth holds the drive down) then --warp-shape
-        (lsdub/core/drive_shape.py: bilabial closures kept, closing edges early) on the track's frames. Both off: the frames as they are."""
+        """--warp-lead-gate (core/lead_gate.py: the take's own shut, still mouth holds the drive down) then --warp-shape
+        (core/drive_shape.py: bilabial closures kept, closing edges early) on the track's frames. Both off: the frames as they are."""
         if vars(a).get("warp_lead_gate", "off") == "on":
             from . import lead_gate
 
@@ -2132,7 +2132,7 @@ class WarpClip:
 
     def profile(self, i):
         """--warp-profile-plain T: a frame turned past T (eye balance about the nose bridge) keeps the plain
-        own-pixel warp, no synthetic teeth / cavity: in near-profile their far end was a hard cut past the lip (sky B f61-63)."""
+        own-pixel warp, no synthetic teeth / cavity: in near-profile their far end was a hard cut past the lip."""
         t = self.g("warp_profile_plain", 0.0)
         return t > 0 and getattr(self, "fs", None) is not None and self.fs[i] < t
 
@@ -2322,7 +2322,7 @@ class WarpClip:
 
 
 def run(a):
-    # --- --vocalisations skip | rest (lsdub/core/vocalisations.py). vx is None with --vocalisations mouth or a
+    # --- --vocalisations skip | rest (core/vocalisations.py). vx is None with --vocalisations mouth or a
     # track without vocalisations: then this is exactly the unchanged run.
     from . import vocalisations
 
@@ -2336,12 +2336,12 @@ def run(a):
     # --- (end)
     extra = None
     if vars(a).get("warp_aperture", "off") == "loop" and vars(a).get("warp_target", "v9") not in ("coart", "own"):
-        # (opt-in) stage: the aperture loop, the rendered opening corrected toward what was asked (lsdub/core/aperture.py)
+        # (opt-in) stage: the aperture loop, the rendered opening corrected toward what was asked (core/aperture.py)
         from . import aperture
 
         extra = {"aperture": dict(aperture.close_loop(clip), gain=getattr(clip, "aperture_gain", None))}
     if getattr(a, "warp_gate", "off") not in (None, "off"):
-        # the per-frame maker / checker / confirmation gate (lsdub/core/frame_gate.py)
+        # the per-frame maker / checker / confirmation gate (core/frame_gate.py)
         from . import frame_gate
 
         extra = dict(extra or {}, **(frame_gate.gate(clip, a) or {}))
@@ -2350,7 +2350,7 @@ def run(a):
     if vx:
         extra = vx.finish(clip, extra)
     if getattr(a, "occluder_mask", None):
-        # an object in front of the mouth (mic, hand) keeps the take's own pixels (lsdub/core/occluders.py)
+        # an object in front of the mouth (mic, hand) keeps the take's own pixels (core/occluders.py)
         from . import occluders
 
         occ = occluders.load(a.occluder_mask, clip.n, (clip.H, clip.W))

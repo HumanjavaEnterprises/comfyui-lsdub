@@ -49,7 +49,7 @@ SNAP = dict(
     attack_ms=15.0,
     paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15", "--warp-shape", "asym"],
 )  # --warp-follow: the plain target holds the opening near the plan, so a take's own mouth timing does not ride through.
-# --warp-shape asym: closing edges 20 ms early, openings on time (lsdub/core/drive_shape.py); a --warp-shape in the caller's flags wins
+# --warp-shape asym: closing edges 20 ms early, openings on time (core/drive_shape.py); a --warp-shape in the caller's flags wins
 
 
 def snap_paint(paint_args, m):
@@ -664,7 +664,7 @@ def main(argv=None):
     ap.add_argument(
         "--lead",
         type=float,
-        help="viseme / dyn lead, s (default 0.06 with snap (lead sweep on 21: 0.20 -> 0.33, 0.14 -> 0.47, 0.06 -> 0.59, 0.03 -> 0.67, 0.0 -> 0.69; 19 prefers 0.14), 0.10 without)",
+        help="viseme / dyn lead, s (default 0.06 with snap, 0.10 without)",
     )
     ap.add_argument("--word-close", type=float, help="between-word closure, s (default 0.06 with snap)")
     ap.add_argument(

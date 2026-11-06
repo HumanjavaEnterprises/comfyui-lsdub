@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""vocalisations (lsdub/core/vocalisations.py): the lexicon (real words never match), the lyrics markup, the span
+"""vocalisations (core/vocalisations.py): the lexicon (real words never match), the lyrics markup, the span
 list of a track (merged across a short silence, never across a word), `lsdub track skip`, the zero-phase ease, and the
 warp consumer on a synthetic clip, CPU only: --vocalisations skip (the default, on any track) leaves the span
 as the take's own frames (no warp, no layers, no erase) with an eased edge; mouth -- and auto on an unmarked track -- is

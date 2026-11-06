@@ -91,7 +91,7 @@ BLUE_D, BLUE_SOFT, BLUE_BG = 12, 6, 8
 # A ghost pixel: clearly blue (B - R > 12), OR faintly blue AND blue over green (B - R > 6 and B - G > 8: a true
 # blue-grey, BGR ~155,143,142 on a test shot). Cool-lit teeth / a chrome mic are neutral or cyan (B - G 1-7) and only
 # count when clearly blue. (B - R > 6 alone flagged a test cut's teeth and reverted good warp frames; B - R > 12 alone
-# lost shot B f91, whose ghost sits entirely at B - R 7-10.)
+# lost a test shot whose ghost sits entirely at B - R 7-10.)
 DESYNC_FRAC = 0.25  # |take gap - planned egap| above this x the plan's p5-p95 range: the take is off the plan there
 # and is no re-make candidate (calibrated on one test cut; on a test shot it holds on 68% of frames)
 BLUE_FLOOR = 12  # more ghost px than this in the paint region = a ghosted frame (check and the fix_alt fallback)

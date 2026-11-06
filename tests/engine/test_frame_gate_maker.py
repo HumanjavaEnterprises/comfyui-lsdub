@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""per-frame gate, the MAKER + CONFIRMATION (lsdub/core/frame_gate.py) on a synthetic clip, CPU only. The clip's
+"""per-frame gate, the MAKER + CONFIRMATION (core/frame_gate.py) on a synthetic clip, CPU only. The clip's
 input track is HELD for its first frames (no detection) while the head drifts -- the fast-head starts in
 miniature: the warp moves the wrong pixels there. A fake detector stands in for MediaPipe (it measures the synthetic
 lips). With --warp-gate off the render is the batch's bit-for-bit; render_frame(i, {}) reproduces every batch frame;

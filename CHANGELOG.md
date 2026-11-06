@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11 (2026-11-05)
+
+- LSDub Verify's reasons read in plain words. A shot whose mouth barely moves now says, for example, "mouth barely moves: it opened 0.59 as far as the song asks (needs 0.75)". The raw readings stay in the report's JSON and CSV.
+- LSDub Fix It's hint for that reason uses the same plain words.
+- Dubbed output is unchanged from 0.1.10. Projects dubbed with 0.1.10 dub their shots again with this release, and get the same result.
+
 ## 0.1.10 (2026-11-05)
 
 - LSDub Dub has a sharper mouth and two repair fixes, now on by default:

@@ -428,20 +428,20 @@ def _parser():
         choices=["off", "on"],
         default="off",
         help="warp (plain targets): hold the drive down where the take's own mouth stays shut and still while the stem asks it to open "
-        "(a voice the singer on screen does not sing; lsdub/core/lead_gate.py)",
+        "(a voice the singer on screen does not sing; core/lead_gate.py)",
     )
     ap.add_argument(
         "--warp-shape",
         choices=["off", "closures", "asym"],
         default="off",
-        help="warp (plain targets): the drive's shape (lsdub/core/drive_shape.py). closures = every P / B / M of the alignment keeps a "
+        help="warp (plain targets): the drive's shape (core/drive_shape.py). closures = every P / B / M of the alignment keeps a "
         "shut frame; asym = closures, and closing edges 20 ms early while openings keep their time",
     )
     ap.add_argument(
         "--warp-aperture",
         choices=["off", "map", "loop"],
         default="off",
-        help="warp (plain targets): how far the mouth opens (lsdub/core/aperture.py). map = the track's opening scaled per shot so its "
+        help="warp (plain targets): how far the mouth opens (core/aperture.py). map = the track's opening scaled per shot so its "
         "p95 is a full opening of the take's range; loop = map, then the rendered opening measured and the frames rendered again toward "
         "what was asked, within the fold guard; off = as planned",
     )
@@ -1098,7 +1098,7 @@ def _parser():
         "--warp-gate-reg",
         action="store_true",
         help="warp: the gate also runs the inter-layer registration "
-        "ruler (lsdub/audits/layer_reg.py: the windowed slosh of the teeth / cavity / tongue offsets vs the lips) "
+        "ruler (audits/layer_reg.py: the windowed slosh of the teeth / cavity / tongue offsets vs the lips) "
         "and reports its windows in gate.json (reported, not repaired)",
     )
     ap.add_argument(
@@ -1207,7 +1207,7 @@ def _parser():
         "moves the WHOLE interior (both arches + tongue) as one residual; nose = the same with the NOSE's own flow in "
         "the take (the head motion the skull pose misses, no lip in it): still one reference, following the real face",
     )
-    # (lsdub/core/vocalisations.py): non-lexical vocalisations / ad-libs (uh uh uh, ah, da da, mm, hey, ...) ---
+    # (core/vocalisations.py): non-lexical vocalisations / ad-libs (uh uh uh, ah, da da, mm, hey, ...) ---
     ap.add_argument(
         "--vocalisations",
         choices=["auto", "skip", "rest", "mouth"],
@@ -1628,7 +1628,7 @@ def _render(a, ap):
 def paint(
     video, track, out, mode="warp", show_mouth_card=False, card_corner="auto", watermark=True, lib=None, frames=0, args=(), card_faces=None
 ):
-    """the one call a ComfyUI node wraps (docs/node-contract.md): `lsdub paint` exactly as the CLI runs it (the render,
+    """the one call a ComfyUI node wraps: `lsdub paint` exactly as the CLI runs it (the render,
     then the invisible watermark unless watermark=False), and with show_mouth_card the mouth card next to it.
     args: further `lsdub paint` flags (a list, e.g. the warp settings). Returns {clean, annotated, lyric_check,
     lyric_check_md, lyrics_suggested, ret}; the card paths are None when show_mouth_card is off."""

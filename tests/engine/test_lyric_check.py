@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""the mouth card's word facts (lsdub/core/lyric_check.py): the normaliser (heard vs lyric), the per-word confidence
+"""the mouth card's word facts (core/lyric_check.py): the normaliser (heard vs lyric), the per-word confidence
 rule (weak words), reading the lyric word back from lyric_align's reconcile notes, the lyric check writer, the suggested
 lyric sheet, and `lsdub visemes` persisting the facts into the track (words block + per-frame wi; --no-words = the older format)."""
 

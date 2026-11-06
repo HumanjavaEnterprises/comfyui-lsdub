@@ -167,7 +167,7 @@ def test_kept_as_is_is_the_remake_rule():
     assert CONT.kept_as_is(4, ()) and not CONT.kept_as_is(3, ()) and not CONT.kept_as_is(7, [np.zeros(1)])
 
 
-# the settings the accepted run used: sing travel_ref aligner, repair charge remade, paint --warp-shape asym
+# the default settings: sing travel_ref aligner, repair charge remade, paint --warp-shape asym
 ACCEPTED = dict(travel_ref="aligner", charge="remade", warp_shape="asym")
 V019 = dict(travel_ref="take", charge="all", warp_shape="off")
 

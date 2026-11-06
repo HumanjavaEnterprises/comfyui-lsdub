@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """inter-layer registration: the per-frame log of the layer stack (mouth_layers.reg_entry -> warp.json frames[i].reg) and
-the ruler on it (lsdub/audits/layer_reg.py: offsets of the teeth / cavity / tongue vs the lips in the skull-stabilised
+the ruler on it (audits/layer_reg.py: offsets of the teeth / cavity / tongue vs the lips in the skull-stabilised
 frame; jaw residual, jitter, the earlier gate's windowed slosh, the texture drift), plus the interior clip
 (--warp-interior-clip: no cavity or tooth pixel outside the warped lips). Synthetic, CPU only."""
 

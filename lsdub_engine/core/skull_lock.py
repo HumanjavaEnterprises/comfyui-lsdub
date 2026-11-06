@@ -3,7 +3,7 @@
 """skull_lock.py — put the mouth back on the skull: one midline, mouth line parallel to the pupils, upper lip rigid with
 the nose, lips in order, the mouth wrapped on the face's own cylinder.
 
-Every target is the TAKE's own geometry on the same frame (same head pose), from face_constraints (docs/FACE_CONSTRAINTS.md):
+Every target is the TAKE's own geometry on the same frame (same head pose), from face_constraints:
   C3  philtrum (0) height held within 0.75 x the character's own upper-lip tolerance of its REST height (skull frame)
   C1  mouth centre's lateral offset from the nose midline -> the take's (within 1 % of mouth width)
   C2  mouth-corner line angle vs the pupil line -> the take's (within 1 deg); the inner opening shares that axis

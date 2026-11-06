@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""frame_gate.py: the CHECKER of the per-frame gate (the maker / confirmation loop is lsdub/core/frame_gate.py). CPU.
+"""frame_gate.py: the CHECKER of the per-frame gate (the maker / confirmation loop is core/frame_gate.py). CPU.
 
 Every frame of a render is checked against its neighbours and against the source take, in the SKULL-STABILISED mouth
 crop: the take's own rigid skull pose (RigidPlacement on the strict skull points: the pose the warp itself rides) maps a

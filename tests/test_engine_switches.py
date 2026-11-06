@@ -156,7 +156,7 @@ def test_verify_says_what_it_reads_for_a_held_line(pack):
     assert 'travel the song asks for' in s.description
     md = next(o for o in s.outputs if o.display_name == 'md')
     assert 'asks for' in md.tooltip and 'share' in md.tooltip
-    assert 'asked travel' in pack.nodes_qa.fix_for('mouth barely moves (held gape / mumble): delivered 0.59 of the travel the song asked')
+    assert 'how far it opened' in pack.nodes_qa.fix_for('mouth barely moves: it opened 0.59 as far as the song asks (needs 0.75)')
 
 
 def test_the_readme_names_the_switches():
