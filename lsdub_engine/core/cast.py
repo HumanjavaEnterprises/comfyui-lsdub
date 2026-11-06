@@ -38,7 +38,7 @@ MODEL = os.environ.get("LIPS_CAST_MODEL", os.path.join(CACHE, "dinov2_base_cast.
 MEAN, STD = np.array([0.485, 0.456, 0.406], np.float32), np.array([0.229, 0.224, 0.225], np.float32)
 LIPS = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185]
 CHEEKS = [50, 280, 205, 425, 118, 347]
-# dub-safe rule (docs/dub-safe-closeups.md, FACE_CONSTRAINTS): face >= 300 px tall at 1080p, |yaw| <= 16, mouth clear
+# dub-safe rule (the face constraints): face >= 300 px tall at 1080p, |yaw| <= 16, mouth clear
 SAFE_PX, SAFE_YAW = 300.0, 16.0
 NEAR_PX, NEAR_YAW = 200.0, 25.0  # 'near': a reframe / zoom-crop (lsdub zoom) away from dub-safe
 VARIANTS = re.compile(r"_(egirl|office)$")

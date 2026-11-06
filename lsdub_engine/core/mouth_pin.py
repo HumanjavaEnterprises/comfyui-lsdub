@@ -4,7 +4,7 @@
 """mouth_pin.py — pin the painted lower face to the REAL skin motion of the take.
 
 Why it swims: every paint stage places the mouth from MediaPipe landmarks, and on this take those landmarks miss the
-real skin motion by 2-8 px (worst on the fast head swing, f13-19; slip_audit: landmark-vs-flow err p95 ~7 px). The
+real skin motion by 2-8 px (worst on a fast head swing; slip_audit: landmark-vs-flow err p95 ~7 px). The
 painted philtrum/lip/chin therefore moves LESS than the nose on fast moves and drifts back after — it swims.
 
 Fix = decouple position from shape:

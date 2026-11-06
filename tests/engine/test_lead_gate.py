@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""the lead gate stage (lsdub/core/lead_gate.py): synthetic, no models."""
+"""the lead gate stage (core/lead_gate.py): synthetic, no models."""
 
 import numpy as np
 

@@ -4,16 +4,16 @@
 """mouth_card.py — the mouth card (lsdub annotate's per-frame card) as a toggle on the paint path.
 
   lsdub paint ... --out shot.mp4 --annotate [--annotate-corner auto|lower-right|lower-left|band] [--annotate-faces heads.json]
-  mouth_paint.paint(video, track, out, show_mouth_card=True, ...)      # the one call a ComfyUI node wraps (docs/node-contract.md)
+  mouth_paint.paint(video, track, out, show_mouth_card=True, ...)      # the one call a ComfyUI node wraps
 
 After the normal render, and only then, the clean output is READ (never written) and next to it go:
   shot_annotated.mp4         the clean frames + the card (lsdub annotate: the word between its neighbours, the viseme
                              glyph, openness, the next 1 s of visemes, a struck 'skip' on vocalisations; weak-alignment
                              marks and 'heard:' diffs); the card is never over a face (lower-right, else lower-left, else a
                              band below the picture), audio copied
-  shot_lyric_check.json/.md  every heard / lyric mismatch, weak word and vocalisation span (lsdub/core/lyric_check.py)
+  shot_lyric_check.json/.md  every heard / lyric mismatch, weak word and vocalisation span (core/lyric_check.py)
   shot_lyrics_suggested.txt  the lyric sheet with '[heard: x]' suggestions (nothing applied)
-`lsdub paint` (lsdub/cli.py) watermarks the annotated video like the clean one. The card describes the render: the track
+`lsdub paint` (cli.py) watermarks the annotated video like the clean one. The card describes the render: the track
 and the vocalisation mode it was painted with (--vocalisations on the warp path; the other modes mouth everything).
 """
 
@@ -71,7 +71,7 @@ def annotate_args(a):
 def after_paint(a):
     """paint --annotate: the card next to the clean output (which is only read). Returns the side paths that exist. The
     card is a side product: last run's side files of this output are removed first (never mistaken for this run's), and a
-    failing card is reported, not raised, so the clean output still gets its watermark (lsdub/cli.py runs after this)."""
+    failing card is reported, not raised, so the clean output still gets its watermark (cli.py runs after this)."""
     import sys
 
     side = dict(zip(("annotated", "lyric_check", "lyric_check_md", "lyrics_suggested"), side_paths(a.out or "")))

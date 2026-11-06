@@ -3,7 +3,7 @@
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
 """sung_dyn.py — a SUNG mouth-dynamics curve from the vocal itself, for the warp's coarticulation planner.
 
-The coart planner (lsdub/core/coart.py) sets each phone segment's opening from the segment's MEAN audio openness, so
+The coart planner (core/coart.py) sets each phone segment's opening from the segment's MEAN audio openness, so
 inside a held sung vowel the mouth is flat and its motion comes from the take, not the singing. In singing the vowel
 decides the mouth's SHAPE and the voice's loudness decides how far it OPENS (lip/jaw opening tracks loudness more than
 pitch). This writes that as an external dynamics source for `lsdub paint --coart-dyn <csv> --coart-dyn-mix <w>`:

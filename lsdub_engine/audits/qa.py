@@ -854,11 +854,11 @@ def write_verify(meta, rows, out):
         "the shot, the worst word; a free walk, so a word it loses reads as off, and `lost` when a shot's words sit more than 0.6 s off, where the walk has run away on a long song: no reading), then the plan's phones read directly on the vocal's frames: "
         "hiss on hiss, closures on a dip or nasal, vowels on open sound, 0..1. Passed-over words (a lead sheet) are not read.",
         "`path` is reported and moves no band: the paint delivered, then the frames of it picked from before their own time, whose skin is a frame old.",
-        "`travel` is the mouth's travel (p5-p95 of the opening, in face heights), then the share of the take's own travel the song asks for "
-        "(read from the dub's warp log; a held line asks less than the take moves by itself). Under "
-        f"{SC.TRAVEL_CAP}, a shot that delivers less than {SC.TRAVEL_KEEP} of what it was asked (the take's travel x that share, at most 1; "
-        f"the take's travel when there is no reading), or under {SC.TRAVEL_FLOOR}, is a held gape: it scores at most "
-        f"{SC.TRAVEL_CAP_SCORE:.0f}, and its reason says what share it delivered.",
+        "`travel` is how far the mouth opens and closes over the shot (in face heights), then how much of the take's own movement the "
+        "song asks for (read from the dub's warp log; a held line asks less than the take moves by itself). A mouth that barely moves "
+        f"and opens less than {SC.TRAVEL_KEEP:.2f} as far as it was asked (as far as the take does when there is no reading), or that "
+        f"hardly opens at all, scores at most {SC.TRAVEL_CAP_SCORE:.0f}, and its reason says how far it opened. The raw numbers are in "
+        "the JSON and CSV.",
         "",
         "| shot | t (s) | band | score | Δ vs before | class | path | sync corr | audio | shape | vocal | travel | silence | mouth | identity | reason |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",

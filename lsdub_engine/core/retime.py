@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""retime.py: the MAKER for cadence hitches (lsdub/audits/cadence.py is the checker). CPU.
+"""retime.py: the MAKER for cadence hitches (audits/cadence.py is the checker). CPU.
 
 A generator stall is a stretch where the picture crawls for a few frames, then catches up. The frames all exist; they
 are spaced wrongly in time. Around each flagged hitch (padded by --pad frames) the motion is re-spaced so its speed is

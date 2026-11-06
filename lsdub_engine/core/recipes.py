@@ -17,16 +17,15 @@
 
 `inert_under` maps a flag to the condition under which it moves no pixel. Two kinds of row:
   a guard read in the code: the condition holds wherever the recipe's other flags hold
-  OBSERVED_ONLY: 0 frames moved on the golden crops (two 24-frame windows), no guard behind it. The per-flag zero-frame evidence
-    is committed for the local universe only; the hosted universe has only the joint `_min` comparison
+  OBSERVED_ONLY: 0 frames moved on the reference crops (two 24-frame windows), no guard behind it. The per-flag zero-frame check
+    covers the local universe only; the hosted universe has only the joint `_min` comparison
 Each row is a Rule; with RULES (flags outside any recipe) it drives mouth_paint.validate_paint_args. A Rule says the flag is inert
-only when it carries inert=True, and tests/test_flag_interactions.py holds those to the sensitivity block of the golden hashes; a
+only when it carries inert=True, and the flag-interaction tests hold those to the sensitivity block of the reference hashes; a
 Rule with inert=False is a note about what the flag no longer does, on a flag that still moves pixels.
 
-What the `_min` proof covers: test_presets.py renders it and the full recipe side by side on the golden crops (synthetic + demo)
-and compares the frames. The crops replace the original cut-51 substrate, a music-video take barred from tests/golden; the harness's
-`coverage` shows both crops enter the layer stack. Not proven: the OBSERVED_ONLY flags on any longer take (--warp-gate-cands
-drops candidate h, which simply never won here), lip-lock under `_min` (no golden case runs lip-lock), and how any of this
+What the `_min` check covers: the preset tests render it and the full recipe side by side on the reference crops (synthetic + demo)
+and compare the frames; both crops enter the layer stack. Not proven: the OBSERVED_ONLY flags on any longer take (--warp-gate-cands
+drops candidate h, which simply never won here), lip-lock under `_min` (no reference case runs lip-lock), and how any of this
 looks. layers_v16_1 is also one kit's tuning applied to a performance-built kit, and no ruler or hash covers the performance
 frames before an eye pass.
 """

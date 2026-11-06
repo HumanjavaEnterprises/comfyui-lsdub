@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""the NATURALNESS ruler (lsdub/audits/naturalness.py) on synthetic mouth series, CPU only. Its calibration: the
+"""the NATURALNESS ruler (audits/naturalness.py) on synthetic mouth series, CPU only. Its calibration: the
 take against itself reads exactly 0, the take against its own time reversal still reads natural (a reversed natural
 motion is still a natural motion: only the rise / fall asymmetry and the phone windows move), and a step-target copy
 of the take (every phone held at one shape, switched in one frame: the per-frame target motion) reads unnatural."""

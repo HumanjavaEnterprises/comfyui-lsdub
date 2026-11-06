@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""cadence.py: the CHECKER for motion cadence (held / skipped frames). CPU. The maker is lsdub/core/retime.py.
+"""cadence.py: the CHECKER for motion cadence (held / skipped frames). CPU. The maker is core/retime.py.
 
 frame-gate measures the mouth as EXCESS over the take, so a hitch the take already has (a generator stall: the picture
 slows to a crawl for a few frames, then catches up) is "allowed" there and passes. This ruler is absolute: it measures

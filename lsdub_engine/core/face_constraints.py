@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""face_constraints.py — the anatomy rules in docs/FACE_CONSTRAINTS.md, as code (check + targets for --skull-lock/--jaw-lock).
+"""face_constraints.py — the face's anatomy rules, as code (check + targets for --skull-lock/--jaw-lock).
 
 PRINCIPLE: calibrate the character's OWN proportions from the take (median of well-tracked frames, or the take's own
 value on the same frame where head pose matters). The canon is only a sanity band that flags a bad calibration; it is

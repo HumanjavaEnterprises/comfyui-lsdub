@@ -296,7 +296,7 @@ REASON = {
     "sync": "mouth off the vocal",
     "silence": "mouth open in the silences",
     "snap": "soft attacks / missed closures",
-    "travel": "mouth barely moves (held gape / mumble)",
+    "travel": "mouth barely moves",
     "tier": "singer too small for the line",
     "mouth": "mouth hidden (mic / hand / prop)",
     "canon": "off-model look",
@@ -321,7 +321,6 @@ def reason(row, worst):
         "sharpness": f" ({row.get('sharpness')})",
         "mouth": f" ({row.get('mouth_visible')})",
         "snap": f" (rise {row.get('rise_ms')}, closures {row.get('closure_hit')})",
-        "travel": f" (p5-p95 {row.get('mouth_range')})",
     }
     return f"{REASON[worst]}{extra.get(worst, '')} [{v:.2f}]"
 
@@ -346,20 +345,21 @@ def held_gape(r):
 
 
 def held_reason(r):
-    """a held gape's reason in plain words: what share of the travel it was asked for the dub delivered (the song's ask when the warp
-    log read one, else the take's own travel), or that it moved under TRAVEL_FLOOR. The same reading as held_gape."""
+    """a held gape's reason in plain words: how far the mouth opened against what it was asked (the song's ask when the warp log read
+    one, else the take's own travel), or that it hardly opens at all (under TRAVEL_FLOOR). The same reading as held_gape. The raw
+    travel stays in the row's mouth_range."""
     m = r.get("mouth_range")
     if not _fin(m) or m < TRAVEL_FLOOR:
-        return f"{REASON['travel']}: travel {m} is under the {TRAVEL_FLOOR} floor"
+        return f"{REASON['travel']}: it hardly opens at all"
     ref = (r.get("before") or {}).get("mouth_range")
     ask = r.get("asked_travel")
     asked = _fin(ref) and _fin(ask) and ask > 0
     if asked:
         ref = ref * min(ask, 1.0)
     if not (_fin(ref) and ref > 0):
-        return f"{REASON['travel']}: travel {m}, no reading of the take to compare"
-    whose = "the travel the song asked" if asked else "the take's own travel"
-    return f"{REASON['travel']}: delivered {m / ref:.2f} of {whose} (p5-p95 {m}, needs {TRAVEL_KEEP:.2f})"
+        return f"{REASON['travel']}: no reading of the take to compare it with"
+    whose = "the song asks" if asked else "the take does"
+    return f"{REASON['travel']}: it opened {m / ref:.2f} as far as {whose} (needs {TRAVEL_KEEP:.2f})"
 
 
 def finalize(r, smed, sharpness_mode="floor"):
@@ -544,7 +544,7 @@ def write(rows, thumbs, out, video, compared=False):
         f"Three classes, each ranked worst first. PERF = sung, singer medium or closer, mouth visible >= 50%: scored 0-100 (green >= {GREEN}, "
         f"amber >= {AMBER}, red below; a mouth travel under {TRAVEL_CAP} caps at {TRAVEL_CAP_SCORE:.0f}). COVERAGE = sung but no readable singer on "
         f"screen: n/a, grey (an editorial choice, not a sync score). INSERT = unsung: pass, capped at {INSERT_CAP:.0f}. "
-        "Weights: `lsdub/audits/scorecard.py` docstring.",
+        "Weights: `audits/scorecard.py` docstring.",
         "",
     ]
     head = (

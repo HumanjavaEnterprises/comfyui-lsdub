@@ -4,8 +4,8 @@
 """stylized.py — classical-animation mouth rules for LSDub's non-human / cutout / puppet path.
 
 Single source of the shape set, phoneme->anchor map, decomposition axes, per-anchor puppet gape, and the
-track transforms (snap, on-twos, lead, closure-hold, accent, singing holds) distilled in
-docs/MOUTH-ANIMATION-INSIGHTS.md. The photoreal human path does NOT use this module.
+track transforms (snap, on-twos, lead, closure-hold, accent, singing holds) of classical mouth animation.
+The photoreal human path does NOT use this module.
 
 Anchors are named by APPEARANCE, not sound. Each anchor records:
   rep      - a representative name from the 15-viseme library set (so libraries keyed by that set still load)

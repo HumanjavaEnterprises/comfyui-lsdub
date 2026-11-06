@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""the COARTICULATION planner (lsdub/core/coart.py, --warp-target coart) on synthetic phone sequences, CPU only:
+"""the COARTICULATION planner (core/coart.py, --warp-target coart) on synthetic phone sequences, CPU only:
 the dominance blend is a partition of unity; closures reach closure; a 40 ms vowel undershoots while a 400 ms one reaches
 its target; the dynamics prior lands the plan's velocity p95 near the take's own; a skipped span is free (the take's own
 shape); the jaw share 1 is the earlier jaw reference; and --warp-target v9 (the default) is bit for bit on a synthetic clip."""

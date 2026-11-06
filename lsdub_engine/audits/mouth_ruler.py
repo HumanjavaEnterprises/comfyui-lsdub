@@ -814,7 +814,7 @@ def summary(res, ref=None):
     L = [
         "# Mouth baseline",
         "",
-        'Written by `lsdub mouth-ruler run`. Definitions: `lsdub/audits/mouth_ruler.py`. "A → B" is take → render.',
+        'Written by `lsdub mouth-ruler run`. Definitions: `audits/mouth_ruler.py`. "A → B" is take → render.',
         "",
         "## Take vs render",
         "",

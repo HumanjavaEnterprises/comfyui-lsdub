@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""the aperture stage (lsdub/core/aperture.py), its pure parts: the range map, the loop's correction and the fold limit. Synthetic, no models."""
+"""the aperture stage (core/aperture.py), its pure parts: the range map, the loop's correction and the fold limit. Synthetic, no models."""
 
 import numpy as np
 

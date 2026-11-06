@@ -188,18 +188,18 @@ def _held(**k):
 def test_a_held_gape_says_in_plain_words_what_share_of_the_asked_travel_it_delivered():
     r = _held(mouth_range=0.059, before={"mouth_range": 0.125}, asked_travel=0.8)  # asked 0.1 of travel, delivered 0.059
     assert r["score"] == SC.TRAVEL_CAP_SCORE and r["reason"].startswith("mouth barely moves")
-    assert "delivered 0.59 of the travel the song asked" in r["reason"] and "p5-p95 0.059" in r["reason"]
+    assert "it opened 0.59 as far as the song asks" in r["reason"] and "(needs 0.75)" in r["reason"]
     r = _held(mouth_range=0.06, before={"mouth_range": 0.12})  # no warp log: the take is the reference
-    assert "delivered 0.50 of the take's own travel" in r["reason"]
+    assert "it opened 0.50 as far as the take does" in r["reason"]
     r = _held(mouth_range=0.04, before={"mouth_range": 0.12}, asked_travel=0.2)  # under the floor whatever was asked
-    assert "under the 0.05 floor" in r["reason"]
+    assert "it hardly opens at all" in r["reason"]
     r = _held(mouth_range=0.07)  # no reading of the take (the scorecard's case)
     assert r["score"] == SC.TRAVEL_CAP_SCORE and "no reading of the take" in r["reason"]
 
 
 def test_a_dub_that_delivers_what_the_song_asked_keeps_its_reason():
     r = _held(mouth_range=0.08, before={"mouth_range": 0.125}, asked_travel=0.8)  # 0.8 of the 0.1 asked: not held
-    assert r["score"] != SC.TRAVEL_CAP_SCORE or "delivered" not in r["reason"]
+    assert r["score"] != SC.TRAVEL_CAP_SCORE or "it opened" not in r["reason"]
     assert not SC.held_gape(r)
 
 

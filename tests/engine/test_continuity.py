@@ -74,7 +74,7 @@ def test_blue_ruler_ignores_cool_lit_teeth_but_keeps_a_ghost():
     ghost = t.copy()
     ghost[5:15, 5:15] = (124, 118, 100)
     faint = t.copy()
-    faint[5:15, 5:15] = (160, 146, 152)  # shot B f91: B - R 8, B - G 14 (a true blue-grey)
+    faint[5:15, 5:15] = (160, 146, 152)  # a test shot's ghost: B - R 8, B - G 14 (a true blue-grey)
     assert c.blue_px(t, teeth, m) == 0 and c.blue_px(t, ghost, m) == 100 and c.blue_px(t, faint, m) == 100
     T = [t] * 8
     R = [teeth] * 8  # a steady open mouth is not flagged on colour

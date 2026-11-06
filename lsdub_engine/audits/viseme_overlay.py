@@ -18,7 +18,7 @@ of viseme classes as coloured ticks (height = openness). A skipped vocalisation 
 lexicon applied here to an unmarked track) shows its word dimmed and struck through with 'skip' (the default, as lsdub
 paint's; 'rest' with --vocalisations rest; with mouth / an unmarked track under auto -- mouthed -- the
 word is kept and tagged 'ad-lib'). --scale 1 is designed for 1280x720 (default: picture height / 720); 1.0 stays legible on a 2x mouth zoom.
-(the card as a toggle, lsdub paint --annotate): what the aligner knew about the word (lsdub/core/lyric_check.py; the
+(the card as a toggle, lsdub paint --annotate): what the aligner knew about the word (core/lyric_check.py; the
 track's `words` block from `lsdub visemes`, else its alignment, --align; the card grows 16 px for a second word line when a
 track has such facts, else it is the earlier card): a WEAK word (confidence < 0.6: whisper-timed,
 phrase fell back, phones squeezed / stretched, low Whisper probability) gets a dotted underline and a small '?' badge, its

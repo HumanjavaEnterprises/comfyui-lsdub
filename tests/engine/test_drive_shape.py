@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""the drive's shape stage (lsdub/core/drive_shape.py): synthetic, no models."""
+"""the drive's shape stage (core/drive_shape.py): synthetic, no models."""
 
 import numpy as np
 import pytest

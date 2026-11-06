@@ -2688,9 +2688,9 @@ class LayerCompositor:
             cf_rgb, cf_a = self.fill_cavity(i, Q, h, w, io, L["L4"][0], L["L4"][1])
             L["L2"] = (L["L2"][0] * (1 - cf_a[..., None]) + cf_rgb * cf_a[..., None], L["L2"][1])
             om = tl.poly_mask(Q, (h, w), 0.0, 0.03 * io).astype(np.float32)
-            if self.fill_l3 == "restore":  # D3 evidence: the real lower row over the fill's tongue, in place of the fill's drawn row
+            if self.fill_l3 == "restore":  # the real lower row over the fill's tongue, in place of the fill's drawn row
                 L["L3"] = lo_l3
-            elif self.fill_l3 == "off":  # D3 evidence: no L3 at all, for a byte compare with today
+            elif self.fill_l3 == "off":  # no L3 at all, for a byte compare with the default
                 L["L3"] = (L["L3"][0], np.zeros_like(L["L3"][1]))
             else:
                 L["L3"] = (
@@ -3351,7 +3351,7 @@ class LayerCompositor:
 
     def plate_build_info(self):
         """--warp-arch-build the harvest choice (teeth_layer.TeethLayer.build_log), the lower harvest frame, the
-        crown heights, and the double-edge ruler (lsdub/audits/layer_reg.plate_edges) of the built upper / lower plates."""
+        crown heights, and the double-edge ruler (audits/layer_reg.plate_edges) of the built upper / lower plates."""
         from ..audits import layer_reg as lr_
 
         io = self.t.iod
