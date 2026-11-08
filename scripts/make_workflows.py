@@ -38,7 +38,8 @@ CORE = {   # core nodes: (inputs [(name, type)], outputs [(name, type)], widgets
 
 # trailing optionals and sockets added after the example workflows were saved: left out of a workflow unless it sets them, so the
 # JSONs stay what they were and the frontend fills the default. Mirrors the PENDING lists in tests/test_example_workflows.py.
-PENDING = {'LSDubProject': ('mouth_stack',), 'LSDubScorecard': ('sharpness_mode',), 'LSDubAlign': ('retime_to_vocal', 'lead_sheet', 'lead_overrides')}
+PENDING = {'LSDubProject': ('mouth_stack',), 'LSDubScorecard': ('sharpness_mode',), 'LSDubAlign': ('retime_to_vocal', 'lead_sheet', 'lead_overrides', 'aligner'),
+           'LSDubTweaks': ('warp_events', 'warp_hold', 'warp_closures', 'warp_aperture')}
 PENDING_SOCKETS = {'LSDubFixIt': ('scorecard', 'ruler')}
 
 
@@ -302,7 +303,7 @@ def make_character_sing():
     for s_, o, i in (('project', 'project', 'project'), ('load_char', 0, 'character'), ('song', 'song', 'song')): wf.link(s_, o, 'video', i)
     wf.add('shots', 'LSDubShotSplit', (800, 0)).link('project', 'project', 'shots', 'project').link('video', 'source', 'shots', 'source')
     wf.add('lyrics', 'LSDubLyricsSlot', (1200, 800), text=LYRICS_ALR).link('project', 'project', 'lyrics', 'project')
-    wf.add('align', 'LSDubAlign', (1600, 800), transcript_json=DEMO + 'alr_stt.json', retime_to_vocal=True, lead_sheet=True, lead_overrides='')
+    wf.add('align', 'LSDubAlign', (1600, 800), transcript_json=DEMO + 'alr_stt.json', retime_to_vocal=True, lead_sheet=True, lead_overrides='', aligner='sphinx')
     for s_, o, i in (('project', 'project', 'project'), ('song', 'song', 'song'), ('lyrics', 'lyrics', 'lyrics')): wf.link(s_, o, 'align', i)
     wf.add('triage', 'LSDubTriage', (1200, 0))
     for s_, o, i in (('project', 'project', 'project'), ('video', 'source', 'source'), ('shots', 'shots', 'shots'), ('song', 'song', 'song')):

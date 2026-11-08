@@ -27,6 +27,14 @@ from .project import file_hash, shots_todo, stage_key, text_hash
 DUB_VERDICTS = ('DUB', 'DUB-MEDIUM')
 WARP_SHAPES = ('asym', 'off')                               # the first is the engine's default; the last is 0.1.9's
 TRAVEL_GUARDS = ('aligner', 'take')
+# the vocal-driven mouth stages (engine core/nucleus_events, nucleus_hold, closure_plan, aperture): the first value is the engine's default
+# today (the 0.1.11 mouth); the others are the vocal-driven mouth, one choice away each. STAGE_FLAGS maps a Combo to its paint flag.
+WARP_EVENTS = ('off', 'vocal')
+WARP_HOLDS = ('off', 'nucleus-follow', 'nucleus')
+WARP_CLOSURES = ('plan', 'aligned-press', 'aligned')
+WARP_APERTURES = ('off', 'p95', 'map')
+STAGE_FLAGS = {'warp_events': ('--warp-events', WARP_EVENTS), 'warp_hold': ('--warp-hold', WARP_HOLDS),
+               'warp_closures': ('--warp-closures', WARP_CLOSURES), 'warp_aperture': ('--warp-aperture', WARP_APERTURES)}
 COHERENCE_CHARGES = ('remade', 'all')
 SWITCH_TIPS = dict(
     warp_shape='Mouth shape on the snap warp: asym closes the lips 20 ms early and opens them on time; off is the 0.1.9 shape.',
@@ -34,6 +42,15 @@ SWITCH_TIPS = dict(
                  'that render; take judges it against the take alone (0.1.9).',
     coherence_charge='What the continuity repair\'s budget counts: remade only the frames it re-makes; all every flagged run (0.1.9), '
                      'so less gets repaired.',
+    warp_events='Reads the sung syllables off the lead vocal and writes them on the mouth plan (needed by the three below). off = the '
+                '0.1.11 plan. No pixel moves by itself.',
+    warp_hold='One mouth opening per sung syllable, held to the next one, with a dip before each syllable so every onset is a visible rise: '
+              'nucleus-follow also lets the opening follow the voice\'s loudness inside the syllable; nucleus holds it flat; off = the '
+              '0.1.11 envelope mouth. Needs warp_events vocal.',
+    warp_closures='Where the lips shut: aligned-press only on the lyric\'s p/b/m, timed off the vocal, pressed to contact; aligned the same '
+                  'without the press (a slit on an open take); plan = the 0.1.11 closures. Needs warp_events vocal.',
+    warp_aperture='How far the vowels open: p95 scales the plan so the loud wide vowels reach the singer\'s own widest opening; map the same '
+                  'over every frame; off = as planned. p95 needs warp_events vocal.',
 )
 SING_EXTRA = ['--warp-track-mode', 'chain']                 # the standard sing recipe's track mode
 
@@ -74,11 +91,25 @@ def _shape(tw):
     return ['--warp-shape', 'off'] if (getattr(tw, 'flags', None) or {}).get('warp_shape', WARP_SHAPES[0]) == 'off' else []
 
 
+def _stages(tw):
+    """the Tweaks' mouth-stage Combos as paint flags: nothing at a default (the engine's own), the flag at any other value; sing adds
+    --warp-audio for --warp-events itself. settings come after them."""
+    f = getattr(tw, 'flags', None) or {}
+    out = []
+    for name, (flag, options) in STAGE_FLAGS.items():
+        v = f.get(name, options[0])
+        if v != options[0]: out += [flag, v]
+    if f.get('warp_events', WARP_EVENTS[0]) != WARP_EVENTS[0]:  # the phone network's folder under models/lsdub, as Align's
+        from . import devices
+        out += ['--warp-phone-models', devices.models_dir('wav2vec2-espeak')]
+    return out
+
+
 def _paint_flags(project, kit, tw, vocalisations, vocal=None):
     """the shot's flags for sing. --vocalisations is a user-level flag: settings can change it."""
     recipe, face = _stack(project, kit.identity)
     return paint_api.flags(recipe, lib=kit.dir, mode_mods=SING_EXTRA, face_overrides=face,
-                           user_overrides=['--vocalisations', vocalisations, *_advance(tw), *_phrases(tw, vocal), *_shape(tw),
+                           user_overrides=['--vocalisations', vocalisations, *_advance(tw), *_phrases(tw, vocal), *_shape(tw), *_stages(tw),
                                            *paint_api.split_settings(tw.settings)])
 
 
@@ -211,13 +242,21 @@ class LSDubTweaks(io.ComfyNode):
                                tooltip=SWITCH_TIPS['travel_guard']),
                 io.Combo.Input('coherence_charge', options=['remade', 'all'], default='remade', optional=True,
                                tooltip=SWITCH_TIPS['coherence_charge']),
+                io.Combo.Input('warp_events', options=['off', 'vocal'], default='off', optional=True, tooltip=SWITCH_TIPS['warp_events']),
+                io.Combo.Input('warp_hold', options=['off', 'nucleus-follow', 'nucleus'], default='off', optional=True,
+                               tooltip=SWITCH_TIPS['warp_hold']),
+                io.Combo.Input('warp_closures', options=['plan', 'aligned-press', 'aligned'], default='plan', optional=True,
+                               tooltip=SWITCH_TIPS['warp_closures']),
+                io.Combo.Input('warp_aperture', options=['off', 'p95', 'map'], default='off', optional=True,
+                               tooltip=SWITCH_TIPS['warp_aperture']),
             ],
             outputs=[T.LSDubTweaks.Output(display_name='tweaks', tooltip='The mouth controls.')],
         )
 
     @classmethod
     def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv='', sync_advance_ms=0.0, sync_phrases=False,
-                warp_shape='asym', travel_guard='aligner', coherence_charge='remade'):
+                warp_shape='asym', travel_guard='aligner', coherence_charge='remade', warp_events='off', warp_hold='off',
+                warp_closures='plan', warp_aperture='off'):
         try:
             paint_api.split_settings(settings)
         except ValueError as e:
@@ -231,7 +270,9 @@ class LSDubTweaks(io.ComfyNode):
         if sync_phrases:  # the same: absent when off
             flags['sync_phrases'] = True
         for name, value, options in (('warp_shape', warp_shape, WARP_SHAPES), ('travel_guard', travel_guard, TRAVEL_GUARDS),
-                                     ('coherence_charge', coherence_charge, COHERENCE_CHARGES)):
+                                     ('coherence_charge', coherence_charge, COHERENCE_CHARGES), ('warp_events', warp_events, WARP_EVENTS),
+                                     ('warp_hold', warp_hold, WARP_HOLDS), ('warp_closures', warp_closures, WARP_CLOSURES),
+                                     ('warp_aperture', warp_aperture, WARP_APERTURES)):
             if value not in options: raise ValueError(f'LSDub Mouth Tweaks: {name} must be one of {", ".join(options)}, not {value!r}')
             if value != options[0]:  # absent at the default, as above; a cached shot still re-dubs when the engine changes (its key
                 flags[name] = value  # carries the whole engine's version)

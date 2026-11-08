@@ -164,6 +164,10 @@ class LSDubAlign(io.ComfyNode):
                                          'read by Verify.'),
                 io.String.Input('lead_overrides', multiline=True, default='', optional=True,
                                 tooltip='With lead_sheet: your corrections, one per line: pass 10.04 11.93 or lead 10.04 10.49 (seconds).'),
+                io.Combo.Input('aligner', options=['sphinx', 'ctc'], default='sphinx', optional=True,
+                               tooltip='How the lyric is timed on the vocal. sphinx = the 0.1.11 chain (speech aligner per phrase, '
+                                       'speech-to-text spread where it fails); ctc = the lyric\'s sounds forced onto a phone recogniser\'s '
+                                       'frames (first use downloads a 1.2 GB model); speech-to-text then only picks which lines are sung.'),
             ],
             outputs=[T.LSDubAlign.Output(display_name='align', tooltip='Word timings + the song viseme track.'),
                      io.String.Output(display_name='lyric_check', tooltip='Markdown: least certain words and the '
@@ -175,7 +179,7 @@ class LSDubAlign(io.ComfyNode):
         return (song.lead or song.mix) if vocal is None else None
 
     @classmethod
-    def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal=False, lead_sheet=False, lead_overrides=''):
+    def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal=False, lead_sheet=False, lead_overrides='', aligner='sphinx'):
         transcript_json = _input_path(transcript_json)
         vh = media.audio_hash(vocal) if vocal is not None else (song.hashes.get('lead') or song.hash or file_hash(cls._vocal(song, None)))
         tj = file_hash(transcript_json) if transcript_json else ''
@@ -185,14 +189,14 @@ class LSDubAlign(io.ComfyNode):
                                         **({'lead_sheet': text_hash(lead_overrides.strip())} if lead_sheet else {})}, [project.cache_key()])
 
     @classmethod
-    def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides=''):
-        return cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal, lead_sheet, lead_overrides)
+    def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides='', aligner='sphinx'):
+        return cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal, lead_sheet, lead_overrides, aligner)
 
     @classmethod
-    def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides=''):
+    def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides='', aligner='sphinx'):
         from .lsdub_engine.core import lead_sheet as LS, lyric_align as LA, viseme_track as VT, vocalisations as VO, vocal_retime as VR
         transcript_json = _input_path(transcript_json)
-        st = project.stage('audio/align', cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal, lead_sheet, lead_overrides))
+        st = project.stage('audio/align', cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal, lead_sheet, lead_overrides, aligner))
         align, vis, vis_skip, md = st.path('align.json'), st.path('visemes.json'), st.path('visemes_skip.json'), st.path('lyric_check.md')
         if not st.is_done():
             voc = media.write_audio(vocal, st.path('vocal.wav')) if vocal is not None else cls._vocal(song, None)
@@ -214,7 +218,8 @@ class LSDubAlign(io.ComfyNode):
                 if not heard: raise RuntimeError('LSDub Align: no lyrics given and speech-to-text heard no words; connect the lyrics')
                 with open(lyr, 'w', encoding='utf-8') as f: f.write(' '.join(heard) + '\n')
             argv = ['--audio', voc, '--lyrics', lyr, '--t0', '0', '--t1', f'{dur:.3f}', '--out', align,
-                    '--stt-json', stt, '--aligner', 'sphinx', '--whisper-python', '', '--whisper-model', stt_model,
+                    '--stt-json', stt, '--aligner', aligner, '--whisper-python', '', '--whisper-model', stt_model,
+                    *(['--phone-models', devices.models_dir('wav2vec2-espeak')] if aligner == 'ctc' else []),
                     '--device', wd, '--device-index', str(wi), '--whisper-dir', devices.models_dir('whisper')]
             if lyrics is not None: argv += ['--prompt', lyric_prompt(lyr)]
             for ln in pronunciations.splitlines():

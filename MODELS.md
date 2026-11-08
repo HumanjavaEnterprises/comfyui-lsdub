@@ -36,13 +36,15 @@ LSDub Occluders is optional in every workflow. It downloads Florence-2 and SAM 2
 | Video slot, Performance | 1, 4 | gemma4-12b-with-proj-ltx-2.5 (text encoder), ltx-2.5-video-vae, ltx-2.5-audio-vae | 25 + 1.4 + 0.3 GB | Apache-2.0 ([Gemma 4](https://huggingface.co/google/gemma-4-12B-it)); LTX-2.x Community License (VAEs) | `text_encoders`, `vae` |
 | Vocal Split | 4 | MelBandRoformer_kim_vocals.ckpt: download `MelBandRoformer.ckpt` from [KimberleyJSN/melbandroformer](https://huggingface.co/KimberleyJSN/melbandroformer) and save it under this name | 0.9 GB | MIT | `audio_separation` |
 | Align | all | Whisper large-v3 (faster-whisper / CTranslate2), downloaded on first use | 3 GB | MIT | `lsdub/whisper` |
+| Align (`aligner` = ctc), Dub (`warp_events` = vocal) | all | wav2vec2 phone recogniser (facebook/wav2vec2-lv-60-espeak-cv-ft), downloaded on first use | 1.2 GB | Apache-2.0 | `lsdub/wav2vec2-espeak` |
 | Cast, Triage, Verify | all | DINOv2 base (facebook/dinov2-base), downloaded on first use | 0.3 GB | Apache-2.0 | `lsdub/dinov2` |
 | every face node | all | MediaPipe Face Landmarker + YuNet, downloaded on first use (checksummed) | 4 MB | Apache-2.0 / MIT | `lsdub` |
 | Occluders | optional | Florence-2-large + SAM 2.1 base+, downloaded on first use | 1.6 GB | MIT / Apache-2.0 | `lsdub/occluders` |
 
 ## First-use downloads
 
-The first Align run downloads Whisper large-v3 (about 3 GB) with no progress bar in the UI. Let it finish once.
+The first Align run downloads Whisper large-v3 (about 3 GB) with no progress bar in the UI. Let it finish once. With `aligner` = ctc
+(or a Dub with `warp_events` = vocal) the first run also downloads the phone recogniser (1.2 GB), the same way.
 Workflows 2 and 3 ship the demo transcript (`lsdub_demo_landing_stt.json`), so their alignment is the same on every run.
 
 ## GPU memory
