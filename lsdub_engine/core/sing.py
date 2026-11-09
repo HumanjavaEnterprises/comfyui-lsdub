@@ -163,7 +163,8 @@ def retimed_align(align, vocal, work, t0=None, n=None, fps=25.0, lead=0.06, word
     note = {"used": False, "cap_s": RETIME_CAP}
     if t0 is not None and n:
         oc = VT.envelope_open(vocal, t0, n, fps)
-        clip = x[int(round(max(0.0, t0) * VR.SR)) :]
+        a = int(round(max(0.0, t0) * VR.SR))
+        clip = x[a : a + int(round(n / fps * VR.SR))]  # the shot's own span: the rest of the song does not set the judge's floor
         plan = lambda al: np.array(
             [f["open"] for f in VT.build(al, t0, n, fps, lead=lead, min_hold=3, open_curve=oc, word_close=word_close)]
         )
@@ -579,9 +580,17 @@ def travel(op):
 TRAVEL_REFS = ("take", "aligner")
 
 
+def asked_of(warp_json):
+    """the travel a paint's plan asked of the mouth as a share of its take's (audits.qa.asked_travel, the reading Verify scales its
+    held-gape reference by); None with no log or no finite reading."""
+    from ..audits import qa
+
+    return qa.asked_travel({"warp_json": warp_json}).get("asked_travel") if warp_json else None
+
+
 def travel_guard(info, take, align, vocal, t0, out, work, R, again, ref="take"):
-    """a retimed shot whose delivered mouth is a held gape against its own take (scorecard.held_gape: under 0.10 of travel and under
-    TRAVEL_KEEP of the take's, or under the floor) is rendered again from the aligner's times (work/aligner); when that one passes and
+    """a retimed shot whose delivered mouth is a held gape against its own take (scorecard.held_gape, Verify's test: under 0.10 of
+    travel and under TRAVEL_KEEP of the take's travel scaled by the plan's asked_travel (at most 1), or under the floor) is rendered again from the aligner's times (work/aligner); when that one passes and
     is not a held gape, it is delivered instead. The retime can shorten the plan's openings in a way the plan's own reading does not
     show. -> the info of what is delivered, with the readings under retime.guard.
 
@@ -596,8 +605,12 @@ def travel_guard(info, take, align, vocal, t0, out, work, R, again, ref="take"):
         raise ValueError(f"travel ref {ref!r}")
     n = info["frames"]
     t_take, t_out = travel(mouth_open(take, R, n)), travel(mouth_open(out, R, n))
-    held = lambda t: t is not None and t_take is not None and SC.held_gape(dict(mouth_range=t, before=dict(mouth_range=t_take)))
-    guard = {"take_travel": t_take, "retimed_travel": t_out, "held": held(t_out)}
+    ask = asked_of(info.get("warp_json"))
+
+    def held(t, ask):  # Verify's own test (scorecard.held_gape): the take's travel scaled by what the paint's plan asked, at most 1
+        return t is not None and t_take is not None and SC.held_gape(dict(mouth_range=t, before=dict(mouth_range=t_take), asked_travel=ask))
+
+    guard = {"take_travel": t_take, "retimed_travel": t_out, "asked_travel": ask, "held": held(t_out, ask)}
     if not guard["held"]:
         info["retime"]["guard"] = guard
         return info
@@ -614,7 +627,8 @@ def travel_guard(info, take, align, vocal, t0, out, work, R, again, ref="take"):
         if not guard["shortened"]:
             info["retime"]["guard"] = dict(guard, delivered="retimed")
             return info
-    if alt.get("pass") and not held(guard["aligner_travel"]):
+    guard["aligner_asked_travel"] = asked_of(alt.get("warp_json"))
+    if alt.get("pass") and not held(guard["aligner_travel"], guard["aligner_asked_travel"]):
         shutil.copyfile(alt_out, out)
         alt["retime"] = dict(info["retime"], used=False, guard=dict(guard, delivered="aligner"))
         return alt

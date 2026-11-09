@@ -43,7 +43,10 @@ class LSDubVerify(io.ComfyNode):
             description='How likely each dubbed shot is to have worked: a 0-100 score and PASS / REVIEW / FAIL, compared '
                         'with the source (sync, mouth travel, silences, identity drift). A soft or held line is judged against '
                         'the mouth travel the song asks for, not the take\'s own, and the report shows that reading. A shot the '
-                        'dub left as source reads N/A. Frames in vocalisation spans are left out of the sync score.',
+                        'dub left as source reads N/A. Frames in vocalisation spans are left out of the sync score. The events column '
+                        'reads the mouth against the vocal syllable by syllable (onsets met, p/b/m shut, stray shuts, vowel '
+                        'opening, how late the mouth rises), with the phone recogniser when Align downloaded it, else the '
+                        'vocal\'s onsets alone; reported only, it moves no band.',
             inputs=[
                 T.LSDubProject.Input('project', tooltip='The LSDub project.'),
                 T.LSDubSource.Input('source', tooltip='The video before the dub.'),
@@ -81,7 +84,7 @@ class LSDubVerify(io.ComfyNode):
             emb = devices.embedder()
             try:
                 meta, rows = qa.verify(_cut_video(project, source, render), _vocal(song), sj, before=source.path, align=align.align,
-                                       work=st.path('work'), emb=emb)
+                                       work=st.path('work'), emb=emb, phone_models=devices.models_dir('wav2vec2-espeak'))
             finally:
                 devices.release(emb)
             qa.write_verify(meta, rows, out)

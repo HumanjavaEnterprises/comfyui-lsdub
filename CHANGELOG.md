@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- LSDub Verify has an events column, reported only (no band moves): sung onsets met by a mouth rise, p/b/m closures shut, stray shuts against the take's, vowel opening against the take's, and how late the mouth rises per onset (median and p90). It uses the phone recogniser when Align downloaded it, else the vocal's onsets alone, and says which. On the six try-it cells' 0.1.11 cuts: onsets 0.535, p/b/m 3 of 24, per-onset lag p90 +52 ms, while every shot passes or reviews on the bands.
+- Engine vendored from the 0.2.1 branch (tree a7014a2e).
 - The Lip Kit zip and the demo zip are unpacked member by member to paths checked to stay inside their folder (no `extractall`); the demo fetcher now runs the same checks as the Lip Kit. The Comfy Registry flagged 0.1.0-0.1.11 for path traversal.
 - LSDub Save Cut writes its watermarked file faststart (moov first), so a download starts playing without a second request. Timing unchanged.
 - CONTRIBUTING installs what CI installs (`comfy-cli`, `packaging`, ruff 0.17.3 pinned): the deploy-inputs test runs comfy-cli's own scanner and failed with ModuleNotFoundError on a clone that followed the old line. CI was green.

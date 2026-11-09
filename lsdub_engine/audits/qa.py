@@ -343,7 +343,7 @@ def verdict(s, has_refs):
 
 
 # ---------------------------------------------------------------------------------------------------- verify
-def verify(video, vocal, shots_json, before=None, align=None, model=None, work=None, emb=None):
+def verify(video, vocal, shots_json, before=None, align=None, model=None, work=None, emb=None, phone_models=None):
     from . import sync_qa as Q, snap as SN, scorecard as SC, sync_truth as ST
     from ..core import cast as C
 
@@ -361,6 +361,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
     if align:
         vocal_words, heard = vocal_walk(json.load(open(align)), vocal)
     faces = C.Faces()
+    ev, ev_read = vocal_events(vocal, align, phone_models)  # the event judge's own reading of the vocal, once per film
     emb = (emb or C.Embedder(model or C.MODEL)) if before else None
     rows = []
     for s in J["shots"]:
@@ -374,6 +375,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
         r.update(vocal_reading(w_, vocal_words, s, offset, heard))
         r.update(path_reading(s))
         r.update(asked_travel(s))
+        r.update(event_reading(video, s, fps, offset, ev, ev_read))
         if before:
             b = measure_shot(before, s, fps, offset, vocal, act, al, w_, faces, os.path.join(work, "before"), Q, SN)
             r["before"] = {k: b.get(k) for k in ("corr", "mouth_range", "open_in_silence", "mouth_visible", *ST.KEYS)}
@@ -396,6 +398,7 @@ def verify(video, vocal, shots_json, before=None, align=None, model=None, work=N
             r.update(band="N/A", score=None, delta=None, reason=f"left as source: {s.get('left_reason') or 'no render used'}")
     meta = {"video": video, "shots_json": shots_json, "before": before, "bands": {"PASS": PASS_BAND, "REVIEW": REVIEW_BAND}}
     meta["closures_lost"] = SN.lost_closures(words, n / fps - offset)
+    meta["events_read"] = ev_read
     return meta, rows
 
 
@@ -520,6 +523,86 @@ def asked_travel(s):
         return {"asked_travel": round(ask, 3)} if np.isfinite(ask) else {}
     except (OSError, ValueError, KeyError, TypeError, AttributeError, OverflowError):  # a reading only: the take stays the reference
         return {}
+
+
+EV_KEYS = ("onset_hit", "onset_n", "closure_hit", "closure_n", "spurious", "spurious_take", "open_ratio", "open_n")
+LAG_WINDOW_S = 0.2  # a mouth rise this near a sung onset, either side, is that onset's rise (G10 lane 04's per-onset reading)
+
+
+def vocal_events(vocal, align=None, phone_models=None):
+    """the event judge's events over the whole vocal (audits/event_judge.events, the judge's own front end, never the dub's plan) and
+    how they were read: 'phones' with the recogniser's weights on this box, else 'flux only' and why. (None, why) when the vocal does
+    not read."""
+    from . import event_judge as EJ, judge_phones as JP, judge_vocal as JV
+
+    x = JV.read_mono(vocal) if vocal and os.path.exists(vocal) else np.zeros(0)
+    if len(x) < JP.SR // 10:
+        return None, "unread: no vocal"
+    phones, read = None, "flux only: no phone recogniser weights here"
+    if JP.model_source(phone_models) != JP.MODEL:  # local weights only: Verify never downloads
+        try:
+            phones, read = JP.Phones(phone_models), "phones"
+        except Exception as e:  # a broken folder or no torch: the flux reading still stands
+            phones, read = None, f"flux only: the phone recogniser did not load ({type(e).__name__})"
+    words = None
+    if align and os.path.exists(align):
+        words = [w["w"] for w in json.load(open(align))["words"] if w.get("align") != "voiced-fill" and w["w"] != "da"]
+    return EJ.events(x, phones, words), read
+
+
+def onset_lags(onsets, rises, window=LAG_WINDOW_S):
+    """per sung onset (s): the nearest mouth rise within `window` either side, rise - onset in ms (+ = the mouth rises late)."""
+    out = []
+    for o in onsets:
+        d = [r - o for r in rises if abs(r - o) <= window]
+        if d:
+            out.append(1000.0 * min(d, key=abs))
+    return out
+
+
+def event_words(r, lag_med, lag_p90):
+    """the event reading in plain words: the judge's own reasons (event_judge.why), then the per-onset lag."""
+    from . import event_judge as EJ
+
+    out = [EJ.why(r)] if EJ.why(r) else []
+    if lag_med is not None:
+        out.append(f"mouth rises a median {lag_med:+.0f} ms from the sung onsets, {lag_p90:+.0f} ms at p90 (+ = late)")
+    return "; ".join(out)
+
+
+def event_reading(video, s, fps, offset, ev, read):
+    """the delivered shot's mouth (judge_mouth's inner-lip gap in eye distances) read by the event judge against the vocal's onsets,
+    p/b/m closures and wide vowels in the shot's window; the take's own when the shot's work dir holds it. Reported, it moves no
+    band. -> ev_* keys; {} when unread."""
+    from . import event_judge as EJ, judge_mouth as JM, sync_qa as Q
+
+    if ev is None:
+        return {"ev_read": read}
+    F = Q.read_span(video, s["f0"], s["f1"] + 1)
+    if len(F) < EJ.MIN_FRAMES:
+        return {"ev_read": read}
+    boxes = {int(k): v for k, v in (s.get("boxes") or {}).items()} or ({0: s["box"]} if s.get("box") else {})
+    giod, _, _ = JM.opening(F, JM.roi_of(F, boxes or None), fps)
+    if giod is None:
+        return {"ev_read": read}
+    take_op = None
+    take = s.get("warp_json") and os.path.join(s["warp_json"].split(os.sep + "work" + os.sep)[0], "take.mp4")
+    if take and os.path.exists(take):
+        T, _ = JM.frames(take, len(F))
+        if len(T) >= EJ.MIN_FRAMES:
+            take_op, _, _ = JM.opening(T, JM.roi_of(T, boxes or None), fps)
+    t0 = s["start"] - offset
+    c = EJ.cut(ev, t0, t0 + len(F) / fps)
+    r = EJ.score(giod, fps, c["onsets"], c["closures"], c["sung"], c["wide"], take_op)
+    if r.get("onset_n") is None:
+        return {"ev_read": read}
+    lags = onset_lags(c["onsets"], r["events"]["rises"])
+    med = round(float(np.median(lags)), 1) if lags else None
+    p90 = round(float(np.percentile(lags, 90)), 1) if lags else None
+    out = {f"ev_{k}": r.get(k) for k in EV_KEYS}
+    out.update(ev_onset_lag_ms=med, ev_onset_lag_p90_ms=p90, ev_lag_n=len(lags), ev_pass=r.get("pass"), ev_read=read)
+    out["ev_why"] = event_words(r, med, p90)
+    return out
 
 
 def path_reading(s):
@@ -781,7 +864,7 @@ def _path_cell(r):
 
 
 def write_verify(meta, rows, out):
-    from . import scorecard as SC, sync_truth as ST
+    from . import event_judge as EJ, scorecard as SC, sync_truth as ST
 
     order = sorted(
         rows,
@@ -822,6 +905,17 @@ def write_verify(meta, rows, out):
         "nose_ok",
         "path",
         "lag_frames",
+        "ev_onset_hit",
+        "ev_onset_n",
+        "ev_closure_hit",
+        "ev_closure_n",
+        "ev_spurious",
+        "ev_spurious_take",
+        "ev_open_ratio",
+        "ev_onset_lag_ms",
+        "ev_onset_lag_p90_ms",
+        "ev_read",
+        "ev_why",
         "vocal_lost",
         "vocal_off_ms",
         "vocal_off_n",
@@ -854,20 +948,25 @@ def write_verify(meta, rows, out):
         "the shot, the worst word; a free walk, so a word it loses reads as off, and `lost` when a shot's words sit more than 0.6 s off, where the walk has run away on a long song: no reading), then the plan's phones read directly on the vocal's frames: "
         "hiss on hiss, closures on a dip or nasal, vowels on open sound, 0..1. Passed-over words (a lead sheet) are not read.",
         "`path` is reported and moves no band: the paint delivered, then the frames of it picked from before their own time, whose skin is a frame old.",
+        "`events` is reported and moves no band this release: the mouth read against the vocal's events one by one by the event "
+        f"judge (audits/event_judge.py, its own front end; this film: {meta.get('events_read') or 'unread'}): sung onsets met by a "
+        f"mouth rise within {EJ.TOL * 1000:.0f} ms, p/b/m closures met by shut lips, shuts where the singer has no closure (against "
+        "the take's own), the wide vowels' opening against the take's, then the per-onset lag: median and p90 of the nearest rise "
+        f"within {LAG_WINDOW_S * 1000:.0f} ms of each onset (+ = late). The whole-shot `audio` lag can read near 0 while the attacks are late.",
         "`travel` is how far the mouth opens and closes over the shot (in face heights), then how much of the take's own movement the "
         "song asks for (read from the dub's warp log; a held line asks less than the take moves by itself). A mouth that barely moves "
         f"and opens less than {SC.TRAVEL_KEEP:.2f} as far as it was asked (as far as the take does when there is no reading), or that "
         f"hardly opens at all, scores at most {SC.TRAVEL_CAP_SCORE:.0f}, and its reason says how far it opened. The raw numbers are in "
         "the JSON and CSV.",
         "",
-        "| shot | t (s) | band | score | Δ vs before | class | path | sync corr | audio | shape | vocal | travel | silence | mouth | identity | reason |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| shot | t (s) | band | score | Δ vs before | class | path | sync corr | audio | events | shape | vocal | travel | silence | mouth | identity | reason |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in order:
         L.append(
             f"| {r['shot']} | {r['start']:.2f}-{r['end']:.2f} | **{r['band']}** | {'-' if r['score'] is None else (format(r['score'], '.0f'))} | "
             f"{'' if r.get('delta') is None else (format(r['delta'], '+.0f'))} | {r['class']} | {_path_cell(r)} | {'' if r.get('corr') is None else (format(r['corr'], '+.2f'))} | "
-            f"{_audio_cell(r)} | {_shape_cell(r)} | {_vocal_cell(r)} | {_travel_cell(r)} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
+            f"{_audio_cell(r)} | {_events_cell(r)} | {_shape_cell(r)} | {_vocal_cell(r)} | {_travel_cell(r)} | {r.get('open_in_silence') if r.get('open_in_silence') is not None else ''} | "
             f"{r['mouth_visible']:.0%} | {'' if r.get('identity_cos') is None else r['identity_cos']} | {r['reason']} |"
         )
     if meta.get("closures_lost"):
@@ -886,6 +985,22 @@ def write_verify(meta, rows, out):
         ],
         lambda r: f"{r['band']} {'' if r['score'] is None else int(r['score'])}",
     )
+
+
+def _events_cell(r):
+    """onsets hit, closures shut, spurious shuts (take's), vowel opening vs the take's, per-onset lag median / p90; then the words."""
+    if r.get("ev_onset_hit") is None:
+        return ""
+    p = [f"onsets {r['ev_onset_hit']:.2f} of {r['ev_onset_n']}"]
+    if r.get("ev_closure_hit") is not None:
+        p.append(f"closures {r['ev_closure_hit']:.2f} of {r['ev_closure_n']}")
+    sp = r.get("ev_spurious")
+    p.append(f"stray shuts {sp}" + ("" if r.get("ev_spurious_take") is None else f" (take {r['ev_spurious_take']})"))
+    if r.get("ev_open_ratio") is not None:
+        p.append(f"vowels {r['ev_open_ratio']:.2f} of the take's")
+    if r.get("ev_onset_lag_ms") is not None:
+        p.append(f"lag {r['ev_onset_lag_ms']:+.0f} / p90 {r['ev_onset_lag_p90_ms']:+.0f} ms")
+    return ", ".join(p) + (f": {r['ev_why']}" if r.get("ev_why") else "")
 
 
 def _travel_cell(r):
@@ -950,6 +1065,11 @@ def main(argv=None):
     v.add_argument("--before")
     v.add_argument("--align")
     v.add_argument("--model", default=None)
+    v.add_argument(
+        "--phone-models",
+        help="the event reading's phone recogniser folder (default: LSDUB_PHONE_MODELS, LSDUB_HF_MODELS/wav2vec2-espeak); "
+        "no local weights = flux onsets only, never a download",
+    )
     v.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
@@ -987,7 +1107,7 @@ def main(argv=None):
             + f" -> {a.out}.json"
         )
         return 0
-    meta, rows = verify(a.video, a.vocal, a.shots, a.before, a.align, a.model, a.out + "_work")
+    meta, rows = verify(a.video, a.vocal, a.shots, a.before, a.align, a.model, a.out + "_work", phone_models=a.phone_models)
     write_verify(meta, rows, a.out)
     print(
         f"qa verify {a.video}: "

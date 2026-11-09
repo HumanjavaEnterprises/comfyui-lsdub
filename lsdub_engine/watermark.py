@@ -154,6 +154,8 @@ def apply(src, dst, key=KEY, strength=3.0, crf=14):
             f"comment={TAG}",
             "-t",  # every video frame, however short the audio; audio past the last frame stops with it
             f"{(_frames(src) + 0.5) / fps:.6f}",
+            "-movflags",
+            "+faststart",  # moov ahead of mdat: the saved cut plays from the first Range request
             dst,
         ],
         stdin=ff.PIPE,

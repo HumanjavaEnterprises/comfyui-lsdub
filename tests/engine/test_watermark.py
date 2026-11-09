@@ -52,3 +52,28 @@ def test_every_video_frame_survives_whatever_the_audio(tmp_path, audio_s):
         check=True,
     ).stdout
     assert float(probe.split(",")[0]) <= 1.05
+
+
+def _top_atoms(path):
+    """the mp4's top-level box types, in file order."""
+    import struct
+
+    out = []
+    with open(path, "rb") as f:
+        while True:
+            hd = f.read(8)
+            if len(hd) < 8:
+                return out
+            size, kind = struct.unpack(">I4s", hd)
+            if size == 1:
+                size = struct.unpack(">Q", f.read(8))[0] - 8
+            out.append(kind.decode("latin-1"))
+            f.seek(size - 8, 1)
+
+
+def test_the_watermarked_file_is_faststart(clip, tmp_path):
+    """moov ahead of mdat (G10 lane 11: the saved cut, the site's redub.mp4, was the one file with its moov at the end)."""
+    out = str(tmp_path / "wm.mp4")
+    watermark.apply(clip, out)
+    a = _top_atoms(out)
+    assert "moov" in a and "mdat" in a and a.index("moov") < a.index("mdat"), a

@@ -161,9 +161,20 @@ RULES = (
         lambda a: a.warp_events != "off" and not a.warp_audio,
     ),
     Rule(
-        ("--warp-hold", "--warp-closures"),
-        "no --warp-events vocal (with --warp-audio): the hold and closure stages read the events the event stage writes on the track",
-        lambda a: (a.warp_hold != "off" or a.warp_closures != "plan") and (a.warp_events == "off" or not a.warp_audio),
+        ("--warp-hold", "--warp-closures", "--warp-realise"),
+        "no --warp-events vocal (with --warp-audio): the hold, closure and realise stages read the events the event stage writes on "
+        "the track",
+        lambda a: (
+            (a.warp_hold != "off" or a.warp_closures != "plan" or vars(a).get("warp_realise", "off") != "off")
+            and (a.warp_events == "off" or not a.warp_audio)
+        ),
+    ),
+    Rule(
+        ("--warp-aperture",),
+        "p95 with no --warp-events vocal (with --warp-audio): no wide-vowel nuclei are tagged, so p95 reads every frame and is the "
+        "same as map",
+        lambda a: a.warp_aperture == "p95" and (a.warp_events == "off" or not a.warp_audio),
+        inert=False,
     ),
     Rule(
         ("--coart-",),

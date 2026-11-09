@@ -20,7 +20,7 @@ def _setup(pack, tmp_path):
 def test_verify_node(pack, tmp_path, monkeypatch):
     calls = []
 
-    def verify(video, vocal, sj, before=None, align=None, model=None, work=None, emb=None):
+    def verify(video, vocal, sj, before=None, align=None, model=None, work=None, emb=None, phone_models=None):
         calls.append((video, vocal, before, align, json.load(open(sj))['offset']))
         return {'video': video}, [{'shot': 3, 'band': 'REVIEW', 'score': 60.0, 'reason': 'mouth open in the silences'}]
 
@@ -72,7 +72,7 @@ def _capture_verify(pack, monkeypatch):
     mod = importlib.import_module(pack.__name__ + '.lsdub_engine.audits.qa')
     seen = {}
 
-    def verify(video, vocal, sj, before=None, align=None, model=None, work=None, emb=None):
+    def verify(video, vocal, sj, before=None, align=None, model=None, work=None, emb=None, phone_models=None):
         seen['shots'] = json.load(open(sj))['shots']
         return {}, [{'shot': 3, 'band': 'N/A', 'score': None, 'reason': 'left as source: sync gate failed: measured corr 0.1'}]
 
