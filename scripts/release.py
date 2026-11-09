@@ -185,7 +185,6 @@ def main():
 
         step('vendor the engine')
         sh(sys.executable, os.path.join(eng, 'scripts', 'vendor_engine.py'), '--pack', tree, cwd=eng)
-        sh(sys.executable, os.path.join(eng, 'scripts', 'vendor_engine.py'), '--pack', tree, '--check', cwd=eng)
 
         step('pack checks (what CI runs, plus the private-methods scrub in tests/test_registry_rules.py)')
         sh(sys.executable, '-m', 'ruff', 'check', '--select', 'S102,S307,E702,F', '--target-version', 'py310', '.', cwd=tree)
@@ -200,6 +199,7 @@ def main():
         git(tree, 'add', '-A')
         if dry:
             print(f'    would commit "{v}: {first[:100]}" with: ' + git(tree, 'diff', '--cached', '--stat', quiet=True).replace('\n', '\n      '))
+            print('    would then run vendor_engine.py --check on the committed record')
             print(f'    would commit the engine vendor record ({EVIDENCE.format(v=v)[:60]}...)')
             print(f'\n[{STEP[0] + 1}..] would push release/{v}, wait for CI + Install path, fast-forward main, tag v{v}, push the tag and the '
                   'engine record, watch publish, confirm the Registry, check the site deploy.\nDRY RUN OK: every check passed.')
@@ -208,6 +208,7 @@ def main():
         rel_sha = git(tree, 'rev-parse', 'HEAD', quiet=True)
         if read(records) != records_before:
             git(eng, 'commit', '-q', '-m', f'{v} vendor record\n\n{EVIDENCE.format(v=v)}', '--', 'scripts/vendor_records.tsv')
+        sh(sys.executable, os.path.join(eng, 'scripts', 'vendor_engine.py'), '--pack', tree, '--check', cwd=eng)   # clean engine again
 
         step(f'push release/{v} and wait for CI + Install path on {rel_sha[:9]}')
         git(PACK, 'push', '-q', 'origin', f'release/{v}')

@@ -99,16 +99,36 @@ def serve_mirror(folder, rev, files):
             self.send_header('Content-Type', 'application/octet-stream')
             self.end_headers()
 
+        def _proxy(self, method):
+            """anything but the four recogniser files (DINOv2, ...) goes to the real Hub, redirects passed through as they come."""
+            class NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, *a, **k): return None
+            req = urllib.request.Request('https://huggingface.co' + self.path, method=method,
+                                         headers={k: v for k, v in self.headers.items() if k.lower() not in ('host', 'connection')})
+            try: r = urllib.request.build_opener(NoRedirect).open(req, timeout=300)  # noqa: S310 (fixed https host)
+            except urllib.error.HTTPError as e: r = e
+            self.send_response(r.status if hasattr(r, 'status') else r.code)
+            for k, v in r.headers.items():
+                if k.lower() not in ('transfer-encoding', 'connection'): self.send_header(k, v)
+            self.end_headers()
+            if method == 'GET': shutil.copyfileobj(r, self.wfile)
+
         def do_HEAD(self):
             p = self._file()
-            if not p or not os.path.isfile(p):
+            if not p:
+                self._proxy('HEAD')
+                return
+            if not os.path.isfile(p):
                 self.send_error(404)
                 return
             self._head(p)
 
         def do_GET(self):
             p = self._file()
-            if not p or not os.path.isfile(p):
+            if not p:
+                self._proxy('GET')
+                return
+            if not os.path.isfile(p):
                 self.send_error(404)
                 return
             self._head(p)
