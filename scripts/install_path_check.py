@@ -14,7 +14,7 @@ Run it with the ComfyUI venv's python (ComfyUI's requirements + this pack's requ
      (exactly the four pinned files at the pinned revision, no safetensors), and phonemizer is never needed;
   4. dub: the demo workflow (BYO Clip and Song) at its defaults: Dub, Verify, Save Cut;
   5. mouth: the same Dub with Mouth Tweaks warp_events vocal, warp_hold nucleus-follow, warp_closures aligned-press,
-     warp_aperture p95 (the Dub's auto path).
+     warp_aperture p95, on the demo kit named as a user's own face (the Dub's auto path, the plain mouth stack).
 A dubbed shot that errors fails the test even though the Dub itself carries on with the source (on_fail=source).
 
 --hf-mirror DIR serves the four recogniser files from DIR on a local Hugging Face endpoint (CI's cache, so the files are
@@ -37,6 +37,9 @@ import urllib.request
 
 REPO = 'facebook/wav2vec2-lv-60-espeak-cv-ft'
 RECOGNISER_DIR = os.path.join('lsdub', 'wav2vec2-espeak')
+# the mouth Dub runs as a user's own face: a name the preset does not list, so the plain mouth stack and its drive stages
+# (events, closures, hold) run, as they do for every face but the demo's (0.2.1's closures crash was on that path)
+USER_FACE = 'my_singer'
 MOUTH = dict(warp_events='vocal', warp_hold='nucleus-follow', warp_closures='aligned-press', warp_aperture='p95')
 BAD_LOG = [(re.compile(r'phonemizer', re.I), 'phonemizer was needed'),
            (re.compile(r'phone network not loaded'), 'the phone recogniser did not load (vocal events fell back to flux)'),
@@ -170,7 +173,7 @@ def texts(outputs, node):
     return '\n'.join(t if isinstance(t, list) else [str(t)])
 
 
-def workflow(name, aligner='sphinx', mouth=False, align_only=False):
+def workflow(name, aligner='sphinx', mouth=False, align_only=False, identity='red_nova'):
     w = {
         '1': ('LSDubProject', dict(name=name, root='', mode='run', fps=25, song_offset=0, preset='landing', seed=0, force_shots='', backend='local')),
         '2': ('LoadVideo', dict(file='lsdub_demo_landing_clip.mp4')),
@@ -189,7 +192,7 @@ def workflow(name, aligner='sphinx', mouth=False, align_only=False):
             '7': ('LSDubShotSplit', dict(project=['1', 0], source=['3', 0])),
             '10': ('LSDubTriage', dict(samples=6, project=['1', 0], source=['3', 0], shots=['7', 0], song=['6', 0])),
             '11': ('PreviewAny', dict(source=['10', 2])),
-            '14': ('LSDubBuildLipKit', dict(identity='red_nova', kit_dir='lsdub_demo_kits/red_nova.zip', shot_id=-1,
+            '14': ('LSDubBuildLipKit', dict(identity=identity, kit_dir='lsdub_demo_kits/red_nova.zip', shot_id=-1,
                                             keep='person, same face shape, skin tone, hair, eyewear and makeup', seeds=3, project=['1', 0])),
             '15': ('LSDubDub', dict(only_shots='', quality=18, on_fail='source', audio='source', vocalisations='skip', project=['1', 0],
                                     source=['3', 0], shots=['10', 0], song=['6', 0], align=['9', 0], kit=['14', 0])),
@@ -330,7 +333,7 @@ def main():
         if 'dub' in steps: step('dub', lambda: dub('ip-dub-defaults', 'dub at defaults', {}))
         if 'mouth' in steps:
             step('mouth', lambda: dub('ip-dub-mouth', 'dub with the mouth Combos (' + ', '.join(f'{k} {v}' for k, v in MOUTH.items()) + ')',
-                                      dict(aligner='ctc', mouth=True)))
+                                      dict(aligner='ctc', mouth=True, identity=USER_FACE)))
         if failures: raise Fail(f'{len(failures)} step(s) failed:\n  ' + '\n  '.join(failures))
         say('PASS')
     finally:
