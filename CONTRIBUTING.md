@@ -12,7 +12,7 @@ Use the **Suggestion** form. Tell us the shot or the music video that made you w
 ## Pull requests
 - Small and focused beats big and sweeping.
 - Run the checks before you open it:
-  - `pip install -r requirements.txt pytest ruff`
+  - `pip install -r requirements.txt pytest ruff==0.17.3 comfy-cli packaging` (what CI installs; the deploy-inputs test runs comfy-cli's own scanner and needs it)
   - `ruff check --select S102,S307,E702,F .`
   - `pytest -q`
 - New nodes: V3 schema, a tooltip on every input and output.

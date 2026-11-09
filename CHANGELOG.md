@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- CONTRIBUTING installs what CI installs (`comfy-cli`, `packaging`, ruff 0.17.3 pinned): the deploy-inputs test runs comfy-cli's own scanner and failed with ModuleNotFoundError on a clone that followed the old line. CI was green.
 - LSDub Mouth Tweaks tips say what happens without `warp_events vocal`: `warp_hold` and `warp_closures` do nothing and the engine warns; `warp_aperture p95` is the same as `map`.
 
 ## 0.2.0 (2026-11-08)
