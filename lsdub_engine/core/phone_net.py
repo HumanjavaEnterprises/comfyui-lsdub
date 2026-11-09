@@ -7,7 +7,7 @@ vowel's first frame), the recogniser's frame-level evidence to align the lyric's
 when the model is not at hand (flux). Everything here is the driver's own reading of the vocal; the audit side has its own and the
 two never import each other.
 
-  PhoneNet(cache_dir)      the recogniser, loaded by local path when its files are there (no hub call), by repo id otherwise
+  PhoneNet(cache_dir)      the recogniser, loaded by local path; missing files are fetched (pinned, sha-checked) first
   posteriors(x, net)       CTC log-posteriors, one row per FRAME, for samples x at SR
   runs(logp, net)          argmax runs of one label: [(label, start s, end s)]
   level_db(x) / sung(x)    RMS level per HOP under the clip's p95, and the frames where the voice is on
@@ -29,7 +29,7 @@ import numpy as np
 from scipy.ndimage import maximum_filter1d, median_filter
 from scipy.signal import stft
 
-from .._models import hf_snapshot
+from .._models import fetch_pinned, hf_snapshot
 
 MODEL = "facebook/wav2vec2-lv-60-espeak-cv-ft"
 NEED = ("config.json", "vocab.json", "preprocessor_config.json", "pytorch_model.bin")
@@ -70,18 +70,15 @@ def models_dir(cache_dir=None):
 
 
 def model_source(cache_dir=None):
-    """the local snapshot path when the files are there, else the repo id (loads over the network)."""
+    """the local snapshot path when the files are there, else the repo id (PhoneNet then fetches the pinned files)."""
     return hf_snapshot(models_dir(cache_dir), MODEL, NEED) or MODEL
 
 
 def _read_vocab(source):
-    path = os.path.join(source, "vocab.json") if os.path.isdir(source) else None
-    if path and os.path.isfile(path):
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    from transformers import AutoTokenizer
-
-    return AutoTokenizer.from_pretrained(source).get_vocab()
+    """the vocabulary from the snapshot's vocab.json: never through a tokenizer class (the phoneme tokenizer needs phonemizer and
+    espeak, which LSDub does not install)."""
+    with open(os.path.join(source, "vocab.json"), encoding="utf-8") as f:
+        return json.load(f)
 
 
 class PhoneNet:
@@ -91,12 +88,9 @@ class PhoneNet:
         from transformers import AutoModelForCTC
 
         self.source = model_source(cache_dir)
-        where = models_dir(cache_dir)  # by repo id: the download lands under the models folder, never the user's hub cache
-        self.model = (
-            AutoModelForCTC.from_pretrained(self.source, **({"cache_dir": where} if where and self.source == MODEL else {}))
-            .eval()
-            .to(device)
-        )
+        if self.source == MODEL:  # not there yet: the four pinned files, sha-checked, into the models folder; then by path
+            self.source = fetch_pinned(MODEL, models_dir(cache_dir))
+        self.model = AutoModelForCTC.from_pretrained(self.source, use_safetensors=False).eval().to(device)
         self.device = device
         vocab = self.model.config.to_dict().get("vocab") or _read_vocab(self.source)
         self.labels = [t for t, _ in sorted(vocab.items(), key=lambda kv: kv[1])]

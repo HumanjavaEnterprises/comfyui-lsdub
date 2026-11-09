@@ -150,6 +150,18 @@ def verify_snapshot(path, repo_id):
     return path
 
 
+def fetch_pinned(repo_id, cache_dir=None):
+    """download exactly the files KNOWN pins for repo_id, at its pinned revision, into cache_dir's hub layout (None: the user's hub
+    cache), each checked against its sha256; returns the snapshot folder, which then loads by PATH. Nothing else is fetched: no
+    tokenizer files, no converted weights from another revision."""
+    from huggingface_hub import hf_hub_download
+
+    k, path = KNOWN[repo_id], None
+    for name, sha in k["files"].items():
+        path = check_file(hf_hub_download(repo_id, name, revision=k["revision"], cache_dir=cache_dir), sha)
+    return os.path.dirname(path)
+
+
 def hf_snapshot(cache_dir, repo_id, need=("config.json",), revision=None):
     """the local folder of a Hugging Face model under cache_dir, so it loads by PATH (no hub call, works offline):
     the cache layout's snapshot named by refs/main, else any snapshot holding every file in `need` (newest first; a

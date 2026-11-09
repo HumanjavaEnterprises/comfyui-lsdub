@@ -44,7 +44,9 @@ LSDub Occluders is optional in every workflow. It downloads Florence-2 and SAM 2
 ## First-use downloads
 
 The first Align run downloads Whisper large-v3 (about 3 GB) with no progress bar in the UI. Let it finish once. With `aligner` = ctc
-(or a Dub with `warp_events` = vocal) the first run also downloads the phone recogniser (1.2 GB), the same way.
+(or a Dub with `warp_events` = vocal) the first run also downloads the phone recogniser (1.2 GB: four files at a pinned revision, each checked against its sha256, into
+`models/lsdub/wav2vec2-espeak`), the same way. To place it by hand (offline machines), put `config.json`, `vocab.json`,
+`preprocessor_config.json` and `pytorch_model.bin` from the rows in `comfy-build.yaml` under the `type` folder each row names.
 Workflows 2 and 3 ship the demo transcript (`lsdub_demo_landing_stt.json`), so their alignment is the same on every run.
 
 ## GPU memory

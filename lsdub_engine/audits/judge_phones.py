@@ -7,7 +7,7 @@ lyric and the wide-vowel nuclei. Every event comes from here, from the judge's o
 driver (the driver has its own phone network and its own aligner; the two must never import each other). tests/test_judge_frozen.py
 holds the import rules and pins what this produces on fixtures.
 
-  Phones(cache_dir)      the recogniser, loaded by local path when its files are there (no hub call), by repo id otherwise
+  Phones(cache_dir)      the recogniser, loaded by local path; missing files are fetched (pinned, sha-checked) first
   logposteriors(x, P)    CTC log-posteriors at FRAME s per row for samples x at SR
   segments(logp, P)      argmax runs: [(label, start, end)]
   nuclei(logp, x, P)     syllable nuclei: a vowel-token start gated to one per nucleus (after a consonant or silence, or after a
@@ -33,7 +33,7 @@ import numpy as np
 from scipy.ndimage import maximum_filter1d, median_filter
 from scipy.signal import stft
 
-from .._models import hf_snapshot
+from .._models import fetch_pinned, hf_snapshot
 
 MODEL = "facebook/wav2vec2-lv-60-espeak-cv-ft"
 NEED = ("config.json", "vocab.json", "preprocessor_config.json", "pytorch_model.bin")
@@ -95,7 +95,9 @@ class Phones:
         from transformers import AutoModelForCTC
 
         self.source = model_source(cache_dir)
-        self.model = AutoModelForCTC.from_pretrained(self.source).eval().to(device)
+        if self.source == MODEL:  # not there yet: the four pinned files, sha-checked; then by path (the same weights and vocab.json)
+            self.source = fetch_pinned(MODEL, models_dir(cache_dir))
+        self.model = AutoModelForCTC.from_pretrained(self.source, use_safetensors=False).eval().to(device)
         self.device = device
         vocab = self.model.config.to_dict().get("vocab") or _vocab(self.source)
         self.labels = [t for t, _ in sorted(vocab.items(), key=lambda kv: kv[1])]
@@ -113,13 +115,10 @@ class Phones:
 
 
 def _vocab(source):
-    path = os.path.join(source, "vocab.json") if os.path.isdir(source) else None
-    if path and os.path.isfile(path):
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    from transformers import AutoTokenizer
-
-    return AutoTokenizer.from_pretrained(source).get_vocab()
+    """the vocabulary from the snapshot's vocab.json: never through a tokenizer class (the phoneme tokenizer needs phonemizer and
+    espeak, which LSDub does not install)."""
+    with open(os.path.join(source, "vocab.json"), encoding="utf-8") as f:
+        return json.load(f)
 
 
 def logposteriors(x, P):

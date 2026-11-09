@@ -198,41 +198,6 @@ def test_phone_net_loads_by_path(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(not os.environ.get("LSDUB_PHONE_MODELS"), reason="set LSDUB_PHONE_MODELS to the recogniser's local hub folder")
-def test_align_and_paint_stages_round_trip_offline(tmp_path):
-    """the round trip the pack promises: with the recogniser's files pre-placed under a models folder and the hub unreachable
-    (HF_HUB_OFFLINE=1, a dead endpoint, an empty HF_HOME), `lsdub align --aligner ctc --phone-models <dir>` aligns a short cut and
-    `phone_net.PhoneNet(<dir>)` loads by path in a fresh interpreter with no environment variable naming the folder; and loading by
-    repo id with a cache_dir names that folder as the download target (no hub call is made: the folder already holds the snapshot)."""
-    models = os.environ["LSDUB_PHONE_MODELS"]
-    code = textwrap.dedent(f"""
-        import json, os, numpy as np, soundfile as sf
-        os.environ.pop('LSDUB_PHONE_MODELS', None); os.environ.pop('LSDUB_HF_MODELS', None)
-        from lsdub_engine.core import lyric_align as LA, phone_net as PN
-        net = PN.PhoneNet({models!r})
-        assert os.path.isdir(net.source), net.source
-        sr = 16000; t = np.arange(sr * 2) / sr
-        x = np.zeros(sr * 2, np.float32); on = (t > 0.3) & (t < 1.5); x[on] = (0.3 * np.sin(2 * np.pi * 200 * t[on])).astype(np.float32)
-        d = {tmp_path.as_posix()!r}
-        sf.write(d + '/lead.wav', x, sr); open(d + '/lyrics.txt', 'w').write('ma\\n')
-        json.dump([dict(w='ma', start=0.3, end=1.5, p=0.9)], open(d + '/stt.json', 'w'))
-        LA.main(['--audio', d + '/lead.wav', '--lyrics', d + '/lyrics.txt', '--t0', '0', '--t1', '2', '--stt-json', d + '/stt.json',
-                 '--aligner', 'ctc', '--phone-models', {models!r}, '--out', d + '/align.json'])
-        A = json.load(open(d + '/align.json'))
-        assert A['aligner'] == 'ctc' and any(w['align'] == 'ctc' for w in A['words']), A['words']
-        print('ROUNDTRIP-OK')
-    """)
-    env = dict(
-        os.environ,
-        HF_HUB_OFFLINE="1",
-        TRANSFORMERS_OFFLINE="1",
-        HF_ENDPOINT="http://127.0.0.1:9",
-        HF_HOME=str(tmp_path / "empty-hf-home"),
-    )
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=str(tmp_path))
-    assert r.returncode == 0 and "ROUNDTRIP-OK" in r.stdout, r.stderr[-2000:]
-
-
-@pytest.mark.skipif(not os.environ.get("LSDUB_PHONE_MODELS"), reason="set LSDUB_PHONE_MODELS to the recogniser's local hub folder")
 def test_align_round_trip_offline_writes_its_wav_with_the_stdlib(tmp_path):
     """the same offline round trip with the cut written by the stdlib `wave` (soundfile is not a dependency, 04201e8), and the child
     interpreter checked to have never imported soundfile. Gated: the recogniser's weights (1.2 GB) are not in CI."""
