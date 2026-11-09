@@ -172,7 +172,7 @@ def _safe_extract(zf, dst):
     root = os.path.realpath(dst)
     ms = zf.infolist()
     if len(ms) > ZIP_MAX_MEMBERS: raise ValueError(f'zip has {len(ms)} members (max {ZIP_MAX_MEMBERS}); refusing')
-    total = 0
+    total, plan = 0, []
     for m in ms:
         n = m.filename
         if (m.external_attr >> 16) & 0o170000 == 0o120000:
@@ -182,11 +182,17 @@ def _safe_extract(zf, dst):
         out = os.path.realpath(os.path.join(dst, n))
         if out != root and not out.startswith(root + os.sep):
             raise ValueError(f'zip member {n!r} escapes the folder; refusing')
+        plan.append((m, out))
         total += m.file_size
         if m.file_size > (1 << 20) and m.file_size / max(m.compress_size, 1) > ZIP_MAX_RATIO:
             raise ValueError(f'zip member {n!r} compresses {m.file_size / max(m.compress_size, 1):.0f}:1; refusing')
     if total > ZIP_MAX_BYTES: raise ValueError(f'zip unpacks to {total} bytes (max {ZIP_MAX_BYTES}); refusing')
-    zf.extractall(dst)
+    for m, out in plan:                                                  # each member to the path checked above, no extractall
+        if m.is_dir():
+            os.makedirs(out, exist_ok=True)
+            continue
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        with zf.open(m) as src, open(out, 'wb') as f: shutil.copyfileobj(src, f, 1 << 20)
 
 
 def kit_folder(p):

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Lip Kit zip and the demo zip are unpacked member by member to paths checked to stay inside their folder (no `extractall`); the demo fetcher now runs the same checks as the Lip Kit. The Comfy Registry flagged 0.1.0-0.1.11 for path traversal.
+- LSDub Save Cut writes its watermarked file faststart (moov first), so a download starts playing without a second request. Timing unchanged.
 - CONTRIBUTING installs what CI installs (`comfy-cli`, `packaging`, ruff 0.17.3 pinned): the deploy-inputs test runs comfy-cli's own scanner and failed with ModuleNotFoundError on a clone that followed the old line. CI was green.
 - LSDub Mouth Tweaks tips say what happens without `warp_events vocal`: `warp_hold` and `warp_closures` do nothing and the engine warns; `warp_aperture p95` is the same as `map`.
 
