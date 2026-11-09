@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.1 (2026-11-09)
+
+- Fixed: LSDub Align with `aligner` `ctc`, and Mouth Tweaks `warp_events` `vocal`, now work in a fresh ComfyUI. 0.2.0 crashed in Align (`ctc`) and quietly fell back to a weaker onset reading (`vocal`). The phone recogniser now downloads its four pinned files (1.2 GB, sha-checked) into `models/lsdub/wav2vec2-espeak` on first use and loads from there; no extra Python packages are needed.
+- LSDub Verify reports how the mouth meets the vocal, shot by shot: sung onsets met by a mouth rise, p/b/m met by shut lips, stray shuts against the take, vowel opening against the take, and the per-syllable lag. Reported only: the PASS / REVIEW bands are unchanged.
+- Mouth Tweaks warns when `warp_hold`, `warp_closures`, `warp_aperture p95` or `warp_realise` is set without `warp_events vocal` (they need it).
+- Zip files (Lip Kit, demo) unpack member by member to checked paths.
+- The saved cut starts playing before it finishes downloading (faststart).
+- Two engine fixes that change no delivered shot: the render-time held-mouth guard reads the same reference as Verify, and the retime reads only the shot's own audio.
+
 - LSDub Verify has an events column, reported only (no band moves): sung onsets met by a mouth rise, p/b/m closures shut, stray shuts against the take's, vowel opening against the take's, and how late the mouth rises per onset (median and p90). It uses the phone recogniser when Align downloaded it, else the vocal's onsets alone, and says which. On the six try-it cells' 0.1.11 cuts: onsets 0.535, p/b/m 3 of 24, per-onset lag p90 +52 ms, while every shot passes or reviews on the bands.
 - Engine vendored from the 0.2.1 branch (tree a7014a2e).
 - The Lip Kit zip and the demo zip are unpacked member by member to paths checked to stay inside their folder (no `extractall`); the demo fetcher now runs the same checks as the Lip Kit. The Comfy Registry flagged 0.1.0-0.1.11 for path traversal.
