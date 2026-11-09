@@ -3,7 +3,8 @@
 """--mode warp (warp, don't paste): synthetic, CPU only. The dense warp must carry the take's own lip pixels to the
 target landmarks (within 1 px) and leave every pixel beyond the falloff ring bit-identical."""
 
-import numpy as np, cv2
+import numpy as np
+import pytest, cv2
 
 from lsdub_engine.core import mouth_warp as mw
 
@@ -309,3 +310,35 @@ def test_seal_fill_is_a_noop_above_threshold_and_local_below():
     assert al == 1.0
     ch = np.nonzero(np.abs(out.astype(int) - img.astype(int)).max(2))
     assert ch[0].size > 0 and ch[1].min() >= inner[:, 0].min() - 12 and ch[1].max() <= inner[:, 0].max() + 12
+
+
+# -- --warp-realise events: the onset windows the warp lets through as planned --------------------------------------------------------------
+def test_event_windows_cover_the_release_and_attack_of_each_nucleus_only():
+    from lsdub_engine.core import mouth_warp as MW
+
+    fr = [dict(t=round(k / 50.0, 3), ev=dict(k=-1, kind="rest", t_on=None)) for k in range(100)]
+    for k in range(50, 100):
+        fr[k]["ev"] = dict(k=0, kind="nucleus", t_on=1.0)
+    m = MW.event_windows(fr, 100, 50.0)
+    on = np.flatnonzero(m) / 50.0
+    assert on.min() == pytest.approx(1.0 + MW.REALISE_WIN[0], abs=0.02) and on.max() == pytest.approx(1.0 + MW.REALISE_WIN[1], abs=0.02)
+    assert not m[:40].any() and not m[60:].any()
+    assert not MW.event_windows([], 10, 50.0).any() and not MW.event_windows([dict(t=0.0)] * 10, 10, 50.0).any()
+
+
+def test_target_features_keep_frames_skip_the_residual_easing():
+    from lsdub_engine.core import mouth_warp as MW
+
+    n = 40
+    F = np.tile([30.0, 150.0], (n, 1))
+    rng = dict(g_lo=0.0, g_hi=60.0, w_lo=140.0, w_med=150.0, w_hi=160.0)
+    fr = [dict(vis="aa", vis2="sil", mix=0.0, open=0.2) for _ in range(n)]
+    for k in range(18, 22):  # a 4-frame event asking for a full opening
+        fr[k]["open"] = 1.0
+    eased = MW.target_features(fr, F, rng, sigma=2.0, follow=0.15)
+    keep = np.zeros(n, bool)
+    keep[18:22] = True
+    kept = MW.target_features(fr, F, rng, sigma=2.0, follow=0.15, keep=keep)
+    raw = MW.target_features(fr, F, rng, sigma=0.0, follow=0.15)
+    assert np.allclose(kept[18:22, 0], raw[18:22, 0]) and (eased[18:22, 0] < raw[18:22, 0]).all()  # the event keeps its height
+    assert np.allclose(kept[:10, 0], eased[:10, 0])  # outside the window nothing changes

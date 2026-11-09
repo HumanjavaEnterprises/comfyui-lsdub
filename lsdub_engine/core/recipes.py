@@ -156,6 +156,16 @@ LAYER_ONLY = (
 L3_FLAGS = ("--warp-tongue", "--warp-tongue-lit", "--warp-tongue-cover", "--warp-lower-real", "--warp-lower-mix")
 RULES = (
     Rule(
+        ("--warp-events",),
+        "no --warp-audio: the event stage has no stem to read (lsdub sing sets it; `lsdub paint` alone needs it named)",
+        lambda a: a.warp_events != "off" and not a.warp_audio,
+    ),
+    Rule(
+        ("--warp-hold", "--warp-closures"),
+        "no --warp-events vocal (with --warp-audio): the hold and closure stages read the events the event stage writes on the track",
+        lambda a: (a.warp_hold != "off" or a.warp_closures != "plan") and (a.warp_events == "off" or not a.warp_audio),
+    ),
+    Rule(
         ("--coart-",),
         "read only by the coart planner, no --warp-target coart here",
         lambda a: a.warp_target != "coart",

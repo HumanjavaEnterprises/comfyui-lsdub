@@ -828,6 +828,94 @@ def restore_order(words):
     return moved
 
 
+def lyric_window(whisper, lyr, ratio):
+    """the lyric words speech-to-text places inside the cut, in lyric order: from the first to the last lyric word it heard, the
+    unheard ones between them included (heard ''); the whole sheet when the match ratio is under LOW_MATCH (the transcript is not
+    trusted) or nothing was heard. -> [{w, src, heard, p}]; words sung outside the sheet are left to the fill step."""
+    toks = [t for t in lyr if t]
+    if not toks:
+        return []
+    ws = [dict(x, w=norm(x["w"]), heard=x["w"]) for x in whisper if norm(x["w"])]
+    if not ws or ratio is None or ratio < LOW_MATCH:
+        return [{"w": w, "src": "lyric", "heard": "", "p": None} for w in toks]
+    wt = [x["w"] for x in ws]
+    best, reach = (0, 0), 2 * len(wt) + 3  # the sheet may hold twice the words heard (an unheard line between two heard ones)
+    for s in range(len(toks)):
+        r = difflib.SequenceMatcher(None, wt, toks[s : s + reach], autojunk=False).ratio()
+        if r > best[0]:
+            best = (r, s)
+    span = toks[best[1] : best[1] + reach]
+    heard = {}
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, wt, span, autojunk=False).get_opcodes():
+        if op == "equal":
+            heard.update({j1 + k: ws[i] for k, i in enumerate(range(i1, i2))})
+        elif op == "replace":
+            for k, i in enumerate(range(i1, i2)):
+                if j1 + k < j2:
+                    heard[j1 + k] = ws[i]
+    if not heard:
+        return [{"w": w, "src": "lyric", "heard": "", "p": None} for w in toks]
+    lo, hi = min(heard), max(heard)
+    return [
+        {"w": span[j], "src": "lyric" if j in heard else "lyric-unheard", "heard": heard[j]["heard"] if j in heard else "", "p": heard[j].get("p") if j in heard else None}
+        for j in range(lo, hi + 1)
+    ]  # fmt: skip
+
+
+_CMU = {}
+
+
+def cmu_phones(w, extra):
+    """ARPAbet phones of a lyric word for the ctc aligner: --extra-dict first, then the CMU dictionary the sphinx aligner also reads
+    (soundswallower's dict.txt, stress digits kept), then dict_phones (g2p, else the spelling)."""
+    if w in extra:
+        return extra[w].split()
+    if not _CMU:
+        try:
+            import soundswallower as ss
+
+            with open(ss.get_model_path("en-us/dict.txt"), encoding="utf-8") as f:
+                for line in f:
+                    parts = line.split()
+                    if parts and not parts[0].startswith(";;"):
+                        _CMU.setdefault(re.sub(r"\(\d+\)$", "", parts[0].lower()), [p.upper() for p in parts[1:]])
+        except Exception:
+            _CMU.setdefault("", [])
+    ps = _CMU.get(w) or _CMU.get(w.replace("'", ""))
+    return list(ps) if ps else dict_phones(None, w, extra)
+
+
+def ctc_words(pcm, whisper, lyr, ratio, extra, t0, phone_models=None):
+    """`--aligner ctc`: the lyric window's words forced onto the phone recogniser's frames over the whole cut (core/ctc_align.py),
+    first vowels anchored to the recogniser's own nuclei. -> (words, report)."""
+    from . import ctc_align as CA, phone_net as PN
+
+    win = lyric_window(whisper, lyr, ratio)
+    if not win:
+        return [], [{"phrase": "", "method": "ctc", "why": "no lyric words"}]
+    net = PN.PhoneNet(phone_models)
+    logp = PN.posteriors(pcm, net)
+    nuc = [t0 + t for t in PN.nuclei(logp, pcm, net)]
+    toks = [(w["w"], [(p, PN.arpa_token(net, p)) for p in cmu_phones(w["w"], extra)]) for w in win]
+    net.release()
+    got = CA.align(logp, toks, net.blank, t0=t0, nuclei=nuc)
+    final = []
+    for i, (w, r) in enumerate(zip(win, got)):
+        r.update(src=w["src"], heard=w["heard"], p_whisper=w["p"], idx=i)
+        final.append(r)
+    report = [
+        {
+            "phrase": " ".join(w["w"] for w in win),
+            "method": "ctc",
+            "words": len(final),
+            "unheard": sum(1 for w in win if w["src"] == "lyric-unheard"),
+            "anchored": sum(1 for r in final if r.get("anchor_s")),
+            "nuclei": len(nuc),
+        }
+    ]
+    return final, report
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--audio", required=True)
@@ -853,10 +941,14 @@ def main(argv=None):
     ap.add_argument("--stt-only", action="store_true")
     ap.add_argument(
         "--aligner",
-        choices=["sphinx", "mfa", "best"],
+        choices=["sphinx", "mfa", "best", "ctc"],
         default="sphinx",
         help="mfa = Montreal Forced Aligner per phrase, sphinx/whisper chain for phrases MFA fails; best = per phrase, "
-        "MFA vs the sphinx/whisper chain, whichever sits better on the vocal envelope (env_score)",
+        "MFA vs the sphinx/whisper chain, whichever sits better on the vocal envelope (env_score); ctc = the lyric's phones forced "
+        "onto a CTC phone recogniser's frames (core/ctc_align.py), speech-to-text used only to pick the lyric window",
+    )
+    ap.add_argument(
+        "--phone-models", help="ctc: the recogniser's folder (default: LSDUB_PHONE_MODELS, LSDUB_HF_MODELS/wav2vec2-espeak, else the hub)"
     )
     ap.add_argument(
         "--mfa-max-phrase", type=float, default=3.0, help="mfa: split whisper phrases longer than this (s) at their largest gap"
@@ -988,6 +1080,8 @@ def main(argv=None):
 
     if a.aligner == "sphinx":
         final, report = sphinx_chain(phrases)
+    elif a.aligner == "ctc":
+        final, report = ctc_words(pcm, whisper, lyric_tokens(a.lyrics), ratio, extra, a.t0, a.phone_models)
     else:
         mph = []
         for ph in phrases:  # long whisper phrases -> split at the largest gap (MFA drifts on long sung runs)
@@ -1084,13 +1178,17 @@ def main(argv=None):
                     p["start"], p["end"] = lo + (p["start"] - s0) * f, lo + (p["end"] - s0) * f
                 x["start"], x["end"] = lo, hi
     v = env > env.max() - a.snap_db
+    # a ctc alignment has every lyric word of the window on the frames, so a voiced stretch between two words is the earlier word's
+    # held note however long it is (the aligner's cap exists for word times it does not trust); the sheet's fills then cover only
+    # what no word reaches
+    hold_max = HOLD_MAX if a.aligner != "ctc" else max(HOLD_MAX, a.t1 - a.t0)
     for prev, w in zip(final, final[1:]):  # a voiced gap between words = a held note: stretch the earlier word's last vowel
         g0, g1 = int((prev["end"] - a.t0) * 100), int((w["start"] - a.t0) * 100)
         if g1 - g0 >= 5 and v[g0:g1].mean() > 0.7:
             run = voiced_runs(env, vthr, a.t0, prev["end"], w["start"])  # up to the first unvoiced gap, at most HOLD_MAX
             if not run or run[0][0] > prev["end"] + 0.03:
                 continue
-            d = min(run[0][1], prev["end"] + HOLD_MAX) - prev["end"]
+            d = min(run[0][1], prev["end"] + hold_max) - prev["end"]
             if d < 0.03:
                 continue
             ph = prev["phones"]
@@ -1105,7 +1203,7 @@ def main(argv=None):
         w = final[-1]
         run = voiced_runs(env, vthr, a.t0, w["end"], a.t1)
         if run and run[0][0] <= w["end"] + 0.03:
-            d = min(run[0][1], w["end"] + HOLD_MAX) - w["end"]
+            d = min(run[0][1], w["end"] + hold_max) - w["end"]
             if d >= 0.03:
                 ph = w["phones"]
                 k = max([i for i, p in enumerate(ph) if p["p"].rstrip("012") in VOWELS] or [len(ph) - 1])

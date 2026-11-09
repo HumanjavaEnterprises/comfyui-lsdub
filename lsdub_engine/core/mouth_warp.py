@@ -49,6 +49,8 @@ dense warp of the take's own pixels (lighting, texture and skin stay the render'
 
 from ..io import ff
 import json
+import os
+import sys
 import numpy as np, cv2
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
@@ -56,6 +58,16 @@ from scipy.signal import find_peaks
 from . import mouth_paint as mp_
 from . import mouth_morph as mm
 from . import lip_layers as ll
+
+PRESS_SEAL = 0.12  # --warp-closures aligned-press: the slit seal's threshold (x the take's range) on the aligned closure frames
+PRESS_MIN_AL = 0.5  # the erase layer's alpha a pressed frame needs before the seal is applied to it
+PRESS_REF_IOD = (
+    0.03  # the press mode's reference frame (the take's most-closed) must have its lips this close (eye distances) or there is no press
+)
+REALISE_WIN = (-0.16, 0.06)  # --warp-realise events: s around a nucleus onset (the release + the attack, and the apex) applied as planned
+REALISE_SPARE = (
+    0.5  # inside a window this share of the gap's own residual escapes the temporal smoothing (1.0 showed a one-frame teeth pop)
+)
 
 LIP_OUT = mp_.LIP_OUT  # outer lip loop (20)
 LIP_IN = mm.LIP_IN  # inner lip loop (20), ordered
@@ -229,8 +241,36 @@ def _to_band(u, lo, hi, centre):
     return e + centre * (mid - e)
 
 
+def event_windows(fr_t, n, fps):
+    """bool per frame: inside REALISE_WIN of a nucleus onset the event stage tagged (`ev.kind` nucleus, `t_on` in the clip's clock)."""
+    m = np.zeros(n, bool)
+    if not fr_t:
+        return m
+    t0 = float(fr_t[0].get("t", 0.0))
+    t = t0 + np.arange(n) / fps
+    seen = set()
+    for f in fr_t:
+        e = f.get("ev") or {}
+        if e.get("kind") == "nucleus" and e.get("t_on") is not None and e.get("k") not in seen:
+            seen.add(e.get("k"))
+            on = t0 + float(e["t_on"])
+            m |= (t >= on + REALISE_WIN[0]) & (t <= on + REALISE_WIN[1])
+    return m
+
+
 def target_features(
-    fr_t, F, rng, open_gain=1.0, width_gain=1.0, sigma=1.0, bands=None, centre=0.0, width_mix="switch", close_depth=0.0, follow=0.0
+    fr_t,
+    F,
+    rng,
+    open_gain=1.0,
+    width_gain=1.0,
+    sigma=1.0,
+    bands=None,
+    centre=0.0,
+    width_mix="switch",
+    close_depth=0.0,
+    follow=0.0,
+    keep=None,
 ):
     """per-frame target (gap, width): the observed features F (T x 2) clipped into the viseme's band (vis/vis2 mixed),
     bands in the take's own range; vowels' lower bound is raised by the audio's openness (A2F jaw / envelope).
@@ -239,6 +279,7 @@ def target_features(
     sil / aa then loses its width target mid-vowel); 'primary' = vis's band unless vis2 has its own band and mix > 0.5.
     close_depth: PP targets this far BELOW the take's shut gap (units of its range): a press, not a touch, so the closure
     survives the field's smoothing and reads shut.
+    keep (bool per frame): frames whose residual is not eased (an onset window under --warp-realise events).
     follow (> 0): the opening band of every frame but a closure is also held within +-follow of the track's planned opening (its
     `open`, 0..1 of the take's range), so the take's own mouth passes only that near the plan. 0 (the default): a take's mouth
     anywhere inside the viseme's band is kept as it is, with its own timing, which is not the song's."""
@@ -279,10 +320,13 @@ def target_features(
             if (wl, wh) != (-INF, INF)
             else uw[i]
         )
-    if sigma > 0:  # zero-phase ease of the residual; PP closures keep their depth
+    if sigma > 0:  # zero-phase ease of the residual; PP closures keep their depth; `keep` frames (an onset window) keep it whole
         pp = np.array([fr_t[min(i, len(fr_t) - 1)]["vis"] == "PP" for i in range(n)])
+        raw = to.copy()
         r = gaussian_filter1d(to - uo, sigma, mode="nearest")
         to = np.where(pp, np.minimum(to, uo + r), uo + r)
+        if keep is not None:
+            to = np.where(np.asarray(keep, bool)[:n], raw, to)
         tw = uw + gaussian_filter1d(tw - uw, sigma, mode="nearest")
     g = go + to * gs
     w = rng["w_med"] + tw * np.where(tw >= 0, rng["w_hi"] - rng["w_med"], rng["w_med"] - rng["w_lo"])
@@ -1316,6 +1360,7 @@ class WarpClip:
         # small motion stays in its pixels; only the smooth (target - shape) correction is added on top.
         Fs = gaussian_filter1d(F, g("warp_feat_smooth", 0.0), axis=0, mode="nearest") if g("warp_feat_smooth", 0.0) > 0 else F
         self.drive_info = {}
+        self.pressed = None  # --warp-closures aligned-press: the frames the closure stage shut (closure_plan), else None
         if g("warp_target", "v9") not in ("coart", "own"):  # (opt-in) the drive chain's stages before the aperture: lead gate, then shape
             fr_t = self.drive_stages(a, fr_t, Fs, model, float(T.get("fps", 25)))
         pp = np.array([fr_t[min(i, len(fr_t) - 1)]["vis"] == "PP" for i in range(n)])
@@ -1339,8 +1384,15 @@ class WarpClip:
             if vars(a).get("warp_aperture", "off") != "off":  # (opt-in) stage: aperture map (core/aperture.py)
                 from . import aperture
 
-                fr_plan, self.aperture_gain = aperture.mapped(fr_t)
-                print(f"aperture map: the track's opening x{self.aperture_gain:.2f} (its p{aperture.Q:.0f} -> a full opening)")
+                if vars(a).get("warp_aperture") == "p95":
+                    fr_plan, self.aperture_gain = aperture.mapped_p95(fr_t)
+                    print(
+                        f"aperture p95: the track's opening x{self.aperture_gain:.2f} (the wide vowels' p{aperture.Q:.0f} -> a full opening)"
+                    )
+                else:
+                    fr_plan, self.aperture_gain = aperture.mapped(fr_t)
+                    print(f"aperture map: the track's opening x{self.aperture_gain:.2f} (its p{aperture.Q:.0f} -> a full opening)")
+                self.drive_info["aperture"] = dict(mode=a.warp_aperture, gain=round(float(self.aperture_gain), 3))
             Ft = target_features(
                 fr_plan,
                 Fs,
@@ -1353,6 +1405,7 @@ class WarpClip:
                 g("warp_width_mix", "switch"),
                 g("warp_close_depth", 0.0),
                 g("warp_follow", 0.0),
+                keep=event_windows(fr_t, n, float(T.get("fps", 25))) if vars(a).get("warp_realise", "off") == "events" else None,
             )
         # ---- end coart
         dl = np.array([np.linalg.norm(S[i][33, :2] - S[i][168, :2]) for i in range(n)])
@@ -1372,9 +1425,17 @@ class WarpClip:
         scale = np.array([max(1e-6, model.rng["g_hi"] - model.rng["g_lo"]), max(1e-6, model.rng["w_hi"] - model.rng["w_lo"])])
         conf = confidence(dF, scale, a.warp_deadband, a.warp_deadband + g("warp_ramp", 0.08)) if a.warp_deadband >= 0 else np.ones(n)
         conf = gaussian_filter1d(conf, 1.0, mode="nearest")
+        realise = event_windows(fr_t, n, float(T.get("fps", 25))) if vars(a).get("warp_realise", "off") == "events" else None
+        if realise is not None:  # (opt-in) stage: inside a syllable's onset window the plan is applied as planned: no dead-band, no easing
+            conf = np.where(realise, 1.0, conf)
+            self.drive_info["realise"] = dict(mode="events", frames=int(realise.sum()), window_s=list(REALISE_WIN))
+            print(f"realise (events): {int(realise.sum())} frames inside onset windows applied unsmoothed at full confidence")
         dFe = dF * conf[:, None] * a.warp_gain
         shut = spared_shut(a, n, pp)
-        dFe = smooth_residual(dFe, g("warp_temporal", 0.0), shut, temporal_spare(g, Ft[:, 0], shut))  # the field itself, over time
+        sp = temporal_spare(g, Ft[:, 0], shut)
+        if realise is not None:  # inside the windows the temporal smoothing runs at half strength (a one-frame guard against pops)
+            sp = np.maximum(np.asarray(sp, float) if sp is not None else np.zeros(n), realise.astype(float) * REALISE_SPARE)
+        dFe = smooth_residual(dFe, g("warp_temporal", 0.0), shut, sp)  # the field itself, over time
         tw = g("warp_temporal_width", 0.0)  # width (corners -> cheeks): slower
         if tw > g("warp_temporal", 0.0):
             dFe[:, 1] = (
@@ -1551,8 +1612,32 @@ class WarpClip:
         )
 
     def drive_stages(self, a, fr_t, Fs, model, fps):
-        """--warp-lead-gate (core/lead_gate.py: the take's own shut, still mouth holds the drive down) then --warp-shape
-        (core/drive_shape.py: bilabial closures kept, closing edges early) on the track's frames. Both off: the frames as they are."""
+        """--warp-events (core/nucleus_events.py: the vocal's syllable events onto the frames, no pixel change), then
+        --warp-lead-gate (core/lead_gate.py: the take's own shut, still mouth holds the drive down) then --warp-shape
+        (core/drive_shape.py: bilabial closures kept, closing edges early) on the track's frames. All off: the frames as they are."""
+        if vars(a).get("warp_events", "off") != "off" and vars(a).get("warp_audio"):
+            fr_t, self.drive_info["events"] = self.vocal_events(a, fr_t, fps)
+            ev = self.drive_info["events"]
+            print(f"drive events (vocal): {ev['nuclei']} nuclei, {ev['closures']} closures, {ev['rests']} rests on {len(fr_t)} frames")
+        if vars(a).get("warp_closures", "plan") != "plan":
+            from . import closure_plan
+
+            fr_t, self.drive_info["closures"] = closure_plan.placed(fr_t, fps)
+            if a.warp_closures == "aligned-press":
+                self.pressed = np.array([bool(f.get("pp_aligned")) for f in fr_t])
+            c = self.drive_info["closures"]
+            print(
+                f"drive closures ({a.warp_closures}): {c.get('closures', 0)} aligned closures shut, {len(c.get('lifted', []))} stray PP frames lifted"
+            )
+        if vars(a).get("warp_hold", "off") != "off":
+            from . import nucleus_hold
+
+            fr_t, self.drive_info["hold"] = nucleus_hold.held(fr_t, fps, mode=a.warp_hold, level=getattr(self, "vocal_level", None))
+            h = self.drive_info["hold"]
+            print(
+                f"drive hold ({a.warp_hold}): {h.get('nuclei', 0)} targets held, {h.get('reversals', 0)} reversals"
+                + (f" ({h['note']})" if h.get("note") else "")
+            )
         if vars(a).get("warp_lead_gate", "off") == "on":
             from . import lead_gate
 
@@ -1565,6 +1650,53 @@ class WarpClip:
             fr_t, self.drive_info["shape"] = drive_shape.shaped(fr_t, fps, a.warp_shape)
             print(f"drive shape ({a.warp_shape}): closures added at {self.drive_info['shape']['closures_added']}")
         return fr_t
+
+    def pressed_at(self, i):
+        """--warp-closures aligned-press: frame i is one the closure stage shut AND the lip-erase layer fires on it (alpha >= PRESS_MIN_AL,
+        the mistrack guard honoured): the seal only ever finishes a closure the erase makes; a frame the guard refused keeps the plain
+        press (a sealed slit with no closed lips over it reads as a dark band)."""
+        p = getattr(self, "pressed", None)
+        if not (p is not None and 0 <= i < len(p) and p[i]):
+            return False
+        al = getattr(self, "er_al", None)
+        return bool(al is not None and i < len(al) and al[i] >= PRESS_MIN_AL)
+
+    def vocal_events(self, a, fr_t, fps):
+        """the event stage's inputs gathered: the stem cut at the track's t0 for the clip, the alignment's words in the clip's clock
+        (the track names the alignment it was built from), the phone network when its weights are at hand (flux alone otherwise)."""
+        from . import nucleus_events as NE, phone_net as PN, vocal_retime as VR
+
+        T = json.load(open(a.track))
+        t0, n = float(T.get("t0", 0.0)), len(fr_t)
+        dur = n / fps
+        x = VR.read_mono(a.warp_audio)
+        x = x[int(round(t0 * PN.SR)) : int(round((t0 + dur) * PN.SR))]
+        words, vocal_read = [], False
+        if T.get("align") and os.path.exists(T["align"]):
+            A = json.load(open(T["align"]))
+            vocal_read = A.get("aligner") == "ctc"
+            words = [
+                dict(w, phones=[dict(p, start=p["start"] - t0, end=p["end"] - t0) for p in w.get("phones") or []])
+                for w in A.get("words", [])
+                if w.get("end", 0) > t0 and w.get("start", 0) < t0 + dur
+            ]
+        logp = net = None
+        note = None
+        try:
+            net = PN.PhoneNet(vars(a).get("warp_phone_models"))
+            logp = PN.posteriors(x, net) if len(x) >= PN.SR // 10 else None
+        except Exception as e:  # no weights, no torch: the flux detector alone -- a different mouth from the one the ledger read
+            note = f"WARNING: phone network not loaded ({type(e).__name__}: {str(e)[:120]}): syllable events from the spectral flux alone"
+            print(f"drive events: {note}", file=sys.stderr)
+        ev = NE.events(x, words, dur, logp, net, vocal_read=vocal_read)
+        self.vocal_level = PN.level_db(x)  # the clip's level per 10 ms, for the hold's follow mode
+        if net is not None:
+            net.release()
+        out, info = NE.annotate(fr_t, ev, fps, t0=float(fr_t[0].get("t", t0)) if fr_t else t0)
+        info["network"] = "flux-only" if net is None else os.path.basename(str(net.source))
+        if note:
+            info["note"] = note
+        return out, info
 
     # ------------------------------------------------------------------------------------------------ geometry --
     def shape_at(self, i):
@@ -1675,8 +1807,9 @@ class WarpClip:
                                 )[0].astype(np.float32)
                             )
                         out = np.clip(o2 + 0.5, 0, 255).astype(np.uint8)
-                    if g("warp_seal", 0.0) > 0 and more < 0:  # a closing: seal the slit
-                        out, sa = seal_fill(out, dst[iin], (Fe_i[0] - model.rng["g_lo"]) / scale[0], a.warp_seal, g("warp_seal_grow", 1.6))
+                    seal_thr = a.warp_seal if g("warp_seal", 0.0) > 0 else (PRESS_SEAL if self.pressed_at(i) else 0.0)
+                    if seal_thr > 0 and more < 0:  # a closing: seal the slit (--warp-seal, or the press mode's aligned closures)
+                        out, sa = seal_fill(out, dst[iin], (Fe_i[0] - model.rng["g_lo"]) / scale[0], seal_thr, g("warp_seal_grow", 1.6))
                         ent["seal"] = round(sa, 2)
             ent["move_px"] = max(ent["move_px"], round(float(np.abs(dst - src).max()), 2))
             if k < 0 or (
@@ -1990,6 +2123,8 @@ class WarpClip:
         er = g("warp_erase", "off")
         self.er_gap = Fe[:, 0] if not g("warp_erase_close", False) else np.minimum(Fe[:, 0], F[:, 0] + self.dFe_pre_fold[:, 0])
         al = erase_alpha(F[:, 0], self.er_gap, model.rng, g("warp_erase_thr", 0.12), er == "all", F[:, 1], Fe[:, 1])
+        if getattr(self, "pressed", None) is not None and er == "off":  # the press mode without --warp-erase: those frames and no other
+            al = np.where(self.pressed[:n] if len(self.pressed) >= n else np.pad(self.pressed, (0, n - len(self.pressed))), al, 0.0)
         if getattr(getattr(self, "comp", None), "contact", None) is not None:  # a dental frame shows its teeth: no closed lips over them
             al = al * (1.0 - np.minimum(1.0, self.comp.contact["FF"] + self.comp.contact["TH"]))
         # never paste at a mistracked frame: the take's lip landmarks must sit on lip-coloured pixels
@@ -2025,6 +2160,18 @@ class WarpClip:
             print(f"lip erase: reference near each closure: {sorted(layers)}")
         else:
             self.erase = lay(r_)
+        if getattr(self, "pressed", None) is not None and g("warp_erase", "off") == "off":
+            # the press mode pastes the reference frame's lips as "closed": they must BE closed (the lip gap under PRESS_REF_IOD eye
+            # distances); a take that never shuts gives an open mouth over an open mouth and a sealed dark band between them
+            iod = float(np.linalg.norm(S[r_][33, :2] - S[r_][263, :2]))
+            ref_gap = float(F[r_, 0]) / max(iod, 1e-6)
+            if ref_gap > PRESS_REF_IOD:
+                al = np.zeros(n)
+                self.pressed = None
+                self.drive_info.setdefault("closures", {})["press_note"] = (
+                    f"no press: the take's most-closed frame {r_} has a lip gap of {ref_gap:.3f} eye distances (> {PRESS_REF_IOD}); plain closures kept"
+                )
+                print(f"press: {self.drive_info['closures']['press_note']}", file=sys.stderr)
         self.er_al, self.er_fit, self.er_ref = al, fit, r_
 
     def closed_tone(self):
@@ -2139,6 +2286,8 @@ class WarpClip:
     def run_batch(self):
         """round 0 (the earlier batch, bit-identical to the earlier run())."""
         g, n = self.g, self.n
+        if getattr(self, "pressed", None) is not None and self.pressed.any() and self.er_al is None:
+            self.setup_erase()  # the press mode: the erase layer's alpha is known before the frames render (the seal is gated on it)
         if self.shape_px is not None:
             self.round_corners()
         for i in range(n):
@@ -2170,8 +2319,11 @@ class WarpClip:
                 f"jaw {min(l.get('jaw_deg', 0.0) for l in log):.1f}..{max(l.get('jaw_deg', 0.0) for l in log):.1f} deg"
             )
         er = g("warp_erase", "off")
+        if er == "off" and getattr(self, "pressed", None) is not None and self.pressed.any():
+            er = "closures"  # the press mode: the lip-erase layer on the aligned closures only (setup_erase masks it)
         if er != "off":
-            self.setup_erase()
+            if self.er_al is None:
+                self.setup_erase()
             al = self.er_al
             for i in range(n):
                 if al[i] <= 0.01:

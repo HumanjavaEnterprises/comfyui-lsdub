@@ -39,7 +39,7 @@ def test_models_known_agrees_with_the_build_yaml(pack):
         if repo in M.KNOWN and rev != 'main':
             assert M.KNOWN[repo]['revision'] == rev and M.KNOWN[repo]['files'][name] == sha, name
             seen += 1
-    assert seen == 7
+    assert seen == 11
     assert M.FACE_SHA256 in text and M.YUNET_SHA256 in text
 
 

@@ -438,12 +438,50 @@ def _parser():
         "shut frame; asym = closures, and closing edges 20 ms early while openings keep their time",
     )
     ap.add_argument(
+        "--warp-events",
+        choices=["off", "vocal"],
+        default="off",
+        help="warp (plain targets): the vocal's syllable events written onto the drive track (core/nucleus_events.py): nuclei off the "
+        "phone network and the spectral flux, closures off the alignment's P/B/M, rests; read from --warp-audio. Annotation only: no "
+        "pixel moves until a stage reads it",
+    )
+    ap.add_argument("--warp-audio", help="warp (--warp-events): the lead stem the events are read from (song time; the track's t0 cuts it)")
+    ap.add_argument(
+        "--warp-hold",
+        choices=["off", "nucleus", "nucleus-follow"],
+        default="off",
+        help="warp (plain targets, needs --warp-events vocal): one held opening per sung syllable (core/nucleus_hold.py): the vowel's "
+        "class times a coarse loudness, attack ahead of the onset, held to the next syllable, decayed only into a rest; replaces the "
+        "envelope-shaped opening on the track. nucleus-follow: the hold also follows the voice's level inside each syllable",
+    )
+    ap.add_argument(
+        "--warp-phone-models",
+        help="warp (--warp-events): the phone network's folder (default: LSDUB_PHONE_MODELS, LSDUB_HF_MODELS/wav2vec2-espeak, else the hub; no weights = flux onsets only)",
+    )
+    ap.add_argument(
+        "--warp-realise",
+        choices=["off", "events"],
+        default="off",
+        help="warp (plain targets, needs --warp-events vocal): inside each sung syllable's onset window (the release and the attack) the "
+        "plan is applied as planned: full confidence, no residual easing, no temporal smoothing there; everything outside the windows "
+        "keeps its easing. A 4-8 frame event survives the warp",
+    )
+    ap.add_argument(
+        "--warp-closures",
+        choices=["plan", "aligned", "aligned-press"],
+        default="plan",
+        help="warp (plain targets, needs --warp-events vocal): where the lips shut (core/closure_plan.py). plan = the viseme track's PP "
+        "frames as planned; aligned = PP only at the alignment's P / B / M read off the vocal, ahead of the burst, every stray PP lifted; "
+        "aligned-press = aligned, and the lip-erase layer and the slit seal on those frames only, so the closure is a contact",
+    )
+    ap.add_argument(
         "--warp-aperture",
-        choices=["off", "map", "loop"],
+        choices=["off", "map", "loop", "p95"],
         default="off",
         help="warp (plain targets): how far the mouth opens (core/aperture.py). map = the track's opening scaled per shot so its "
-        "p95 is a full opening of the take's range; loop = map, then the rendered opening measured and the frames rendered again toward "
-        "what was asked, within the fold guard; off = as planned",
+        "p95 is a full opening of the take's range; p95 = the same gain read on the wide-vowel nuclei only (needs --warp-events vocal); "
+        "loop = map, then the rendered opening measured and the frames rendered again toward what was asked, within the fold guard; "
+        "off = as planned",
     )
     ap.add_argument(
         "--warp-jaw-gain", type=float, default=1.0, help="warp: gain on the soft chin's share of an opening / closing (jaw drop / raise)"

@@ -42,6 +42,15 @@ KNOWN = {
         "revision": "4271c66b88cdbc05735372ec13b2360108de5317",
         "files": {"model.safetensors": "7715423d6549bf1e71188bdd84f4ac960cc0597886af24a5ef7b66f128660685"},
     },
+    "facebook/wav2vec2-lv-60-espeak-cv-ft": {
+        "revision": "ae45363bf3413b374fecd9dc8bc1df0e24c3b7f4",
+        "files": {
+            "config.json": "4609fb49b7e1d28aecb2840da1926c40bd915bc6f1120a940afacf7159bbfb13",
+            "vocab.json": "d732ab2456c0c017930001dc9af0b41b3b93d25b2eb9740bf9d925508d7d87d0",
+            "preprocessor_config.json": "a2254a5b58f72cd4de3632f8eee64f3f098b7c1402128d2f419e7d00ae13e335",
+            "pytorch_model.bin": "3173bde9e9ce490fa0f989e413c42f25bc1820c020adc1e6b9b87025b3cfcc5e",
+        },
+    },
     "facebook/sam2.1-hiera-base-plus": {
         "revision": "b7320756a13354e7530a63935656d35b2f91a290",
         "files": {"sam2.1_hiera_base_plus.pt": "a2345aede8715ab1d5d31b4a509fb160c5a4af1970f199d9054ccfb746c004c5"},

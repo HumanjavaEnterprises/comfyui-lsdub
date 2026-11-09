@@ -3,6 +3,7 @@
 """the aperture stage (core/aperture.py), its pure parts: the range map, the loop's correction and the fold limit. Synthetic, no models."""
 
 import numpy as np
+import pytest
 
 from lsdub_engine.core import aperture as AP
 
@@ -90,3 +91,35 @@ def test_steady_eases_single_frame_noise_and_keeps_unread_frames_unread():
     m[3] = np.nan
     got = AP.steady(m)
     assert got[10] < 0.3 and np.isnan(got[3]) and abs(np.nanmean(got) - np.nanmean(m)) < 0.01
+
+
+# -- p95 on the wide-vowel nuclei -----------------------------------------------------------------------------------------------------------
+def _ev(kind, vowel=None):
+    return dict(k=0, kind=kind, t_on=0.0, vowel=vowel, db=0.0, bin=1)
+
+
+def test_p95_reads_the_wide_vowel_nuclei_only():
+    fr = [dict(open=0.5, vis="aa", ev=_ev("nucleus", "AA"))] * 10 + [dict(open=0.1, vis="DD", ev=_ev("nucleus", "IY"))] * 30
+    out, k = AP.mapped_p95(fr)
+    assert k == pytest.approx(2.0) and out[0]["open"] == 1.0 and out[-1]["open"] == pytest.approx(0.2)  # 0.5 -> 1.0 on the AA nuclei
+    _, k_all = AP.mapped(fr)
+    assert k_all == pytest.approx(2.0)  # here p95 over all frames happens to agree; the next case separates them
+
+
+def test_a_consonant_dense_line_gets_the_vowel_gain_not_the_all_frames_gain():
+    fr = [dict(open=0.6, vis="aa", ev=_ev("nucleus", "AE"))] * 2 + [dict(open=0.25, vis="nn", ev=_ev("nucleus", "IY"))] * 60
+    out, k = AP.mapped_p95(fr)
+    _, k_all = AP.mapped(fr)
+    assert k == pytest.approx(1 / 0.6) and k_all > k  # all-frames p95 sits on the consonants and would blow the line up
+
+
+def test_p95_never_narrows_keeps_its_cap_and_leaves_pp_frames_shut():
+    fr = [dict(open=1.0, vis="aa", ev=_ev("nucleus", "AA"))] * 5 + [dict(open=0.0, vis="PP", ev=_ev("closure"))] * 2
+    out, k = AP.mapped_p95(fr)
+    assert k == 1.0 and [f["open"] for f in out] == [1.0] * 5 + [0.0] * 2
+    quiet = [dict(open=0.05, vis="aa", ev=_ev("nucleus", "AA"))] * 5
+    _, k = AP.mapped_p95(quiet)
+    assert k == pytest.approx(1 / AP.FLOOR)
+    plain = [dict(open=0.5, vis="aa")] * 5  # no events tagged: the range gain over every frame
+    _, k = AP.mapped_p95(plain)
+    assert k == pytest.approx(2.0)

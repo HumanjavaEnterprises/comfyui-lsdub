@@ -181,3 +181,72 @@ def test_restore_order_keeps_the_silence_where_it_was():
     assert [w["w"] for w in W] == ["y", "x"]
     assert (W[0]["start"], W[0]["end"]) == (0.0, pytest.approx(1.0)) and (W[1]["start"], W[1]["end"]) == (1.5, pytest.approx(1.6))
     assert not any(w["start"] < 1.5 and w["end"] > 1.0 for w in W)
+
+
+# -- the ctc aligner ---------------------------------------------------------------------------------------------------------------------
+def test_lyric_window_keeps_the_unheard_words_between_the_heard_ones_and_falls_back_to_the_sheet():
+    lyr = ["turn", "the", "lights", "up", "here", "we", "go", "every", "heartbeat"]
+    heard = [dict(w="Turn", start=0, end=0.2, p=0.9), dict(w="lights", start=0.4, end=0.7, p=0.9), dict(w="go.", start=1.7, end=2.0, p=0.9)]
+    W = LA.lyric_window(heard, lyr, 0.9)
+    assert [w["w"] for w in W] == ["turn", "the", "lights", "up", "here", "we", "go"]  # from the first to the last heard word
+    assert [w["src"] for w in W] == ["lyric", "lyric-unheard", "lyric", "lyric-unheard", "lyric-unheard", "lyric-unheard", "lyric"]
+    assert W[0]["heard"] == "Turn" and W[1]["heard"] == "" and W[-1]["p"] == 0.9 and W[1]["p"] is None
+    low = LA.lyric_window(heard, lyr, 0.2)  # under LOW_MATCH: the whole sheet, nothing heard
+    assert [w["w"] for w in low] == lyr and all(w["heard"] == "" for w in low)
+    assert [w["w"] for w in LA.lyric_window([], lyr, None)] == lyr and LA.lyric_window(heard, [], 0.9) == []
+
+
+def test_aligner_ctc_writes_ctc_words_from_the_recognisers_frames(tmp_path, monkeypatch):
+    """--aligner ctc with the phone network monkeypatched: every word aligned 'ctc', boundaries on the frames the posteriors name,
+    the file says aligner ctc, speech-to-text timing never read."""
+    import json
+
+    import numpy as np
+
+    from lsdub_engine.core import phone_net as PN
+
+    class Net:
+        labels = ["<pad>", "<unk>", "m", "ɑ", "p", "a", "ɪ", "t"]
+        blank, special = 0, {0, 1}
+        index = {t: i for i, t in enumerate(labels)}
+
+        def __init__(self, *a, **k):
+            pass
+
+        def release(self):
+            pass
+
+    rows = [0] * 10 + [2] * 3 + [3] * 10 + [0] * 5 + [4] * 2 + [5] * 12 + [0] * 108  # "ma" then "pie" (p a), 3 s of frames
+    lp = np.full((len(rows), len(Net.labels)), np.log(0.001))
+    for t, k in enumerate(rows):
+        lp[t, k] = np.log(0.9)
+    monkeypatch.setattr(PN, "PhoneNet", Net)
+    monkeypatch.setattr(PN, "posteriors", lambda x, net: lp)
+    monkeypatch.setattr(PN, "nuclei", lambda logp, x, net, corr=0.02: [])
+    monkeypatch.setattr(LA, "cmu_phones", lambda w, extra: {"ma": ["M", "AA1"], "pie": ["P", "AY1"]}[w])
+    sr, x = 16000, np.zeros(16000 * 3, np.float32)
+    t = np.arange(len(x)) / sr
+    on = ((t > 0.2) & (t < 0.46)) | ((t > 0.56) & (t < 0.84))
+    x[on] = (0.3 * np.sin(2 * np.pi * 220 * t[on])).astype(np.float32)
+    import wave
+
+    wav = tmp_path / "lead.wav"
+    with wave.open(str(wav), "wb") as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(sr)
+        f.writeframes((x * 32767).astype(np.int16).tobytes())
+    (tmp_path / "lyrics.txt").write_text("ma pie\n")
+    (tmp_path / "stt.json").write_text(json.dumps([dict(w="ma", start=0.0, end=0.3, p=0.9), dict(w="pie", start=0.3, end=0.9, p=0.9)]))
+    out = tmp_path / "align.json"
+    LA.main(["--audio", str(wav), "--lyrics", str(tmp_path / "lyrics.txt"), "--t0", "0", "--t1", "3", "--stt-json", str(tmp_path / "stt.json"),
+             "--aligner", "ctc", "--out", str(out)])  # fmt: skip
+    A = json.loads(out.read_text())
+    words = [w for w in A["words"] if w["w"] in ("ma", "pie")]
+    assert A["aligner"] == "ctc" and [w["w"] for w in words] == ["ma", "pie"] and all(w["align"] == "ctc" for w in words)
+    assert words[0]["phones"][0]["start"] == pytest.approx(10 * 0.02 - 0.02) and words[0]["phones"][1]["p"] == "AA"
+    assert words[1]["phones"][0]["start"] == pytest.approx(28 * 0.02 - 0.02) and words[1]["phones"][1]["p"] == "AY"
+    assert A["phrases"][0]["method"] == "ctc" and A["phrases"][0]["words"] == 2
+    # the voice runs on after "pie" to 0.84 s (its last frames are blank to the recogniser): a held note, the word stretched to it
+    # with no cap, and no 'da' fill placed over it
+    assert words[1]["end"] >= 0.80 and [w["w"] for w in A["words"]] == ["ma", "pie"]  # no 'da' fill over the held tail

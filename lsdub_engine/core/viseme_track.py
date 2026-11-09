@@ -195,7 +195,56 @@ def rhubarb_phones(rh, mode):
     ]
 
 
-def build(align, t0, n, fps, lead=0.06, release=0.05, min_hold=3, open_curve=None, extra_ph=(), word_index=False, word_close=0.0):
+WORD_CLOSE_DROP_DB = 6.0  # the vocal must fall this much across a word boundary for the between-word press to apply
+WORD_CLOSE_SPAN = 0.06  # s each side of the boundary the level is read over
+
+
+def level_db_10ms(audio, t0, dur):
+    """10 ms RMS level (dB) of the stem from t0 over dur, read as envelope_open reads it."""
+    raw = ff.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-ss",
+            f"{t0:.3f}",
+            "-t",
+            f"{dur + 0.2:.3f}",
+            "-i",
+            audio,
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-f",
+            "f32le",
+            "-",
+        ],
+        capture_output=True,
+        check=True,
+    ).stdout
+    x = np.frombuffer(raw, np.float32)
+    n = max(1, len(x) // 160)
+    fr = x[: n * 160].reshape(n, 160)
+    return 20 * np.log10(np.sqrt(np.mean(fr * fr, 1)) + 1e-9)
+
+
+def boundary_drops(db, bnds, t0, span=WORD_CLOSE_SPAN):
+    """per boundary (song time): the level's fall across it, the peak over the span before against the trough over the span after."""
+    out = []
+    for b in bnds:
+        i = int(round((b - t0) * 100))
+        before = db[max(0, i - int(span * 100)) : max(1, i)]
+        after = db[max(0, i) : max(1, i + int(span * 100))]
+        out.append(float(before.max() - after.min()) if len(before) and len(after) else 0.0)
+    return out
+
+
+def build(
+    align, t0, n, fps, lead=0.06, release=0.05, min_hold=3, open_curve=None, extra_ph=(), word_index=False, word_close=0.0, close_where=None
+):
+    """close_where: None = the between-word press at every word boundary (word_close > 0); a callable over the boundary times (song
+    time) -> a bool per boundary, the press applied only where it says (--word-close-vocal: where the vocal's level drops)."""
     ph = (phone_list(align) if align else []) + list(extra_ph)
     tt = t0 + (np.arange(n) + 0.5) / fps
     W = np.zeros((n, len(VIS)))
@@ -229,6 +278,9 @@ def build(align, t0, n, fps, lead=0.06, release=0.05, min_hold=3, open_curve=Non
             spans[key] = (min(s, p["start"]), max(e, p["end"]))
         iv = sorted(spans.values())
         bnds = [(a[1] + b[0]) / 2 for a, b in zip(iv, iv[1:])]  # the MIDPOINT between consecutive words
+        if bnds and close_where is not None:
+            keep = close_where(bnds)
+            bnds = [b for b, k in zip(bnds, keep) if k]
         if bnds:
             bnds = np.array(bnds)
             peak = float(np.median(W.sum(1))) * 0.9 or 0.9  # moderate: deepens gaps, won't swamp a phone
@@ -377,6 +429,12 @@ def main(argv=None):
     ap.add_argument("--fps", type=float, default=25)
     ap.add_argument("--audio", help="vocal stem for openness (envelope)")
     ap.add_argument(
+        "--open-curve",
+        choices=["envelope", "off"],
+        default="envelope",
+        help="off: the class opening alone, no envelope on the track (a drive stage that holds the opening per syllable sets this)",
+    )
+    ap.add_argument(
         "--pump-gate",
         type=float,
         default=0.0,
@@ -395,6 +453,12 @@ def main(argv=None):
         default=0.0,
         help="a near-closed rest lip position between words "
         "(seconds each side of every word boundary; 0 = off). The mouth falls toward base at word edges.",
+    )
+    ap.add_argument(
+        "--word-close-vocal",
+        action="store_true",
+        help="the between-word press (--word-close) only where the vocal's level drops across the boundary (needs --audio): words sung "
+        "legato get no shut between them",
     )
     ap.add_argument("--out", required=True)
     ap.add_argument("--arkit-csv")
@@ -418,14 +482,31 @@ def main(argv=None):
             R = np.array([[float(x) for x in row] for row in r])
         j = np.interp(a.t0 + np.arange(a.frames) / a.fps, R[:, h.index("time_s")], R[:, h.index("jawOpen")])
         oc = np.clip(j / max(1e-6, np.percentile(j, 95)), 0, 1.2)
-    elif a.audio:
+    elif a.audio and a.open_curve != "off":
         oc = envelope_open(a.audio, a.t0, a.frames, a.fps)
     if oc is not None and a.pump_gate > 0:
         from .sung_dyn import pump
 
         oc = pump(np.clip(oc, 0, 1), a.fps, a.pump_gate, a.pump_ratio, a.pump_hold_ms)[0]
     words = bool(a.words and align)
-    fr = build(align, a.t0, a.frames, a.fps, a.lead, a.release, a.min_hold, oc, xp, word_index=words, word_close=a.word_close)
+    close_where = None
+    if a.word_close_vocal and a.audio and a.word_close:
+        db = level_db_10ms(a.audio, a.t0, a.frames / a.fps)
+        close_where = lambda bnds: [d >= WORD_CLOSE_DROP_DB for d in boundary_drops(db, bnds, a.t0)]  # noqa: E731
+    fr = build(
+        align,
+        a.t0,
+        a.frames,
+        a.fps,
+        a.lead,
+        a.release,
+        a.min_hold,
+        oc,
+        xp,
+        word_index=words,
+        word_close=a.word_close,
+        close_where=close_where,
+    )
     T = {
         "fps": a.fps,
         "t0": a.t0,

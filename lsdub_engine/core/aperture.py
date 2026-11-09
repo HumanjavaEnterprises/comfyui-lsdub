@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Humanjava Enterprises. LSDub: https://github.com/HumanjavaEnterprises/comfyui-lsdub
-"""aperture.py: how far the mouth opens. One stage of the drive chain, behind one paint flag, --warp-aperture (off | map | loop).
+"""aperture.py: how far the mouth opens. One stage of the drive chain, behind one paint flag, --warp-aperture (off | map | loop | p95).
 
   drive (the track's per-frame `open`) -> [map] -> aperture target -> render -> [loop] -> output
 
 map   the drive's own range per shot: its q-th percentile becomes a full opening (1.0 of the take's range, g_lo..g_hi), the rest
       scaled with it and clipped to 0..1. A drive that never opens past 0.6 then reaches the most this face opens in its own take, and
       a shot keeps its singer's travel instead of 60 % of it. Only ever a gain >= 1: a drive already reaching full opening is unchanged.
+p95   map, but the percentile is read on the wide-vowel nuclei the event stage tagged (--warp-events), not on every frame: the vowels
+      reach the take's own full opening and a consonant-dense line is not scaled by its consonants.
 loop  map, then the rendered mouth measured and corrected: per frame, the opening the warp achieved on the rendered pixels (inner-lip
       gap / eye distance, re-detected) against the opening it was asked for before its fold guard, and the frame rendered again with
       the residual scaled toward the request, never past FOLD_THR's fold limit (the warp's own Jacobian check) and never past HI x the
@@ -19,7 +21,8 @@ warp's targets and the rendered pixels."""
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 
-MODES = ("off", "map", "loop")
+MODES = ("off", "map", "loop", "p95")
+WIDE = ("AA", "AE", "AH", "AO", "AY", "AW")  # the wide-open vowels the p95 mode reads its percentile on
 Q = 95.0  # the drive's percentile that becomes a full opening
 FLOOR = 0.2  # a drive whose q-th percentile is under this is not scaled past 1 / FLOOR (a near-silent shot is not blown up)
 LO, HI = 0.8, 1.4  # the applied residual stays within this x the requested one
@@ -44,6 +47,25 @@ def mapped(frames, q=Q, floor=FLOOR):
     changed; every other key is kept."""
     k = range_gain([f.get("open", 0.0) for f in frames], q, floor)
     return [dict(f, open=round(float(np.clip(float(f.get("open", 0.0)) * k, 0.0, 1.0)), 3)) for f in frames], k
+
+
+def wide_gain(frames, q=Q, floor=FLOOR):
+    """the gain that sets the p95 opening of the wide-vowel NUCLEI (frames the event stage tagged `ev.kind` nucleus with a wide vowel)
+    to 1.0: a consonant-dense line is not blown up by its own low frames. No such frames: range_gain over every frame."""
+    o = [
+        float(f.get("open", 0.0))
+        for f in frames
+        if (f.get("ev") or {}).get("kind") == "nucleus" and str((f.get("ev") or {}).get("vowel") or "").rstrip("012") in WIDE
+    ]
+    return range_gain(o if o else [f.get("open", 0.0) for f in frames], q, floor)
+
+
+def mapped_p95(frames, q=Q, floor=FLOOR):
+    """track frames -> (new frames with `open` scaled by wide_gain and clipped to 0..1, the gain); PP frames keep their 0."""
+    k = wide_gain(frames, q, floor)
+    return [
+        dict(f, open=0.0 if f.get("vis") == "PP" else round(float(np.clip(float(f.get("open", 0.0)) * k, 0.0, 1.0)), 3)) for f in frames
+    ], k
 
 
 # ------------------------------------------------------------------------------------------------------------------------ loop --

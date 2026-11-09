@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 (2026-11-08)
+
+- LSDub Dub can now drive the mouth from the lead vocal, syllable by syllable, one choice away on two nodes. Defaults are unchanged: at the defaults this release dubs exactly as 0.1.11 did.
+- LSDub Mouth Tweaks has four new switches, each `off` (the 0.1.11 mouth) by default:
+  - `warp_events`: `vocal` reads the sung syllables, the lyric's p/b/m and the rests off the lead vocal and writes them on the mouth plan. The three below need it.
+  - `warp_hold`: `nucleus-follow` holds one opening per sung syllable with a dip and a rise at every onset, following the voice's level inside the syllable; `nucleus` the same without the follow.
+  - `warp_closures`: `aligned-press` shuts the lips only on the lyric's p/b/m, timed off the vocal and pressed to contact where the take's own lips can meet; `aligned` the same without the press; `plan` is the 0.1.11 closures.
+  - `warp_aperture`: `p95` opens the wide vowels as far as the singer's own widest opening; `map` the same over every frame.
+- LSDub Align has an `aligner` switch: `ctc` forces the lyric's sounds onto a phone recogniser's frames and leaves the words where the voice sings them; `sphinx` (default) is the 0.1.11 chain. `ctc` and `warp_events vocal` share one recogniser (1.2 GB), downloaded on first use into `models/lsdub/wav2vec2-espeak`, like the speech-to-text model.
+- Measured on six try-it cells (three shots each) with `aligner ctc`, `warp_events vocal`, `warp_hold nucleus-follow`, `warp_closures aligned-press`, `warp_aperture p95`, against the lead vocal: sung onsets met by a mouth rise within 60 ms, median 0.585 → 0.757; p/b/m closures landing within 40 ms, 0.0 → 0.834; spurious shuts per 15 s, 2 → 0.5 against the take's 1; vowel opening against the take's own, 0.78 → 1.02. The envelope check LSDub Verify reads is unchanged.
+- LSDub Dub's `mouth_card` works with the new mouth as before: the card shows what each sound asked for and what the lips did.
+- Projects dubbed with 0.1.11 dub their shots again with this release and, at the defaults, get the same result.
+
 ## 0.1.11 (2026-11-05)
 
 - LSDub Verify's reasons read in plain words. A shot whose mouth barely moves now says, for example, "mouth barely moves: it opened 0.59 as far as the song asks (needs 0.75)". The raw readings stay in the report's JSON and CSV.

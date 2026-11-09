@@ -74,6 +74,44 @@ def snap_paint(paint_args, m):
 
 
 # ---------------------------------------------------------------------------------------------------- pick
+def has_flag(flags, name):
+    """name is among flags, as `--x v` or `--x=v`."""
+    return any(str(f) == name or str(f).startswith(name + "=") for f in flags)
+
+
+def flag_value(flags, name):
+    """the value after name in flags (`--x v` or `--x=v`); None when absent."""
+    fl = [str(f) for f in flags]
+    for i, f in enumerate(fl):
+        if f == name and i + 1 < len(fl):
+            return fl[i + 1]
+        if f.startswith(name + "="):
+            return f.split("=", 1)[1]
+    return None
+
+
+def track_target(warp_json, n, m):
+    """the paint's own planned opening (its per-frame target gap, after every drive stage) as the pick's target per OUTPUT frame: the
+    mean of the internal frames of each output frame. The hold stage's apex and closures are then picked where the plan put them,
+    not where a low-passed envelope peaks."""
+    tg = np.array([float(f.get("tgap", f.get("egap", 0.0))) for f in json.load(open(warp_json))["frames"]], float)
+    if not len(tg):
+        return np.zeros(n)
+    out = np.array([tg[k * m : (k + 1) * m].mean() if k * m < len(tg) else tg[-1] for k in range(n)])
+    return out
+
+
+def warp_audio(paint_args, snap_flags, vocal):
+    """the stem the event stage reads (--warp-audio), set when --warp-events is among the paint's flags (the caller's or SNAP's) and
+    the caller did not name one; () otherwise, so a paint without the stage gets the argv it always did."""
+    flags = [str(x) for x in (*paint_args, *snap_flags)]
+    if "--warp-events" not in flags and not any(f.startswith("--warp-events=") for f in flags):
+        return ()
+    if "--warp-audio" in flags or any(f.startswith("--warp-audio=") for f in flags):
+        return ()
+    return ("--warp-audio", str(vocal))
+
+
 def pick_extremes(egap_hi, target, m):
     """egap_hi: the warp's planned opening per INTERNAL frame (n * m); target: the audio opening per OUTPUT frame (n).
     -> internal index per output frame: from k*m to k*m+m//2, the most-closed where the audio is at a local minimum,
@@ -118,6 +156,8 @@ def retimed_align(align, vocal, work, t0=None, n=None, fps=25.0, lead=0.06, word
     if not (os.path.exists(align) and os.path.exists(vocal)):
         return align, {"used": False, "why": "nothing to read"}
     A = json.load(open(align))
+    if A.get("aligner") == "ctc":  # read off the vocal's own frames already; the capped walk and the envelope judge are not a better reader
+        return align, {"used": False, "why": "ctc alignment"}
     x = VR.read_mono(vocal)
     R = VR.retime(A, vocal, x=x, cap=RETIME_CAP)
     note = {"used": False, "cap_s": RETIME_CAP}
@@ -281,6 +321,14 @@ def run(
     sd += paint_api.dyn_flags(paint_args)
     if word_close:
         vs += ["--word-close", str(word_close)]
+    hold = has_flag(paint_args, "--warp-hold") or has_flag(SNAP["paint"] if snap else (), "--warp-hold")
+    if hold:  # the hold stage writes the opening: the track carries the class opening alone, no envelope under it
+        vs += ["--open-curve", "off"]
+    if word_close and (flag_value(paint_args, "--warp-closures") or flag_value(SNAP["paint"] if snap else (), "--warp-closures")) in (
+        "aligned",
+        "aligned-press",
+    ):
+        vs += ["--word-close-vocal"]  # the between-word press only where the vocal drops
     steps.call("sung_dyn", sd, quiet=True)
     steps.call("visemes", vs, quiet=True)
     tm["plan"] = round(time.perf_counter() - t_, 3)
@@ -294,14 +342,15 @@ def run(
             *paint_api.coart_dyn(paint_args, dyn),
             *(snap_paint(paint_args, m) if snap else ()),
             *(("--occluder-mask", occ) if mask else ()),
+            *warp_audio(paint_args, snap_paint(paint_args, m) if snap else (), drive),
         ],
     )
     t_plan = plan_t0(t0, paint_args, fps * m)  # the plan moved: the gate reads the same curve
     pick = (
-        (lambda wj, n_, m_: pick_extremes([f["egap"] for f in json.load(open(wj))["frames"]], moved_target(dyn, n, t_plan, fps, wj, m), m_))
+        (lambda wj, n_, m_: pick_extremes([f["egap"] for f in json.load(open(wj))["frames"]], track_target(wj, n, m) if hold else moved_target(dyn, n, t_plan, fps, wj, m), m_))
         if m > 1
         else None
-    )
+    )  # fmt: skip
     R = MED.run(
         take,
         trk,

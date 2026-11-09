@@ -129,3 +129,67 @@ def test_snap_paint_holds_the_callers_warp_temporal_at_the_internal_rate():
     assert S.SNAP["paint"][S.SNAP["paint"].index("--warp-temporal") + 1] == "0.6"  # SNAP itself is left alone
     p = S.snap_paint(["--warp-temporal", "0.1"], 2)
     assert p[p.index("--warp-temporal") + 1] == "0.6"  # never under SNAP's own
+
+
+def test_retimed_align_passes_a_ctc_alignment_untouched(tmp_path):
+    """an alignment read off the vocal's own frames (aligner ctc) is not re-read by the capped retime walk: the path comes back as given."""
+    import json
+    from lsdub_engine.core import sing as S
+
+    al = tmp_path / "align.json"
+    al.write_text(
+        json.dumps({"aligner": "ctc", "words": [{"w": "ma", "start": 0.1, "end": 0.4, "phones": [{"p": "M", "start": 0.1, "end": 0.2}]}]})
+    )
+    voc = tmp_path / "v.wav"
+    voc.write_bytes(b"RIFF")  # never read
+    path, note = S.retimed_align(str(al), str(voc), str(tmp_path), 0.0, 10, 25.0)
+    assert path == str(al) and note == {"used": False, "why": "ctc alignment"} and not (tmp_path / "align_vocal.json").exists()
+
+
+def test_track_target_picks_the_plans_own_opening_per_output_frame(tmp_path):
+    """the hold stage's pick target: the paint's per-frame target gap averaged over each output frame's internal frames, so a held
+    apex and a closure are picked where the plan put them."""
+    import json
+    from lsdub_engine.core import sing as S
+
+    wj = tmp_path / "w.json"
+    wj.write_text(json.dumps({"frames": [dict(i=i, tgap=float(v), egap=0.0) for i, v in enumerate([1, 3, 5, 5, 2, 0, 0, 4])]}))
+    assert list(S.track_target(str(wj), 4, 2)) == [2.0, 5.0, 1.0, 2.0]
+    assert list(S.track_target(str(wj), 5, 2)) == [2.0, 5.0, 1.0, 2.0, 4.0]  # past the log: its last value
+    assert S.has_flag(["--warp-hold", "nucleus"], "--warp-hold") and S.has_flag(["--warp-hold=nucleus"], "--warp-hold")
+    assert not S.has_flag(["--warp-shape", "off"], "--warp-hold")
+    assert S.warp_audio(["--warp-events", "vocal"], (), "v.wav") == ("--warp-audio", "v.wav")
+    assert S.warp_audio(["--warp-events", "vocal", "--warp-audio", "x.wav"], (), "v.wav") == () and S.warp_audio([], (), "v.wav") == ()
+
+
+def test_the_press_mode_gets_the_vocal_conditioned_word_press(monkeypatch, tmp_path):
+    """--warp-closures aligned-press (and aligned) make sing pass --word-close-vocal to visemes; plan does not."""
+    import numpy as np
+    from lsdub_engine.core import sing as S
+
+    seen = {}
+
+    def call(step, argv, **k):
+        if step == "visemes":
+            seen["vs"] = [str(a) for a in argv]
+        if step == "paint":
+            raise RuntimeError("stop")
+
+    F = [np.zeros((64, 64, 3), np.uint8)] * 4
+    monkeypatch.setattr(S.MED, "read", lambda v, n=None, *a: (F, 25.0))
+    monkeypatch.setattr(S.steps, "call", call)
+    monkeypatch.setattr(S.MED, "run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
+    for mode, want in (("aligned-press", True), ("aligned", True), ("plan", False)):
+        with pytest.raises(RuntimeError):
+            S.run(
+                "t.mp4",
+                "a.json",
+                "v.wav",
+                0.0,
+                str(tmp_path / "o.mp4"),
+                str(tmp_path / "w"),
+                ["--warp-events", "vocal", "--warp-closures", mode],
+                box=[0, 0, 64, 64],
+                vocal_retime=False,
+            )
+        assert ("--word-close-vocal" in seen["vs"]) is want, (mode, seen["vs"])
