@@ -526,7 +526,7 @@ def asked_travel(s):
 
 
 EV_KEYS = ("onset_hit", "onset_n", "closure_hit", "closure_n", "spurious", "spurious_take", "open_ratio", "open_n")
-LAG_WINDOW_S = 0.2  # a mouth rise this near a sung onset, either side, is that onset's rise (G10 lane 04's per-onset reading)
+LAG_WINDOW_S = 0.2  # a mouth rise this near a sung onset, either side, is that onset's rise (the per-onset reading)
 
 
 def vocal_events(vocal, align=None, phone_models=None):

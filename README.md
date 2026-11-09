@@ -202,12 +202,29 @@ Python SDK (`pip install comfy-sdk`).
   Qwen-Image-Edit Lightning LoRA).
 - **Cost:** cloud runs use your Comfy credits.
 
+## Stability and releases
+LSDub aims to be stable software that is easy to install and build on, not a stream of updates.
+
+- Releases are batched. A patch version (0.2.x) only fixes breakage; new features wait for the next minor version.
+- Across a minor series the defaults stay byte-identical: the same inputs at the defaults give the same render, unless the
+  changelog says otherwise.
+- Every release passes the install-path test before it is tagged: a clean ComfyUI on CPU, only this pack's
+  requirements, every node registered, the phone recogniser downloaded into an empty models folder, and a Dub at the
+  defaults and with the mouth switches on the demo clip.
+- Models are pinned by revision and checked by sha256 ([MODELS.md](MODELS.md)).
+- What changed: [the changelog](https://lsdub.sndbnch.app/changelog). Something broke: the
+  [issue forms](https://github.com/HumanjavaEnterprises/comfyui-lsdub/issues/new/choose).
+
+In honesty: 0.2.0, 0.2.1 and 0.2.2 landed in one day, before the install-path test existed. Two of them fixed breakage a
+clean install would have caught (the phone recogniser in a fresh ComfyUI, and the Dub with the mouth switches on). The test
+now runs on every pull request, before every publish, and weekly.
+
 ## Troubleshooting
 
 - **The first Align run sits there.** It is downloading Whisper large-v3 (about 3 GB) with no progress bar in the UI.
   Let it finish once.
-- **The demo download fails.** Get `lsdub-demo-0.1.0.zip` from the GitHub Releases page by hand and run
-  `python scripts/fetch_demo.py --zip lsdub-demo-0.1.0.zip`.
+- **The demo download fails.** Get `lsdub-demo-0.1.1.zip` from the GitHub Releases page by hand and run
+  `python scripts/fetch_demo.py --zip lsdub-demo-0.1.1.zip`.
 - **Align warns about the lyrics.** If what is sung matches the lyrics poorly (below 0.5), it warns and places the
   lyrics on the voice. Below 0.2 it stops and asks you to check the lyrics: they probably belong to another song.
 - **A shot failed to dub.** It is reported, and by default the cut keeps its original frames. Run workflow 3 on the
