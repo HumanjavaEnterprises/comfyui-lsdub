@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.2 (2026-11-09)
+
+- Fixed: LSDub Dub with the new mouth switches on (`warp_events vocal` and the hold, closures or aperture switches) failed every shot in 0.2.1 with a TypeError on its automatic path. It now renders. Checked end to end in a stock ComfyUI from an empty models folder: Align `ctc` fetched the four pinned recogniser files, the Dub picked the new mouth on 3/3 shots, Verify showed the new readings, and the mouth card rendered.
+
 ## 0.2.1 (2026-11-09)
 
 - Fixed: LSDub Align with `aligner` `ctc`, and Mouth Tweaks `warp_events` `vocal`, now work in a fresh ComfyUI. 0.2.0 crashed in Align (`ctc`) and quietly fell back to a weaker onset reading (`vocal`). The phone recogniser now downloads its four pinned files (1.2 GB, sha-checked) into `models/lsdub/wav2vec2-espeak` on first use and loads from there; no extra Python packages are needed.
