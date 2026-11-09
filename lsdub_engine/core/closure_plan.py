@@ -47,7 +47,7 @@ def _window(e, events):
 def placed(frames, fps, t0=None):
     """-> (new frames, info). Frames need the event stage's `ev`; frames without it come back unchanged."""
     if not frames or not any("ev" in f for f in frames):
-        return list(frames), {"mode": "aligned", "closures": 0, "lifted": 0, "note": "no events on the track"}
+        return list(frames), {"mode": "aligned", "closures": 0, "lifted": [], "note": "no events on the track"}
     t0 = float(frames[0].get("t", 0.0)) if t0 is None else float(t0)
     times = np.array([float(f.get("t", t0 + i / fps)) - t0 for i, f in enumerate(frames)])
     seen, events = set(), []

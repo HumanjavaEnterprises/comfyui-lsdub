@@ -82,3 +82,11 @@ def test_frames_without_events_come_back_unchanged_and_every_other_key_is_kept()
     tagged = tag(frames(30), [dict(kind="nucleus", t_on=0.1, vowel="AA"), dict(kind="closure", t_on=0.4, t_off=0.44)])
     out, _ = CP.placed(tagged, FPS)
     assert all(set(f) - {"pp_aligned"} == set(g) for f, g in zip(out, tagged)) and tagged[20]["vis"] == "aa"  # the input is not changed
+
+
+def test_frames_with_no_events_come_back_unchanged_with_an_empty_lifted_list():
+    """the auto path's native candidate paints with no --warp-audio, so its track carries no events: the frames are returned as
+    they are and `lifted` is a list like every other path's (the paint's log line takes its len; 0.2.0's int there failed every shot)."""
+    frames = [dict(t=i / 25, vis="PP" if i in (3, 4) else "E", open=0.5) for i in range(10)]
+    out, info = CP.placed(frames, 25)
+    assert out == frames and info["lifted"] == [] and len(info["lifted"]) == 0 and info["closures"] == 0
