@@ -32,12 +32,12 @@ By contributing you agree your work is licensed under the Apache License 2.0, th
 
 ## Stability policy
 - Releases are batched; patch versions only for breakage. Features go into the next minor version.
-- Defaults stay byte-identical across a minor series unless the changelog says otherwise.
+- Defaults stay unchanged within a minor series unless the changelog says otherwise.
 - Every release passes the install-path test (`.github/workflows/install-path.yml`, `scripts/install_path_check.py`) on a
   clean ComfyUI before it is tagged. Run it yourself: `python scripts/install_path_check.py --comfyui PATH/TO/ComfyUI` with
   that ComfyUI's venv (its requirements plus `requirements.txt`, nothing else).
 - Models are pinned by revision and sha256.
-- 0.2.0 to 0.2.2 landed in one day while the install-path test did not yet exist; it has run on every release since.
+- 0.2.0 to 0.2.2 landed in one day while the install-path test did not yet exist; it runs on every release from 0.2.3 on.
 
 ## Releases (maintainers)
 One command, from a clean pack checkout on main with the engine and the microsite checked out beside it:
@@ -51,6 +51,17 @@ green; bumps the version, the Icon/Banner URLs and CITATION.cff; regenerates the
 engine; runs the pack checks; pushes `release/X.Y.Z` and waits for CI and Install path; then fast-forwards main, tags `vX.Y.Z`,
 watches the publish (which runs Install path again first), confirms the Registry lists the version and checks the site
 deploy. Any failure before the tag stops with a plain message and leaves nothing changed remotely.
+
+If release.py stops part way:
+- Before "push release/X.Y.Z": nothing remote changed. Fix the cause; delete the local `release/X.Y.Z` branch
+  (`git checkout main && git branch -D release/X.Y.Z`) and drop a local engine record commit if one was made
+  (`git -C ../lsdub reset --hard origin/main`), then run it again.
+- After the release branch is pushed but before the tag: only `release/X.Y.Z` is on origin. Fix on that branch and push
+  again (release.py waits on the new commit), or delete it (`git push origin --delete release/X.Y.Z`) and start over.
+- After the tag: main and `vX.Y.Z` were pushed together (`--atomic`), so publish is running. Never re-tag or delete the tag;
+  watch the publish run, and if it failed, fix and release the next patch version. Push the engine record by hand if
+  release.py stopped before it did (`git -C ../lsdub push origin main`).
+release.py names what it already pushed whenever it stops.
 
 Repository secrets:
 - `REGISTRY_ACCESS_TOKEN` (here): the Comfy Registry publisher key, already set.

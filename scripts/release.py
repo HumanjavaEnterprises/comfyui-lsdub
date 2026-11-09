@@ -40,11 +40,14 @@ EVIDENCE = ('Evidence: release-check source=lsdub/core/lyric_align.py read the v
 
 
 class Stop(SystemExit):
-    def __init__(self, msg): super().__init__(f'\nrelease: STOPPED. {msg}\nNothing remote was changed.' if not REMOTE_TOUCHED[0] else
-                                              f'\nrelease: STOPPED. {msg}')
+    def __init__(self, msg):
+        pushed = '\n'.join(f'  - {p}' for p in PUSHED)
+        tail = ('\nNothing remote was changed.' if not PUSHED else
+                f'\nAlready pushed:\n{pushed}\nRecovery: CONTRIBUTING.md, Releases, "If release.py stops part way".')
+        super().__init__(f'\nrelease: STOPPED. {msg}{tail}')
 
 
-REMOTE_TOUCHED = [False]
+PUSHED = []
 STEP = [0]
 
 
@@ -164,7 +167,9 @@ def main():
     try: RN.check(read(os.path.join(PACK, 'CHANGELOG.md')), v)
     except ValueError as e: raise Stop(f'CHANGELOG.md: {e}. Write the {v} section first (CONTRIBUTING.md, Release notes).') from None
     git(site, 'fetch', '-q', 'origin', 'main', quiet=True)
-    page = git(site, 'show', 'origin/main:docs/changelog.html', quiet=True)
+    r = subprocess.run(['git', 'show', 'origin/main:docs/changelog.html'], cwd=site, capture_output=True, text=True)
+    if r.returncode: raise Stop(f'the microsite main ({site}) has no docs/changelog.html. The changelog page has to be on the site\'s main first.')
+    page = r.stdout
     if f'id="v{v}"' not in page:
         raise Stop(f'the microsite main has no <section id="v{v}"> in docs/changelog.html. Add it on the site\'s main first.')
     print(f'    demo zip ok: {demo_published(PACK)}')
@@ -212,19 +217,20 @@ def main():
 
         step(f'push release/{v} and wait for CI + Install path on {rel_sha[:9]}')
         git(PACK, 'push', '-q', 'origin', f'release/{v}')
+        PUSHED.append(f'pack branch release/{v} ({rel_sha[:9]}); main, tags and the Registry untouched')
         print('    (a branch only; main, tags and the Registry are untouched until both pass)')
         time.sleep(20)
         runs_green(PACK_REPO, rel_sha, ['CI', 'Install path'], wait=True)
 
         step(f'fast-forward main, tag v{v}, push; push the engine record')
-        REMOTE_TOUCHED[0] = True
         git(PACK, 'checkout', '-q', 'main')
         git(PACK, 'merge', '-q', '--ff-only', f'release/{v}')
-        git(PACK, 'push', '-q', 'origin', 'main')
         git(PACK, 'tag', '-a', f'v{v}', '-m', f'LSDub {v}')
-        git(PACK, 'push', '-q', 'origin', f'v{v}')
+        git(PACK, 'push', '-q', '--atomic', 'origin', 'main', f'v{v}')   # main and the tag land together or not at all
+        PUSHED.append(f'pack main -> {rel_sha[:9]} and tag v{v} (publish starts from the tag)')
         tag_time = time.time()
         git(eng, 'push', '-q', 'origin', 'main')
+        PUSHED.append('engine main: the vendor record commit')
 
         step('watch publish (it re-runs Install path on the tag first)')
         time.sleep(20)
@@ -234,7 +240,8 @@ def main():
         for _ in range(30):
             with urllib.request.urlopen(REGISTRY, timeout=60) as r: vs = {x.get('version'): x.get('status') for x in json.loads(r.read())}  # noqa: S310
             if v in vs:
-                print(f'    {v}: {vs[v]}')
+                st = {'NodeVersionStatusActive': 'Active', 'NodeVersionStatusPending': 'Pending'}.get(vs[v], vs[v])
+                print(f'    {v}: {st}' + (' (listed; the Registry still has to review it before it is Active)' if st == 'Pending' else ''))
                 break
             time.sleep(30)
         else:

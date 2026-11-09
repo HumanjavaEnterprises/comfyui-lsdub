@@ -206,8 +206,7 @@ Python SDK (`pip install comfy-sdk`).
 LSDub aims to be stable software that is easy to install and build on, not a stream of updates.
 
 - Releases are batched. A patch version (0.2.x) only fixes breakage; new features wait for the next minor version.
-- Across a minor series the defaults stay byte-identical: the same inputs at the defaults give the same render, unless the
-  changelog says otherwise.
+- Within a minor series the defaults stay unchanged unless the changelog says otherwise.
 - Every release passes the install-path test before it is tagged: a clean ComfyUI on CPU, only this pack's
   requirements, every node registered, the phone recogniser downloaded into an empty models folder, and a Dub at the
   defaults and with the mouth switches on the demo clip.
