@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- LSDub Mouth Tweaks tips say what happens without `warp_events vocal`: `warp_hold` and `warp_closures` do nothing and the engine warns; `warp_aperture p95` is the same as `map`.
+
 ## 0.2.0 (2026-11-08)
 
 - LSDub Dub can now drive the mouth from the lead vocal, syllable by syllable, one choice away on two nodes. Defaults are unchanged: at the defaults this release dubs exactly as 0.1.11 did.

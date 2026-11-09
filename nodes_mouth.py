@@ -46,11 +46,12 @@ SWITCH_TIPS = dict(
                 '0.1.11 plan. No pixel moves by itself.',
     warp_hold='One mouth opening per sung syllable, held to the next one, with a dip before each syllable so every onset is a visible rise: '
               'nucleus-follow also lets the opening follow the voice\'s loudness inside the syllable; nucleus holds it flat; off = the '
-              '0.1.11 envelope mouth. Needs warp_events vocal.',
+              '0.1.11 envelope mouth. Needs warp_events vocal: without it the engine warns and it does nothing.',
     warp_closures='Where the lips shut: aligned-press only on the lyric\'s p/b/m, timed off the vocal, pressed to contact; aligned the same '
-                  'without the press (a slit on an open take); plan = the 0.1.11 closures. Needs warp_events vocal.',
+                  'without the press (a slit on an open take); plan = the 0.1.11 closures. Needs warp_events vocal: '
+                  'without it the engine warns and it does nothing.',
     warp_aperture='How far the vowels open: p95 scales the plan so the loud wide vowels reach the singer\'s own widest opening; map the same '
-                  'over every frame; off = as planned. p95 needs warp_events vocal.',
+                  'over every frame; off = as planned. p95 needs warp_events vocal: without it the engine warns and p95 is the same as map.',
 )
 SING_EXTRA = ['--warp-track-mode', 'chain']                 # the standard sing recipe's track mode
 
