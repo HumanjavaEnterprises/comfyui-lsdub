@@ -10,10 +10,9 @@ jobs:
     if: github.repository == 'HumanjavaEnterprises/comfyui-lsdub'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5
-      - name: Release notes from the top CHANGELOG section
+      - name: Release notes from the top released CHANGELOG section (checked against pyproject)
         run: |
-          awk '/^## /{n++} n==1' CHANGELOG.md | sed '1s/^## /LSDub /' > "$RUNNER_TEMP/notes.md"
-          test -s "$RUNNER_TEMP/notes.md"
+          python3 scripts/release_notes.py --out "$RUNNER_TEMP/notes.md"
           { echo 'COMFY_NODE_CHANGELOG<<LSDUB_NOTES_EOF'; cat "$RUNNER_TEMP/notes.md"; echo 'LSDUB_NOTES_EOF'; } >> "$GITHUB_ENV"
       - uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9   # main, 2026-10
         with:

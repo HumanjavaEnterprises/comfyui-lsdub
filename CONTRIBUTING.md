@@ -21,3 +21,11 @@ Use the **Suggestion** form. Tell us the shot or the music video that made you w
 - Credit what you built on, in the README's "Built on and learned from", if your change uses someone's work directly.
 
 By contributing you agree your work is licensed under the Apache License 2.0, the same as the rest of the pack.
+
+## Release notes
+- Each version's section in CHANGELOG.md is what the Comfy Registry shows: at most 6 short topline bullets in
+  plain words (what a ComfyUI user gets), then a last line `Full changelog: https://lsdub.sndbnch.app/changelog`.
+  The full detail of every change goes on that page, not here.
+- No `## Unreleased` heading in the file; add the section when the version is released.
+- The heading names the version in pyproject.toml. `python scripts/release_notes.py` checks all of this; CI runs it
+  (`tests/test_release_notes.py`) and the publish job fails without it.

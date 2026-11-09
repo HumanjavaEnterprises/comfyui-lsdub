@@ -1,39 +1,31 @@
 # Changelog
 
-## Unreleased
-
 ## 0.2.2 (2026-11-09)
 
-- Fixed: LSDub Dub with the new mouth switches on (`warp_events vocal` and the hold, closures or aperture switches) failed every shot in 0.2.1 with a TypeError on its automatic path. It now renders. Checked end to end in a stock ComfyUI from an empty models folder: Align `ctc` fetched the four pinned recogniser files, the Dub picked the new mouth on 3/3 shots, Verify showed the new readings, and the mouth card rendered.
+- Fixed: LSDub Dub renders again with the new mouth switches on (0.2.1 failed every shot there).
+- Checked end to end in a fresh ComfyUI: models download, the new mouth is picked, Verify and the mouth card work.
+
+Full changelog: https://lsdub.sndbnch.app/changelog
 
 ## 0.2.1 (2026-11-09)
 
-- Fixed: LSDub Align with `aligner` `ctc`, and Mouth Tweaks `warp_events` `vocal`, now work in a fresh ComfyUI. 0.2.0 crashed in Align (`ctc`) and quietly fell back to a weaker onset reading (`vocal`). The phone recogniser now downloads its four pinned files (1.2 GB, sha-checked) into `models/lsdub/wav2vec2-espeak` on first use and loads from there; no extra Python packages are needed.
-- LSDub Verify reports how the mouth meets the vocal, shot by shot: sung onsets met by a mouth rise, p/b/m met by shut lips, stray shuts against the take, vowel opening against the take, and the per-syllable lag. Reported only: the PASS / REVIEW bands are unchanged.
-- Mouth Tweaks warns when `warp_hold`, `warp_closures`, `warp_aperture p95` or `warp_realise` is set without `warp_events vocal` (they need it).
-- Zip files (Lip Kit, demo) unpack member by member to checked paths.
-- The saved cut starts playing before it finishes downloading (faststart).
-- Two engine fixes that change no delivered shot: the render-time held-mouth guard reads the same reference as Verify, and the retime reads only the shot's own audio.
+- Fixed: Align `ctc` and Mouth Tweaks `warp_events vocal` now work in a fresh ComfyUI; the recogniser downloads itself on first use.
+- LSDub Verify shows how the mouth meets the vocal, shot by shot (onsets, p/b/m closures, lag). Reported only.
+- Mouth Tweaks warns when a vocal-only switch is set without `warp_events vocal`.
+- Lip Kit and demo zips unpack safely, file by file.
+- Saved cuts start playing before they finish downloading.
 
-- LSDub Verify has an events column, reported only (no band moves): sung onsets met by a mouth rise, p/b/m closures shut, stray shuts against the take's, vowel opening against the take's, and how late the mouth rises per onset (median and p90). It uses the phone recogniser when Align downloaded it, else the vocal's onsets alone, and says which. On the six try-it cells' 0.1.11 cuts: onsets 0.535, p/b/m 3 of 24, per-onset lag p90 +52 ms, while every shot passes or reviews on the bands.
-- Engine vendored from the 0.2.1 branch (tree a7014a2e).
-- The Lip Kit zip and the demo zip are unpacked member by member to paths checked to stay inside their folder (no `extractall`); the demo fetcher now runs the same checks as the Lip Kit. The Comfy Registry flagged 0.1.0-0.1.11 for path traversal.
-- LSDub Save Cut writes its watermarked file faststart (moov first), so a download starts playing without a second request. Timing unchanged.
-- CONTRIBUTING installs what CI installs (`comfy-cli`, `packaging`, ruff 0.17.3 pinned): the deploy-inputs test runs comfy-cli's own scanner and failed with ModuleNotFoundError on a clone that followed the old line. CI was green.
-- LSDub Mouth Tweaks tips say what happens without `warp_events vocal`: `warp_hold` and `warp_closures` do nothing and the engine warns; `warp_aperture p95` is the same as `map`.
+Full changelog: https://lsdub.sndbnch.app/changelog
 
 ## 0.2.0 (2026-11-08)
 
-- LSDub Dub can now drive the mouth from the lead vocal, syllable by syllable, one choice away on two nodes. Defaults are unchanged: at the defaults this release dubs exactly as 0.1.11 did.
-- LSDub Mouth Tweaks has four new switches, each `off` (the 0.1.11 mouth) by default:
-  - `warp_events`: `vocal` reads the sung syllables, the lyric's p/b/m and the rests off the lead vocal and writes them on the mouth plan. The three below need it.
-  - `warp_hold`: `nucleus-follow` holds one opening per sung syllable with a dip and a rise at every onset, following the voice's level inside the syllable; `nucleus` the same without the follow.
-  - `warp_closures`: `aligned-press` shuts the lips only on the lyric's p/b/m, timed off the vocal and pressed to contact where the take's own lips can meet; `aligned` the same without the press; `plan` is the 0.1.11 closures.
-  - `warp_aperture`: `p95` opens the wide vowels as far as the singer's own widest opening; `map` the same over every frame.
-- LSDub Align has an `aligner` switch: `ctc` forces the lyric's sounds onto a phone recogniser's frames and leaves the words where the voice sings them; `sphinx` (default) is the 0.1.11 chain. `ctc` and `warp_events vocal` share one recogniser (1.2 GB), downloaded on first use into `models/lsdub/wav2vec2-espeak`, like the speech-to-text model.
-- Measured on six try-it cells (three shots each) with `aligner ctc`, `warp_events vocal`, `warp_hold nucleus-follow`, `warp_closures aligned-press`, `warp_aperture p95`, against the lead vocal: sung onsets met by a mouth rise within 60 ms, median 0.585 → 0.757; p/b/m closures landing within 40 ms, 0.0 → 0.834; spurious shuts per 15 s, 2 → 0.5 against the take's 1; vowel opening against the take's own, 0.78 → 1.02. The envelope check LSDub Verify reads is unchanged.
-- LSDub Dub's `mouth_card` works with the new mouth as before: the card shows what each sound asked for and what the lips did.
-- Projects dubbed with 0.1.11 dub their shots again with this release and, at the defaults, get the same result.
+- LSDub Dub can drive the mouth from the lead vocal, syllable by syllable. Defaults dub exactly as 0.1.11.
+- Four new Mouth Tweaks switches: `warp_events`, `warp_hold`, `warp_closures`, `warp_aperture`.
+- New Align `aligner` `ctc`: the lyric's sounds forced onto the voice, words left where they are sung.
+- On six test songs: sung onsets met 0.585 → 0.757, p/b/m closures 0.0 → 0.834, stray shuts 2 → 0.5 per 15 s.
+- The mouth card works with the new mouth.
+
+Full changelog: https://lsdub.sndbnch.app/changelog
 
 ## 0.1.11 (2026-11-05)
 
