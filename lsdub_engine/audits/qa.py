@@ -614,6 +614,45 @@ def event_reading(video, s, fps, offset, ev, read):
     return out
 
 
+def candidate_events(video, take, vocal, align, t0, n, fps, models=None, work=None):
+    """Verify's sync band (audits/qa.event_band) on one delivered candidate: the event judge's reading of its mouth against the vocal's
+    events in the shot's window [t0, t0 + n / fps), the take's own mouth for the stray-shut anchor. -> {ev_*: ..., ev_band, ev_read};
+    ev_read is 'phones' only with the recogniser's weights on this box (never downloaded here); otherwise the row says why and has
+    no ev_band, and the pick falls back to the envelope gate."""
+    from . import event_judge as EJ, judge_phones as JP, judge_vocal as JV
+
+    qa = sys.modules[__name__]
+    if JP.model_source(models) == JP.MODEL:
+        return {"ev_read": "flux only: no phone recogniser weights here"}
+    try:
+        phones = JP.Phones(models)
+    except Exception as e:  # a broken folder or no torch
+        return {"ev_read": f"flux only: the phone recogniser did not load ({type(e).__name__})"}
+    x = JV.read_mono(vocal) if vocal and os.path.exists(vocal) else np.zeros(0)
+    a, b = int(round(max(0.0, t0) * JP.SR)), int(round((t0 + n / fps) * JP.SR))
+    x = x[a:b]
+    if len(x) < JP.SR // 10:
+        return {"ev_read": "unread: no vocal in the shot"}
+    words = None
+    if align and os.path.exists(align):
+        with open(align, encoding="utf-8") as f:
+            W = json.load(f)["words"]
+        words = [w["w"] for w in W if t0 <= float(w.get("start", -1)) < t0 + n / fps and w.get("align") != "voiced-fill" and w["w"] != "da"]
+    ev = EJ.events(x, phones, words or None)
+    c = EJ.cut(ev, 0.0, n / fps)
+    op, _, _ = EJ.opening_of(video, work, n, fps)
+    take_op, _, _ = EJ.opening_of(take, None, n, fps)
+    r = EJ.score(op, fps, c["onsets"], c["closures"], c["sung"], c["wide"], take_op)
+    if r.get("onset_n") is None:
+        return {"ev_read": "unread: no mouth reading"}
+    row = {f"ev_{k}": r.get(k) for k in qa.EV_KEYS}
+    row.update(ev_read="phones", ev_pass=r.get("pass"))
+    row["ev_chance"] = round(min(1.0, (r.get("rise_n") or 0) / (n / fps) * 2 * EJ.TOL), 3)
+    row["ev_odds"] = qa.onset_odds(row["ev_onset_hit"], row["ev_onset_n"], row["ev_chance"])
+    row["ev_band"], row["ev_band_why"] = qa.event_band(row)
+    return row
+
+
 def onset_odds(hit, n, chance):
     """the chance of meeting at least hit x n of n sung onsets with each one met at random with probability `chance` (one-sided
     binomial tail); None when unread."""
