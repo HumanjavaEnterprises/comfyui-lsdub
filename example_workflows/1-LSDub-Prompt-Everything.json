@@ -1076,7 +1076,7 @@
    ],
    "size": [
     340,
-    424
+    398
    ],
    "flags": {},
    "order": 21,
@@ -1108,8 +1108,7 @@
     false,
     "asym",
     "aligner",
-    "remade",
-    "events"
+    "remade"
    ],
    "color": "#532",
    "title": "LSDub Mouth Tweaks"

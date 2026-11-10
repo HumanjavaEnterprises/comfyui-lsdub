@@ -107,9 +107,9 @@ def _stages(tw):
     for name, (flag, options) in STAGE_FLAGS.items():
         v = f.get(name, options[0])
         if v != options[0]: out += [flag, v]
-    if f.get('warp_events', WARP_EVENTS[0]) != WARP_EVENTS[0]:  # the phone network's folder under models/lsdub, as Align's
-        from . import devices
-        out += ['--warp-phone-models', devices.models_dir('wav2vec2-espeak')]
+    if f.get('warp_events', WARP_EVENTS[0]) == 'vocal':  # the phone network's folder under models/lsdub, as Align's: named through
+        from . import devices                               # LSDUB_PHONE_MODELS (paint, the event stage and the auto pick read it), so
+        os.environ.setdefault('LSDUB_PHONE_MODELS', devices.models_dir('wav2vec2-espeak'))   # the default argv stays the argv
     return out
 
 

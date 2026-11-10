@@ -42,6 +42,17 @@ GATE_KEYS = (
     "corr", "corr_all", "best", "lag_ms", "corr_pm1", "open_in_silence", "rise_ms", "closure_hit", "pass", "vocal_frac",
     "truth", "truth_lag_ms", "truth_best", "truth_level", "truth_events", "truth_pass", "truth_kept", "truth_kept_lag_ms",
 )  # fmt: skip
+AUTO_EV_KEYS = (
+    "ev_read",
+    "ev_band",
+    "ev_band_why",
+    "ev_onset_hit",
+    "ev_onset_n",
+    "ev_closure_hit",
+    "ev_closure_n",
+    "ev_spurious",
+    "ev_odds",
+)
 AUTO_KEYS = ("truth", "truth_lag_ms", "corr", "best", "open_in_silence", "rise_ms", "closure_hit", "pass")
 SNAP = dict(
     lead=0.06,
@@ -410,7 +421,23 @@ def run(
     if auto:
         info.update(
             auto_select(
-                take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, info, t_plan=t_plan, native_occ=native_occ
+                take,
+                align,
+                vocal,
+                t0,
+                out,
+                work,
+                paint_args,
+                dyn,
+                R,
+                target,
+                fps,
+                n,
+                a2f,
+                info,
+                t_plan=t_plan,
+                native_occ=native_occ,
+                events_on=stage_value(paint_args, snap_flags, "--warp-events") == "vocal",
             )
         )
         tm["native"] = round(time.perf_counter() - t_, 3)
@@ -436,9 +463,58 @@ def run(
     return info
 
 
+def event_read(video, take, vocal, align, t0, n, fps, paint_args, work=None):
+    """Verify's sync band (audits/qa.event_band) on one delivered candidate: the event judge's reading of its mouth against the vocal's
+    events in the shot's window [t0, t0 + n / fps), the take's own mouth for the stray-shut anchor. -> {ev_*: ..., ev_band, ev_read};
+    ev_read is 'phones' only with the recogniser's weights on this box (never downloaded here); otherwise the row says why and has
+    no ev_band, and the pick falls back to the envelope gate."""
+    from ..audits import event_judge as EJ, judge_phones as JP, judge_vocal as JV, qa
+
+    models = flag_value(paint_args, "--warp-phone-models")
+    if JP.model_source(models) == JP.MODEL:
+        return {"ev_read": "flux only: no phone recogniser weights here"}
+    try:
+        phones = JP.Phones(models)
+    except Exception as e:  # a broken folder or no torch
+        return {"ev_read": f"flux only: the phone recogniser did not load ({type(e).__name__})"}
+    x = JV.read_mono(vocal) if vocal and os.path.exists(vocal) else np.zeros(0)
+    a, b = int(round(max(0.0, t0) * JP.SR)), int(round((t0 + n / fps) * JP.SR))
+    x = x[a:b]
+    if len(x) < JP.SR // 10:
+        return {"ev_read": "unread: no vocal in the shot"}
+    words = None
+    if align and os.path.exists(align):
+        with open(align, encoding="utf-8") as f:
+            W = json.load(f)["words"]
+        words = [w["w"] for w in W if t0 <= float(w.get("start", -1)) < t0 + n / fps and w.get("align") != "voiced-fill" and w["w"] != "da"]
+    ev = EJ.events(x, phones, words or None)
+    c = EJ.cut(ev, 0.0, n / fps)
+    op, _, _ = EJ.opening_of(video, work, n, fps)
+    take_op, _, _ = EJ.opening_of(take, None, n, fps)
+    r = EJ.score(op, fps, c["onsets"], c["closures"], c["sung"], c["wide"], take_op)
+    if r.get("onset_n") is None:
+        return {"ev_read": "unread: no mouth reading"}
+    row = {f"ev_{k}": r.get(k) for k in qa.EV_KEYS}
+    row.update(ev_read="phones", ev_pass=r.get("pass"))
+    row["ev_chance"] = round(min(1.0, (r.get("rise_n") or 0) / (n / fps) * 2 * EJ.TOL), 3)
+    row["ev_odds"] = qa.onset_odds(row["ev_onset_hit"], row["ev_onset_n"], row["ev_chance"])
+    row["ev_band"], row["ev_band_why"] = qa.event_band(row)
+    return row
+
+
 def pick_paint(s, n):
-    """the rate that wins, by their gates: one that passes beats one that fails, else the better sync, within 0.02 the quieter silences. Unmeasured silence is the worst.
-    The sync is the audio sync (truth) when both gates read it, else the plan corr."""
+    """the rate that wins, by their gates. 0.3.0: when both carry Verify's event band (a phones reading, s/n["ev_band"]), the one inside it
+    wins if the other is not, unless it is under the envelope floor (truth < TRUTH_FAIL); otherwise (both or neither inside, or no
+    phones reading) the 0.2.x rule: one that passes beats one that fails, else the better sync, within 0.02 the quieter silences.
+    Unmeasured silence is the worst. The sync is the audio sync (truth) when both gates read it, else the plan corr."""
+    from ..audits import sync_truth as ST
+
+    floor = lambda g: g.get("truth") is not None and g["truth"] < ST.TRUTH_FAIL  # noqa: E731
+    es, en = s.get("ev_band"), n.get("ev_band")
+    if es is not None and en is not None and bool(es) != bool(en):
+        win, lose = ("sing", "native") if es else ("native", "sing")
+        if not floor(s if es else n):
+            return win
     k = "truth" if s.get("truth") is not None and n.get("truth") is not None else "corr"
     key = lambda g: (g[k] if g[k] is not None else -9, -(g["open_in_silence"] if g.get("open_in_silence") is not None else 9))
     if bool(s.get("pass")) != bool(n.get("pass")):
@@ -447,7 +523,9 @@ def pick_paint(s, n):
     return "native" if (n_c[0] > s_c[0] + 0.02) or (abs(n_c[0] - s_c[0]) <= 0.02 and n_c[1] > s_c[1]) else "sing"
 
 
-def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info, t_plan=None, native_occ=()):
+def auto_select(
+    take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info, t_plan=None, native_occ=(), events_on=False
+):
     """Per-shot auto-selection: also run the native warp (lsdub paint on the full take at the frame rate, the pre-sing
     recipe) and keep pick_paint's choice of the two.
     Both are kept: <out>_sing.mp4 and <out>_native.mp4; <out> is the winner. native_occ: the native paint's occluder flags
@@ -488,14 +566,20 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
     target = target if t_plan is None else moved_target(dyn, n, t_plan, fps, nat_json)  # its own paint, its own offsets
     g_n = gate(nat, R, target, vocal, align, t0, fps, work=os.path.join(work, "native_gate"), warp_json=nat_json)
 
-    win = pick_paint(sing_info, g_n)
+    if events_on:  # the vocal-driven mouth: Verify's event band decides between the two (pick_paint)
+        ev_s = event_read(sng, take, vocal, align, t0, n, fps, paint_args, work)
+        ev_n = event_read(nat, take, vocal, align, t0, n, fps, paint_args, work=None)
+    else:  # classic (0.2.x): the envelope gate alone, as 0.2.x picked
+        ev_s = ev_n = {"ev_read": "classic: the envelope gate picks"}
+    win = pick_paint({**sing_info, **ev_s}, {**g_n, **ev_n})
     if win == "native":
         shutil.copyfile(nat, out)
     return {
         "auto": {
             "winner": win,
-            "sing": {k: sing_info.get(k) for k in AUTO_KEYS},
-            "native": {k: g_n.get(k) for k in AUTO_KEYS},
+            "sing": {**{k: sing_info.get(k) for k in AUTO_KEYS}, **{k: ev_s.get(k) for k in AUTO_EV_KEYS if k in ev_s}},
+            "native": {**{k: g_n.get(k) for k in AUTO_KEYS}, **{k: ev_n.get(k) for k in AUTO_EV_KEYS if k in ev_n}},
+            "by": "events" if ev_s.get("ev_band") is not None and ev_n.get("ev_band") is not None else f"envelope ({ev_s.get('ev_read')})",
         },
         **(
             {

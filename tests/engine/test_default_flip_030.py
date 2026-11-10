@@ -84,3 +84,34 @@ def test_the_event_band_decides_and_the_envelope_is_the_floor():
     assert c["band"] == "FAIL" and "does not follow the vocal" in c["reason"]
     d = qa.score_row(_row(), 100.0, SC)  # no phones reading: the 0.2.x envelope band
     assert d["band"] == "REVIEW" and "ev_band" not in d
+
+
+def test_classic_on_every_switch_is_the_022_paint_exactly():
+    """sing's paint flags with every stage on classic parse to the same paint namespace as 0.2.2's SNAP (the flags as 0.2.2 sent them)."""
+    snap_022 = [
+        "--warp-sigma",
+        "0.8",
+        "--warp-temporal",
+        "0.6",
+        "--warp-close-depth",
+        "0.05",
+        "--warp-follow",
+        "0.15",
+        "--warp-shape",
+        "asym",
+    ]
+    base = ["--video", "v", "--track", "t", "--out", "o", "--lib", "K", "--warp-track-mode", "chain", "--vocalisations", "skip"]
+    new = vars(MP._parser().parse_args([*base, *CLASSIC, *S.snap_paint(CLASSIC, 2)]))
+    old = vars(MP._parser().parse_args([*base, *snap_022]))
+    assert new == old
+    assert S.warp_audio(CLASSIC, S.snap_paint(CLASSIC, 2), "v.wav") == ()
+
+
+def test_the_auto_pick_reads_the_event_band_with_the_envelope_as_floor():
+    g = dict(truth=0.5, truth_lag_ms=0.0, corr=0.5, best=0.5, open_in_silence=0.1, pass_=True)
+    s = dict(g, **{"pass": False, "truth": 0.25, "ev_band": True})  # the new mouth: inside the event band, under the old gate
+    n = dict(g, **{"pass": True, "ev_band": False})
+    assert S.pick_paint(s, n) == "sing"
+    assert S.pick_paint(dict(s, truth=0.1), n) == "native"  # under the envelope floor: the event band cannot carry it
+    assert S.pick_paint(dict(s, ev_band=None), dict(n, ev_band=None)) == "native"  # no phones reading: the 0.2.x rule
+    assert S.pick_paint(dict(s, ev_band=False), n) == "native"  # neither inside: the 0.2.x rule
