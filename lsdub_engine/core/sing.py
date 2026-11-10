@@ -96,6 +96,18 @@ def snap_paint(paint_args, m):
     return p
 
 
+def routed(paint_args, snap=True):
+    """the paint flags sing paints with. The vocal-driven mouth (STAGES) rides the plain targets only, so on a coart face (a preset's
+    layer stack, e.g. landing's layers_v16_1) the stages would drop and the mouth stay 0.2.x. With SNAP on and --warp-events not
+    `classic`/`off` in the caller's flags, a coart target paints on the plain target instead (`--warp-target v9` appended: the last one
+    wins); the layer stack is unchanged and the coart-only flags fall inert. Classic (or snap off, or any other target): unchanged, so
+    the 0.2.x paint stays byte-identical. The native candidate of the auto pick keeps the caller's flags."""
+    a = list(paint_args)
+    if not snap or flag_value(a, "--warp-events") in ("classic", "off") or paint_api.target(a) != "coart":
+        return a
+    return [*a, "--warp-target", "v9"]
+
+
 def stage_value(paint_args, snap_flags, name):
     """the value a mouth stage flag has on this paint: the caller's, else SNAP's (snap_flags, as snap_paint gave them); `classic`
     read as the 0.2.x value. None: neither names it (the paint's own default)."""
@@ -293,6 +305,9 @@ def run(
     again = dict(paint_args=paint_args, char=char, db=db, box=box, face_target=face_target, fps_mult=fps_mult, snap=snap, a2f=a2f,
                  lead=lead, word_close=word_close, auto=auto, preset=preset, lossless=lossless, pump=pump, drive_comp=drive_comp)  # fmt: skip
     align0 = align
+    native_args, paint_args = list(paint_args), routed(paint_args, snap)
+    if paint_args != native_args:
+        print("sing: the vocal-driven mouth rides the plain target: --warp-target v9 on coart (classic keeps coart)", file=sys.stderr)
     if not a2f:
         wt = paint_api.target(paint_args)
         by = (
@@ -427,7 +442,7 @@ def run(
                 t0,
                 out,
                 work,
-                paint_args,
+                native_args,
                 dyn,
                 R,
                 target,
@@ -471,24 +486,36 @@ def event_read(video, take, vocal, align, t0, n, fps, paint_args, work=None):
 
 
 def pick_paint(s, n):
-    """the rate that wins, by their gates. 0.3.0: when both carry Verify's event band (a phones reading, s/n["ev_band"]), the one inside it
-    wins if the other is not, unless it is under the envelope floor (truth < TRUTH_FAIL); otherwise (both or neither inside, or no
-    phones reading) the 0.2.x rule: one that passes beats one that fails, else the better sync, within 0.02 the quieter silences.
-    Unmeasured silence is the worst. The sync is the audio sync (truth) when both gates read it, else the plan corr."""
+    """the rate that wins, by their gates (pick_rule's winner)."""
+    return pick_rule(s, n)[0]
+
+
+def pick_rule(s, n):
+    """(winner, by) of the two gates. 0.3.0: when both carry Verify's event band (a phones reading, s/n["ev_band"]), the one inside it
+    wins if the other is not, unless it is under the envelope floor (truth < TRUTH_FAIL); by = "events". Otherwise (both or neither
+    inside, or no phones reading) the 0.2.x rule: one that passes beats one that fails, else the better sync, within 0.02 the quieter
+    silences; by = "envelope (<why the event band did not decide>)". Unmeasured silence is the worst. The sync is the audio sync
+    (truth) when both gates read it, else the plan corr."""
     from ..audits import sync_truth as ST
 
     floor = lambda g: g.get("truth") is not None and g["truth"] < ST.TRUTH_FAIL  # noqa: E731
     es, en = s.get("ev_band"), n.get("ev_band")
-    if es is not None and en is not None and bool(es) != bool(en):
-        win, lose = ("sing", "native") if es else ("native", "sing")
+    if es is None or en is None:
+        why = s.get("ev_read") or n.get("ev_read") or "no event band on both"
+    elif bool(es) == bool(en):
+        why = "both inside the event band" if es else "neither inside the event band"
+    else:
+        win = "sing" if es else "native"
         if not floor(s if es else n):
-            return win
+            return win, "events"
+        why = f"the {win} inside the event band is under the envelope floor"
     k = "truth" if s.get("truth") is not None and n.get("truth") is not None else "corr"
     key = lambda g: (g[k] if g[k] is not None else -9, -(g["open_in_silence"] if g.get("open_in_silence") is not None else 9))
+    by = f"envelope ({why})"
     if bool(s.get("pass")) != bool(n.get("pass")):
-        return "native" if n.get("pass") else "sing"
+        return ("native" if n.get("pass") else "sing"), by
     s_c, n_c = key(s), key(n)
-    return "native" if (n_c[0] > s_c[0] + 0.02) or (abs(n_c[0] - s_c[0]) <= 0.02 and n_c[1] > s_c[1]) else "sing"
+    return ("native" if (n_c[0] > s_c[0] + 0.02) or (abs(n_c[0] - s_c[0]) <= 0.02 and n_c[1] > s_c[1]) else "sing"), by
 
 
 def auto_select(
@@ -539,7 +566,7 @@ def auto_select(
         ev_n = event_read(nat, take, vocal, align, t0, n, fps, paint_args, work=None)
     else:  # classic (0.2.x): the envelope gate alone, as 0.2.x picked
         ev_s = ev_n = {"ev_read": "classic: the envelope gate picks"}
-    win = pick_paint({**sing_info, **ev_s}, {**g_n, **ev_n})
+    win, by = pick_rule({**sing_info, **ev_s}, {**g_n, **ev_n})
     if win == "native":
         shutil.copyfile(nat, out)
     return {
@@ -547,7 +574,7 @@ def auto_select(
             "winner": win,
             "sing": {**{k: sing_info.get(k) for k in AUTO_KEYS}, **{k: ev_s.get(k) for k in AUTO_EV_KEYS if k in ev_s}},
             "native": {**{k: g_n.get(k) for k in AUTO_KEYS}, **{k: ev_n.get(k) for k in AUTO_EV_KEYS if k in ev_n}},
-            "by": "events" if ev_s.get("ev_band") is not None and ev_n.get("ev_band") is not None else f"envelope ({ev_s.get('ev_read')})",
+            "by": by,
         },
         **(
             {
