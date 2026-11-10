@@ -47,20 +47,32 @@ SNAP = dict(
     lead=0.06,
     word_close=0.06,
     attack_ms=15.0,
-    paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15", "--warp-shape", "asym"],
-)  # --warp-follow: the plain target holds the opening near the plan, so a take's own mouth timing does not ride through.
+    paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15", "--warp-shape", "asym",
+           "--warp-events", "vocal", "--warp-hold", "nucleus-follow", "--warp-closures", "aligned-press", "--warp-aperture", "p95",
+           "--warp-realise", "events"],
+)  # fmt: skip
+# --warp-follow: the plain target holds the opening near the plan, so a take's own mouth timing does not ride through.
 # --warp-shape asym: closing edges 20 ms early, openings on time (core/drive_shape.py); a --warp-shape in the caller's flags wins
+# the vocal-driven mouth (0.3.0): the syllable events off the vocal, one held opening per syllable that follows the voice's level,
+# closures only on the lyric's p/b/m pressed to contact, vowels opened to the singer's own widest, and the plan realised inside each
+# onset window. Plain targets only (coart has its own planner); a caller's value for any of them wins, and `classic` on each is 0.2.x.
+STAGES = ("--warp-events", "--warp-hold", "--warp-closures", "--warp-aperture", "--warp-realise")
+CLASSIC = {"--warp-events": "off", "--warp-hold": "off", "--warp-closures": "plan", "--warp-aperture": "off", "--warp-realise": "off"}
+CALLER_WINS = ("--warp-shape", *STAGES)
 
 
 def snap_paint(paint_args, m):
     """SNAP's paint flags. A --warp-temporal in the caller's flags, in output frames, holds here at the internal rate (x m); it
     never goes under SNAP's own. --warp-temporal-width, in output frames too, the same, and --warp-temporal-spare eases over one output
-    frame. A --warp-shape in the caller's flags replaces SNAP's (--warp-shape off: the drive as it was before asym). Named by nobody:
-    SNAP's flags unchanged."""
+    frame. A --warp-shape or a mouth stage flag (STAGES) in the caller's flags replaces SNAP's (--warp-shape off: the drive as it was
+    before asym; `classic` on a stage: the 0.2.x mouth). The stages ride only on the plain targets. Named by nobody: SNAP's flags
+    unchanged."""
     p = list(SNAP["paint"])
-    if any(str(x) == "--warp-shape" or str(x).startswith("--warp-shape=") for x in paint_args):
-        i = p.index("--warp-shape")
-        del p[i : i + 2]
+    plain = paint_api.target(paint_args) not in ("coart", "own")
+    for f in CALLER_WINS:
+        if has_flag(paint_args, f) or (f in STAGES and not plain):
+            i = p.index(f)
+            del p[i : i + 2]
     t = paint_api.temporal(paint_args)
     if t is not None:
         i = p.index("--warp-temporal") + 1
@@ -71,6 +83,14 @@ def snap_paint(paint_args, m):
     if any(str(x) == "--warp-temporal-spare" for x in paint_args):
         p += ["--warp-temporal-spare-ease", str(float(m))]
     return p
+
+
+def stage_value(paint_args, snap_flags, name):
+    """the value a mouth stage flag has on this paint: the caller's, else SNAP's (snap_flags, as snap_paint gave them); `classic`
+    read as the 0.2.x value. None: neither names it (the paint's own default)."""
+    v = flag_value(paint_args, name)
+    v = flag_value(snap_flags, name) if v is None else v
+    return CLASSIC.get(name) if v == "classic" else v
 
 
 # ---------------------------------------------------------------------------------------------------- pick
@@ -102,12 +122,11 @@ def track_target(warp_json, n, m):
 
 
 def warp_audio(paint_args, snap_flags, vocal):
-    """the stem the event stage reads (--warp-audio), set when --warp-events is among the paint's flags (the caller's or SNAP's) and
-    the caller did not name one; () otherwise, so a paint without the stage gets the argv it always did."""
-    flags = [str(x) for x in (*paint_args, *snap_flags)]
-    if "--warp-events" not in flags and not any(f.startswith("--warp-events=") for f in flags):
+    """the stem the event stage reads (--warp-audio), set when --warp-events is on (vocal) in the paint's flags (the caller's or SNAP's)
+    and the caller did not name one; () otherwise, so a paint without the stage gets the argv it always did."""
+    if stage_value(paint_args, snap_flags, "--warp-events") in (None, "off"):
         return ()
-    if "--warp-audio" in flags or any(f.startswith("--warp-audio=") for f in flags):
+    if has_flag(paint_args, "--warp-audio") or has_flag(snap_flags, "--warp-audio"):
         return ()
     return ("--warp-audio", str(vocal))
 
@@ -322,13 +341,11 @@ def run(
     sd += paint_api.dyn_flags(paint_args)
     if word_close:
         vs += ["--word-close", str(word_close)]
-    hold = has_flag(paint_args, "--warp-hold") or has_flag(SNAP["paint"] if snap else (), "--warp-hold")
+    snap_flags = snap_paint(paint_args, m) if snap else ()
+    hold = stage_value(paint_args, snap_flags, "--warp-hold") not in (None, "off")
     if hold:  # the hold stage writes the opening: the track carries the class opening alone, no envelope under it
         vs += ["--open-curve", "off"]
-    if word_close and (flag_value(paint_args, "--warp-closures") or flag_value(SNAP["paint"] if snap else (), "--warp-closures")) in (
-        "aligned",
-        "aligned-press",
-    ):
+    if word_close and stage_value(paint_args, snap_flags, "--warp-closures") in ("aligned", "aligned-press"):
         vs += ["--word-close-vocal"]  # the between-word press only where the vocal drops
     steps.call("sung_dyn", sd, quiet=True)
     steps.call("visemes", vs, quiet=True)
@@ -341,9 +358,9 @@ def run(
         user_overrides=paint_args,
         operational=[
             *paint_api.coart_dyn(paint_args, dyn),
-            *(snap_paint(paint_args, m) if snap else ()),
+            *snap_flags,
             *(("--occluder-mask", occ) if mask else ()),
-            *warp_audio(paint_args, snap_paint(paint_args, m) if snap else (), drive),
+            *warp_audio(paint_args, snap_flags, drive),
         ],
     )
     t_plan = plan_t0(t0, paint_args, fps * m)  # the plan moved: the gate reads the same curve

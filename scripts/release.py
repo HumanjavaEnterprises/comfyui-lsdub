@@ -16,7 +16,9 @@ In order, stopping at the first failure with a plain message (nothing remote cha
   7. pushes release/X.Y.Z and waits for CI and Install path to pass on that commit;
   8. (dry run stops before this: it works in a throwaway worktree and pushes nothing)
   9. fast-forwards main to it, tags vX.Y.Z, pushes main and the tag, pushes the engine record;
- 10. watches the publish run, confirms the Comfy Registry lists X.Y.Z, and makes sure the site deploy ran.
+ 10. watches the publish run, confirms the Comfy Registry lists X.Y.Z, then deploys the site from this box: a clean checkout of
+     the microsite's main (equal to origin/main) through wrangler's own login (no API token, no GitHub secret), and checks
+     https://lsdub.sndbnch.app/changelog answers 200 with the new version on it.
 """
 import argparse
 import hashlib
@@ -228,7 +230,6 @@ def main():
         git(PACK, 'tag', '-a', f'v{v}', '-m', f'LSDub {v}')
         git(PACK, 'push', '-q', '--atomic', 'origin', 'main', f'v{v}')   # main and the tag land together or not at all
         PUSHED.append(f'pack main -> {rel_sha[:9]} and tag v{v} (publish starts from the tag)')
-        tag_time = time.time()
         git(eng, 'push', '-q', 'origin', 'main')
         PUSHED.append('engine main: the vendor record commit')
 
@@ -247,22 +248,43 @@ def main():
         else:
             raise Stop(f'publish passed but {REGISTRY} does not list {v} after 15 minutes; check the publisher page.')
 
-        step('site deploy (the publish workflow dispatches it; started here if it did not)')
-        time.sleep(30)
-        runs = gh_json('run', 'list', '-R', SITE_REPO, '--workflow', 'deploy.yml', '--json', 'databaseId,createdAt,event,url', '-L', '10')
-        fresh = [r for r in runs if time.mktime(time.strptime(r['createdAt'], '%Y-%m-%dT%H:%M:%SZ')) - time.timezone >= tag_time - 60]
-        if not fresh:
-            sh('gh', 'workflow', 'run', 'deploy.yml', '-R', SITE_REPO, '--ref', 'main')
-            time.sleep(15)
-            fresh = gh_json('run', 'list', '-R', SITE_REPO, '--workflow', 'deploy.yml', '--json', 'databaseId,createdAt,event,url', '-L', '1')
-        if fresh:
-            sh('gh', 'run', 'watch', str(fresh[0]['databaseId']), '-R', SITE_REPO, '--exit-status', check=False)
-            print(f'    site deploy run: {fresh[0]["url"]} (a skipped deploy means CLOUDFLARE_API_TOKEN is not set there)')
+        step('site deploy from this box (wrangler login; clean microsite main), then /changelog shows the version')
+        deploy_site(site, v)
         print(f'\nreleased {v}.')
     finally:
         if made_worktree:
             git(PACK, 'worktree', 'remove', '--force', tree, check=False, quiet=True)
             if read(records) != records_before: write(records, records_before)   # the dry run's vendor record, undone
+
+
+CF_ACCOUNT = 'fa095a45453409a42f1c739a174e609f'
+CHANGELOG_URL = 'https://lsdub.sndbnch.app/changelog'
+
+
+def deploy_site(site, v):
+    """the microsite deploys from a clean checkout of its main, equal to origin/main, with wrangler's OAuth login on this box (an
+    API token in the environment is dropped so the login is what deploys); then /changelog must answer 200 and carry v."""
+    git(site, 'fetch', '-q', 'origin', 'main', quiet=True)
+    if git(site, 'rev-parse', '--abbrev-ref', 'HEAD', quiet=True) != 'main':
+        raise Stop(f'the microsite checkout ({site}) is not on main. Switch it to main and deploy by hand: CONTRIBUTING.md, Releases.')
+    if git(site, 'status', '--porcelain', quiet=True):
+        raise Stop(f'the microsite checkout ({site}) has local changes. Deploy needs a clean main.')
+    if git(site, 'rev-parse', 'HEAD', quiet=True) != git(site, 'rev-parse', 'origin/main', quiet=True):
+        raise Stop(f'the microsite main ({site}) is not equal to origin/main. Pull it, then deploy by hand: CONTRIBUTING.md, Releases.')
+    env = {k: val for k, val in os.environ.items() if k != 'CLOUDFLARE_API_TOKEN'}
+    env['CLOUDFLARE_ACCOUNT_ID'] = CF_ACCOUNT
+    sh('npx', 'wrangler', 'deploy', cwd=site, env=env)
+    PUSHED.append('the microsite deployed from its main')
+    for _ in range(10):
+        try:
+            with urllib.request.urlopen(CHANGELOG_URL, timeout=30) as r:  # noqa: S310
+                if r.status == 200 and f'id="v{v}"' in r.read().decode('utf-8', 'replace'):
+                    print(f'    {CHANGELOG_URL}: 200, shows {v}')
+                    return
+        except OSError:
+            pass
+        time.sleep(15)
+    raise Stop(f'the site deployed but {CHANGELOG_URL} does not answer 200 with {v} on it; check the deploy output above.')
 
 
 if __name__ == '__main__':

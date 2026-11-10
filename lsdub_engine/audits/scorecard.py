@@ -207,6 +207,11 @@ def components(row, film_sharp_med, sharpness_mode="floor"):
         c["sync"] = clip01((max(row["corr"], row.get("corr_pm1") or row["corr"]) - 0.2) / 0.6)
         if _fin(row.get("truth")):  # the vocal itself (sync_truth), when read, is the sync; the plan corr stays a diagnostic
             c["sync"] = clip01((row["truth"] - TRUTH_SYNC[0]) / (TRUTH_SYNC[1] - TRUTH_SYNC[0]))
+        if row.get("ev_read") == "phones":  # 0.3.0: a phones event reading that meets the vocal's events is in sync (qa.event_band)
+            from . import qa
+
+            if qa.event_band(row)[0]:
+                c["sync"] = 1.0
         if row.get("open_in_silence") is not None:
             c["silence"] = 1 - clip01((row["open_in_silence"] - 0.15) / 0.4)
         sn = [

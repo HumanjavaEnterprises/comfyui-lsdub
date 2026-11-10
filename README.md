@@ -151,6 +151,10 @@ and `LSDub/qa`.
   - `coherence_charge` (`remade`): the continuity repair's budget counts only the frames it re-makes. `all` is 0.1.9's,
     which counts every flagged run.
   - Set all three to their second choice to dub as 0.1.9 did.
+  - The vocal-driven mouth (default since 0.3.0): `warp_events` (`vocal`), `warp_hold` (`nucleus-follow`), `warp_closures`
+    (`aligned-press`), `warp_aperture` (`p95`) and `warp_realise` (`events`): one opening per sung syllable, lips shut only on
+    the lyric's p/b/m, vowels as wide as the singer's own. Set all five to `classic`, and Align's `aligner` to `classic`, for
+    the 0.2.x mouth.
 - **LSDub Dub:** dubs each DUB and DUB-MEDIUM shot.
   - The shot is cropped to a 512 px face and warped at 2x the frame rate. The lower face is pasted back and a measured
     sync gate is applied.
@@ -169,6 +173,9 @@ and `LSDub/qa`.
 **QA**
 - **LSDub Verify:** a likely-success score per dubbed shot (PASS, REVIEW or FAIL), compared with the source. A soft or
   held line is judged against the mouth travel the song asks for, and the report shows that reading beside the travel.
+  A shot can PASS when its mouth opens on clearly more of the sung syllables than chance would give, shuts on the sung
+  p/b/m and shuts nowhere else more often than the singer's own take (needs the recogniser Align `ctc` downloads; without
+  it, the 0.2.x band).
 - **LSDub Scorecard:** every shot of the cut scored 0 to 100, worst first.
 - **LSDub Sync QA:** the measured mouth against the vocal (correlation and lag), with a review card that scrolls the
   vocal waveform past a playhead.
@@ -207,6 +214,7 @@ LSDub aims to be stable software that is easy to install and build on, not a str
 
 - Releases are batched. A patch version (0.2.x) only fixes breakage; new features wait for the next minor version.
 - Within a minor series the defaults stay unchanged unless the changelog says otherwise.
+- 0.3.0 changed the defaults (the new mouth, Align `ctc`, Verify's bands), which is why it is a minor release.
 - Every release passes the install-path test before it is tagged: a clean ComfyUI on CPU, only this pack's
   requirements, every node registered, the phone recogniser downloaded into an empty models folder, and a Dub at the
   defaults and with the mouth switches on the demo clip.

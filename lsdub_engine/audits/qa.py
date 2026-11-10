@@ -527,6 +527,13 @@ def asked_travel(s):
 
 EV_KEYS = ("onset_hit", "onset_n", "closure_hit", "closure_n", "spurious", "spurious_take", "open_ratio", "open_n")
 LAG_WINDOW_S = 0.2  # a mouth rise this near a sung onset, either side, is that onset's rise (the per-onset reading)
+# Verify's sync band (0.3.0) reads the event judge, not the envelope. Each line comes from the 190-shot matrix's controls (the original take
+# against the new song, the render against the vocal's events shifted +-200 ms: 1140 readings, none may PASS) and the take's own numbers:
+EV_ODDS = 0.05  # onsets: the chance of meeting this many of them with the shot's own rises placed at random (rise density x 2 TOL) is under 1 in 20
+EV_MIN_ONSETS = 4  # fewer sung onsets than this are too few to read (the judge's thin line): REVIEW, not PASS
+EV_CLOSURE = 0.5  # p/b/m shut when 2 or more: at least half (the take against the new song reaches 0.52 at its p90); one closure: shut
+# stray shuts: no more than the singer's own take shows in the same sung time. The envelope reading stays only as the floor: under
+# sync_truth.TRUTH_FAIL the mouth does not follow the song at all and the shot FAILS, whatever the events say.
 
 
 def vocal_events(vocal, align=None, phone_models=None):
@@ -601,8 +608,46 @@ def event_reading(video, s, fps, offset, ev, read):
     p90 = round(float(np.percentile(lags, 90)), 1) if lags else None
     out = {f"ev_{k}": r.get(k) for k in EV_KEYS}
     out.update(ev_onset_lag_ms=med, ev_onset_lag_p90_ms=p90, ev_lag_n=len(lags), ev_pass=r.get("pass"), ev_read=read)
+    out["ev_chance"] = round(min(1.0, (r.get("rise_n") or 0) / (len(F) / fps) * 2 * EJ.TOL), 3)
+    out["ev_odds"] = onset_odds(out["ev_onset_hit"], out["ev_onset_n"], out["ev_chance"])
     out["ev_why"] = event_words(r, med, p90)
     return out
+
+
+def onset_odds(hit, n, chance):
+    """the chance of meeting at least hit x n of n sung onsets with each one met at random with probability `chance` (one-sided
+    binomial tail); None when unread."""
+    if hit is None or not n or chance is None:
+        return None
+    from math import comb
+
+    k, p = int(round(hit * n)), min(max(float(chance), 0.0), 1.0)
+    return round(sum(comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(k, n + 1)), 5)
+
+
+def event_band(r):
+    """Verify's sync band on the event reading -> (True / False, why) on a phones reading of a sung shot, (None, '') when the row has
+    no such reading (Verify then reads the envelope, sync_truth, as 0.2.x did). The lines: EV_* above."""
+    if r.get("ev_read") != "phones" or r.get("ev_onset_n") is None:
+        return None, ""
+    n = r["ev_onset_n"]
+    if n < EV_MIN_ONSETS:
+        return False, f"too few sung onsets to read the sync ({n}, need {EV_MIN_ONSETS})"
+    odds = r.get("ev_odds")
+    if odds is None:
+        odds = onset_odds(r.get("ev_onset_hit"), n, r.get("ev_chance"))
+    if odds is None or odds > EV_ODDS:
+        return False, (
+            f"mouth meets {r.get('ev_onset_hit') or 0:.2f} of {n} sung onsets, no better than chance "
+            f"({r.get('ev_chance') or 0:.2f}) would give often enough"
+        )
+    cn, ch = r.get("ev_closure_n") or 0, r.get("ev_closure_hit")
+    if (cn >= 2 and (ch or 0) < EV_CLOSURE) or (cn == 1 and not ch):
+        return False, f"lips miss the sung p/b/m ({ch or 0:.2f} of {cn} shut)"
+    sp, st = r.get("ev_spurious"), r.get("ev_spurious_take")
+    if sp is not None and st is not None and sp > st:
+        return False, f"mouth shuts where the singer does not ({sp} vs {st} on the take)"
+    return True, ""
 
 
 def path_reading(s):
@@ -758,7 +803,11 @@ def score_row(r, smed, SC):
     elif r["class"] == "COVERAGE":
         r["band"] = "REVIEW"
     else:
-        truth_cap(r)
+        ev_ok, ev_why = event_band(r)
+        if ev_ok is None:
+            truth_cap(r)
+        else:
+            sync_cap(r, ev_ok, ev_why)
         r["band"] = "PASS" if r["score"] >= PASS_BAND else "REVIEW" if r["score"] >= REVIEW_BAND else "FAIL"
     if (r.get("vocal_frac") or 0) >= VOCAL_NOTE and r["band"] in ("REVIEW", "FAIL"):
         r["reason"] = f"vocalisation spans cover {r['vocal_frac']:.0%} of the shot; " + r["reason"]
@@ -782,6 +831,29 @@ def truth_cap(r):
         r["reason"] = ST.why(r)
     else:
         r["reason"] = f"{ST.why(r)}; {r['reason']}"
+    return r
+
+
+def sync_cap(r, ev_ok, ev_why):
+    """the event reading decides the sync (0.3.0): a PERF shot whose mouth does not meet the vocal's events (event_band) cannot PASS
+    (score capped under PASS_BAND); one under the envelope floor (truth < TRUTH_FAIL: it follows the song no better than a mouth that
+    ignores it) FAILS (capped under REVIEW_BAND)."""
+    from . import sync_truth as ST
+
+    r["ev_band"] = bool(ev_ok)
+    if r.get("score") is None:
+        return r
+    if r.get("truth") is not None and r["truth"] < ST.TRUTH_FAIL:
+        cap, why = REVIEW_BAND - 1, ST.why(r)
+    elif not ev_ok:
+        cap, why = PASS_BAND - 1, ev_why
+    else:
+        return r
+    if r["score"] > cap:
+        r["score"] = float(cap)
+        r["reason"] = why
+    else:
+        r["reason"] = f"{why}; {r['reason']}"
     return r
 
 
@@ -914,6 +986,10 @@ def write_verify(meta, rows, out):
         "ev_open_ratio",
         "ev_onset_lag_ms",
         "ev_onset_lag_p90_ms",
+        "ev_chance",
+        "ev_odds",
+        "ev_band",
+        "ev_pass",
         "ev_read",
         "ev_why",
         "vocal_lost",
@@ -936,10 +1012,11 @@ def write_verify(meta, rows, out):
         "`sync corr` reads the mouth against the opening built from the alignment, the curve the dub itself was painted from: a high "
         "number says the render followed its plan, and cannot see a wrong alignment: reported, a diagnostic. `audio` reads it "
         "against the vocal itself with no alignment (its level and open voiced sound, levels and events, at lag 0), "
-        "on every frame of the shot, then the mouth's lag in ms (+ = the mouth trails): it decides the sync; with vocalisation "
+        "on every frame of the shot, then the mouth's lag in ms (+ = the mouth trails); with vocalisation "
         "spans handed to the take, the same reading on the other frames follows in brackets, reported only. Under "
-        f"{ST.TRUTH_MIN} or more than {ST.LATE_MS:.0f} ms late (or {ST.EARLY_MS:.0f} ms early) a shot cannot PASS; under "
-        f"{ST.TRUTH_FAIL} it FAILS.",
+        f"{ST.TRUTH_FAIL} it FAILS (the mouth does not follow the song at all). With a phones reading of the vocal, `events` decides "
+        f"the sync; without one (no local recogniser weights) `audio` does, as in 0.2.x: under {ST.TRUTH_MIN} or more than "
+        f"{ST.LATE_MS:.0f} ms late (or {ST.EARLY_MS:.0f} ms early) a shot cannot PASS.",
         "`shape` is reported and moves no band: height contrast (1 = the delivered heights follow the card's, 0 = every class the same "
         "height), then p / b / m phones with the lips really shut (gap under a share of the eye distance), then the width travel, then "
         "the darkest reading at the lips' corners on closures (no calibrated threshold: compare to the take's).",
@@ -948,11 +1025,16 @@ def write_verify(meta, rows, out):
         "the shot, the worst word; a free walk, so a word it loses reads as off, and `lost` when a shot's words sit more than 0.6 s off, where the walk has run away on a long song: no reading), then the plan's phones read directly on the vocal's frames: "
         "hiss on hiss, closures on a dip or nasal, vowels on open sound, 0..1. Passed-over words (a lead sheet) are not read.",
         "`path` is reported and moves no band: the paint delivered, then the frames of it picked from before their own time, whose skin is a frame old.",
-        "`events` is reported and moves no band this release: the mouth read against the vocal's events one by one by the event "
+        "`events` reads the mouth against the vocal's events one by one by the event "
         f"judge (audits/event_judge.py, its own front end; this film: {meta.get('events_read') or 'unread'}): sung onsets met by a "
-        f"mouth rise within {EJ.TOL * 1000:.0f} ms, p/b/m closures met by shut lips, shuts where the singer has no closure (against "
-        "the take's own), the wide vowels' opening against the take's, then the per-onset lag: median and p90 of the nearest rise "
-        f"within {LAG_WINDOW_S * 1000:.0f} ms of each onset (+ = late). The whole-shot `audio` lag can read near 0 while the attacks are late.",
+        f"mouth rise within {EJ.TOL * 1000:.0f} ms (beside it the share chance would meet with the shot's own rises), p/b/m closures met "
+        "by shut lips, shuts where the singer has no closure (against the take's own), the wide vowels' opening against the take's, then "
+        f"the per-onset lag: median and p90 of the nearest rise within {LAG_WINDOW_S * 1000:.0f} ms of each onset (+ = late). "
+        f"On a phones reading it decides the sync: a shot can PASS when its mouth meets clearly more sung onsets than chance would "
+        f"(odds under 1 in {1 / EV_ODDS:.0f}, at least {EV_MIN_ONSETS} onsets), shuts on the sung p/b/m (at least half, or the one there "
+        "is) and shuts nowhere else more often than the singer's own take. `target` is the event judge's own target line (onsets "
+        f"{EJ.PASS['onset_hit']:.2f}, closures {EJ.PASS['closure_hit']:.2f}, vowels {EJ.PASS['open_ratio']:.2f} of the take's), shown "
+        "for the headroom and moving no band.",
         "`travel` is how far the mouth opens and closes over the shot (in face heights), then how much of the take's own movement the "
         "song asks for (read from the dub's warp log; a held line asks less than the take moves by itself). A mouth that barely moves "
         f"and opens less than {SC.TRAVEL_KEEP:.2f} as far as it was asked (as far as the take does when there is no reading), or that "
@@ -991,7 +1073,7 @@ def _events_cell(r):
     """onsets hit, closures shut, spurious shuts (take's), vowel opening vs the take's, per-onset lag median / p90; then the words."""
     if r.get("ev_onset_hit") is None:
         return ""
-    p = [f"onsets {r['ev_onset_hit']:.2f} of {r['ev_onset_n']}"]
+    p = [f"onsets {r['ev_onset_hit']:.2f} of {r['ev_onset_n']}" + ("" if r.get("ev_chance") is None else f" (chance {r['ev_chance']:.2f})")]
     if r.get("ev_closure_hit") is not None:
         p.append(f"closures {r['ev_closure_hit']:.2f} of {r['ev_closure_n']}")
     sp = r.get("ev_spurious")
@@ -1000,6 +1082,8 @@ def _events_cell(r):
         p.append(f"vowels {r['ev_open_ratio']:.2f} of the take's")
     if r.get("ev_onset_lag_ms") is not None:
         p.append(f"lag {r['ev_onset_lag_ms']:+.0f} / p90 {r['ev_onset_lag_p90_ms']:+.0f} ms")
+    if r.get("ev_pass") is not None:
+        p.append("target met" if r["ev_pass"] else "target not yet met")
     return ", ".join(p) + (f": {r['ev_why']}" if r.get("ev_why") else "")
 
 

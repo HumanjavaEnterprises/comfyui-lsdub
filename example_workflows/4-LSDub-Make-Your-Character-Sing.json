@@ -539,7 +539,7 @@
     true,
     true,
     "",
-    "sphinx"
+    "classic"
    ],
    "color": "#523",
    "title": "LSDub Align"
@@ -1055,7 +1055,7 @@
    ],
    "size": [
     340,
-    398
+    424
    ],
    "flags": {},
    "order": 20,
@@ -1087,7 +1087,8 @@
     false,
     "asym",
     "aligner",
-    "remade"
+    "remade",
+    "events"
    ],
    "color": "#532",
    "title": "LSDub Mouth Tweaks"

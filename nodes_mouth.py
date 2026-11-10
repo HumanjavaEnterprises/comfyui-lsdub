@@ -27,14 +27,18 @@ from .project import file_hash, shots_todo, stage_key, text_hash
 DUB_VERDICTS = ('DUB', 'DUB-MEDIUM')
 WARP_SHAPES = ('asym', 'off')                               # the first is the engine's default; the last is 0.1.9's
 TRAVEL_GUARDS = ('aligner', 'take')
-# the vocal-driven mouth stages (engine core/nucleus_events, nucleus_hold, closure_plan, aperture): the first value is the engine's default
-# today (the 0.1.11 mouth); the others are the vocal-driven mouth, one choice away each. STAGE_FLAGS maps a Combo to its paint flag.
-WARP_EVENTS = ('off', 'vocal')
-WARP_HOLDS = ('off', 'nucleus-follow', 'nucleus')
-WARP_CLOSURES = ('plan', 'aligned-press', 'aligned')
-WARP_APERTURES = ('off', 'p95', 'map')
+# the vocal-driven mouth stages (engine core/nucleus_events, nucleus_hold, closure_plan, aperture, the realise stage): since 0.3.0 the first
+# value is the engine's default (sing.SNAP turns them on); `classic` is the 0.2.x mouth, one choice away on each. STAGE_FLAGS maps a Combo
+# to its paint flag. LEGACY: the values a 0.2.x workflow saved for the old default, read as `classic`.
+WARP_EVENTS = ('vocal', 'classic')
+WARP_HOLDS = ('nucleus-follow', 'nucleus', 'classic')
+WARP_CLOSURES = ('aligned-press', 'aligned', 'classic')
+WARP_APERTURES = ('p95', 'map', 'classic')
+WARP_REALISES = ('events', 'classic')
 STAGE_FLAGS = {'warp_events': ('--warp-events', WARP_EVENTS), 'warp_hold': ('--warp-hold', WARP_HOLDS),
-               'warp_closures': ('--warp-closures', WARP_CLOSURES), 'warp_aperture': ('--warp-aperture', WARP_APERTURES)}
+               'warp_closures': ('--warp-closures', WARP_CLOSURES), 'warp_aperture': ('--warp-aperture', WARP_APERTURES),
+               'warp_realise': ('--warp-realise', WARP_REALISES)}
+LEGACY = {'off': 'classic', 'plan': 'classic'}
 COHERENCE_CHARGES = ('remade', 'all')
 SWITCH_TIPS = dict(
     warp_shape='Mouth shape on the snap warp: asym closes the lips 20 ms early and opens them on time; off is the 0.1.9 shape.',
@@ -42,16 +46,18 @@ SWITCH_TIPS = dict(
                  'that render; take judges it against the take alone (0.1.9).',
     coherence_charge='What the continuity repair\'s budget counts: remade only the frames it re-makes; all every flagged run (0.1.9), '
                      'so less gets repaired.',
-    warp_events='Reads the sung syllables off the lead vocal and writes them on the mouth plan (needed by the three below). off = the '
-                '0.1.11 plan. No pixel moves by itself.',
+    warp_events='Reads the sung syllables off the lead vocal and writes them on the mouth plan (needed by the four below). classic = the '
+                '0.2.x plan.',
     warp_hold='One mouth opening per sung syllable, held to the next one, with a dip before each syllable so every onset is a visible rise: '
-              'nucleus-follow also lets the opening follow the voice\'s loudness inside the syllable; nucleus holds it flat; off = the '
-              '0.1.11 envelope mouth. Needs warp_events vocal: without it the engine warns and it does nothing.',
+              'nucleus-follow also lets the opening follow the voice\'s loudness inside the syllable; nucleus holds it flat; classic = the '
+              '0.2.x envelope mouth. Needs warp_events vocal: without it the engine warns and it does nothing.',
     warp_closures='Where the lips shut: aligned-press only on the lyric\'s p/b/m, timed off the vocal, pressed to contact; aligned the same '
-                  'without the press (a slit on an open take); plan = the 0.1.11 closures. Needs warp_events vocal: '
+                  'without the press (a slit on an open take); classic = the 0.2.x closures. Needs warp_events vocal: '
                   'without it the engine warns and it does nothing.',
     warp_aperture='How far the vowels open: p95 scales the plan so the loud wide vowels reach the singer\'s own widest opening; map the same '
-                  'over every frame; off = as planned. p95 needs warp_events vocal: without it the engine warns and p95 is the same as map.',
+                  'over every frame; classic = as planned (0.2.x). p95 needs warp_events vocal: without it p95 is the same as map.',
+    warp_realise='events lets each sung syllable\'s attack through the smoothing, so short syllables still show; classic = the 0.2.x '
+                 'smoothing everywhere. Needs warp_events vocal.',
 )
 SING_EXTRA = ['--warp-track-mode', 'chain']                 # the standard sing recipe's track mode
 
@@ -93,8 +99,9 @@ def _shape(tw):
 
 
 def _stages(tw):
-    """the Tweaks' mouth-stage Combos as paint flags: nothing at a default (the engine's own), the flag at any other value; sing adds
-    --warp-audio for --warp-events itself. settings come after them."""
+    """the Tweaks' mouth-stage Combos as paint flags: nothing at a default (sing's own), the flag at any other value (`classic` too: the
+    engine reads it as the 0.2.x value, and sing then drops its own); sing adds --warp-audio for --warp-events itself. settings come
+    after them."""
     f = getattr(tw, 'flags', None) or {}
     out = []
     for name, (flag, options) in STAGE_FLAGS.items():
@@ -243,21 +250,34 @@ class LSDubTweaks(io.ComfyNode):
                                tooltip=SWITCH_TIPS['travel_guard']),
                 io.Combo.Input('coherence_charge', options=['remade', 'all'], default='remade', optional=True,
                                tooltip=SWITCH_TIPS['coherence_charge']),
-                io.Combo.Input('warp_events', options=['off', 'vocal'], default='off', optional=True, tooltip=SWITCH_TIPS['warp_events']),
-                io.Combo.Input('warp_hold', options=['off', 'nucleus-follow', 'nucleus'], default='off', optional=True,
+                io.Combo.Input('warp_events', options=['vocal', 'classic'], default='vocal', optional=True, tooltip=SWITCH_TIPS['warp_events']),
+                io.Combo.Input('warp_hold', options=['nucleus-follow', 'nucleus', 'classic'], default='nucleus-follow', optional=True,
                                tooltip=SWITCH_TIPS['warp_hold']),
-                io.Combo.Input('warp_closures', options=['plan', 'aligned-press', 'aligned'], default='plan', optional=True,
+                io.Combo.Input('warp_closures', options=['aligned-press', 'aligned', 'classic'], default='aligned-press', optional=True,
                                tooltip=SWITCH_TIPS['warp_closures']),
-                io.Combo.Input('warp_aperture', options=['off', 'p95', 'map'], default='off', optional=True,
+                io.Combo.Input('warp_aperture', options=['p95', 'map', 'classic'], default='p95', optional=True,
                                tooltip=SWITCH_TIPS['warp_aperture']),
+                io.Combo.Input('warp_realise', options=['events', 'classic'], default='events', optional=True,
+                               tooltip=SWITCH_TIPS['warp_realise']),
             ],
             outputs=[T.LSDubTweaks.Output(display_name='tweaks', tooltip='The mouth controls.')],
         )
 
     @classmethod
+    def validate_inputs(cls, warp_events='vocal', warp_hold='nucleus-follow', warp_closures='aligned-press', warp_aperture='p95',
+                        warp_realise='events'):
+        """the mouth-stage Combos take their options and the values a 0.2.x workflow saved (off / plan, read as classic)."""
+        for name, v in (('warp_events', warp_events), ('warp_hold', warp_hold), ('warp_closures', warp_closures),
+                        ('warp_aperture', warp_aperture), ('warp_realise', warp_realise)):
+            options = STAGE_FLAGS[name][1]
+            if v not in options and LEGACY.get(v) not in options:
+                return f'{name} must be one of {", ".join(options)}, not {v!r}'
+        return True
+
+    @classmethod
     def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv='', sync_advance_ms=0.0, sync_phrases=False,
-                warp_shape='asym', travel_guard='aligner', coherence_charge='remade', warp_events='off', warp_hold='off',
-                warp_closures='plan', warp_aperture='off'):
+                warp_shape='asym', travel_guard='aligner', coherence_charge='remade', warp_events='vocal', warp_hold='nucleus-follow',
+                warp_closures='aligned-press', warp_aperture='p95', warp_realise='events'):
         try:
             paint_api.split_settings(settings)
         except ValueError as e:
@@ -273,7 +293,10 @@ class LSDubTweaks(io.ComfyNode):
         for name, value, options in (('warp_shape', warp_shape, WARP_SHAPES), ('travel_guard', travel_guard, TRAVEL_GUARDS),
                                      ('coherence_charge', coherence_charge, COHERENCE_CHARGES), ('warp_events', warp_events, WARP_EVENTS),
                                      ('warp_hold', warp_hold, WARP_HOLDS), ('warp_closures', warp_closures, WARP_CLOSURES),
-                                     ('warp_aperture', warp_aperture, WARP_APERTURES)):
+                                     ('warp_aperture', warp_aperture, WARP_APERTURES), ('warp_realise', warp_realise, WARP_REALISES)):
+            if name in STAGE_FLAGS and value not in options and LEGACY.get(value) in options:
+                _log(f'Mouth Tweaks: {name} {value!r} is a 0.2.x value, read as classic (the 0.2.x mouth); pick {options[0]} for the 0.3.0 mouth')
+                value = 'classic'
             if value not in options: raise ValueError(f'LSDub Mouth Tweaks: {name} must be one of {", ".join(options)}, not {value!r}')
             if value != options[0]:  # absent at the default, as above; a cached shot still re-dubs when the engine changes (its key
                 flags[name] = value  # carries the whole engine's version)
