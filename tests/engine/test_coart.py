@@ -472,7 +472,7 @@ def test_advance_rounds_half_to_even():
 def test_sing_reads_the_plan_on_whole_frames():
     from lsdub_engine.core import sing as S
 
-    assert S.plan_t0(1.0, ["--coart-advance-ms", "100"], 25) == 1.0 + 2 / 25
+    assert S.plan_t0(1.0, ["--warp-target", "coart", "--coart-advance-ms", "100"], 25) == 1.0 + 2 / 25
 
 
 def test_plan_clip_plans_on_whole_frames(monkeypatch, tmp_path):
