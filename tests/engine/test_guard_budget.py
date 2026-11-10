@@ -197,9 +197,15 @@ def test_the_019_values_are_one_flag_away():
     """0.1.9: --travel-guard take, --coherence-charge all, and `-- --warp-shape off` after sing's flags, which leaves SNAP as it was."""
     assert V019["travel_ref"] in S.TRAVEL_REFS and V019["charge"] in CONT.CHARGES
     snap_019 = ["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15"]
-    assert S.snap_paint(["--warp-shape", V019["warp_shape"]], 2) == snap_019
-    assert S.snap_paint(["--warp-shape=closures"], 2) == snap_019  # the caller's own shape, in either spelling, wins
-    assert S.SNAP["paint"] == [*snap_019, "--warp-shape", "asym"]  # SNAP itself is left alone
+    classic = [x for f in S.STAGES for x in (f, "classic")]  # 0.3.0's stages, back to 0.2.x
+    assert S.snap_paint(["--warp-shape", V019["warp_shape"], *classic], 2) == snap_019
+    assert S.snap_paint(["--warp-shape=closures", *classic], 2) == snap_019  # the caller's own shape, in either spelling, wins
+    assert S.SNAP["paint"] == [
+        *snap_019,
+        "--warp-shape",
+        "asym",
+        *(x for f in S.STAGES for x in (f, S.SNAP["paint"][S.SNAP["paint"].index(f) + 1])),
+    ]
 
 
 def test_a_callers_shape_reaches_paint(monkeypatch):
