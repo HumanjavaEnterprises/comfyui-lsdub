@@ -1,7 +1,7 @@
 # Security
 
 ## Supported versions
-The latest 0.2.x release gets security fixes. Older versions do not; please update.
+The latest 0.3.x release gets security fixes. Older versions do not; please update.
 
 ## How to report
 Report security problems privately through GitHub's
