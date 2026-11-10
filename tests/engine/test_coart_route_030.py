@@ -60,3 +60,25 @@ def test_by_names_the_0_2_rule_when_it_decided():
     assert S.pick_rule(dict(s, ev_band=None, **c), dict(n, ev_band=None, **c)) == ("native", "envelope (classic: the envelope gate picks)")
     for a, b in ((s, n), (dict(s, ev_band=None), n), (dict(s, truth=0.1), n)):
         assert S.pick_rule(a, b)[0] == S.pick_paint(a, b)
+
+
+SHAPE = paint_api.flags("layers_v16_1_shape", lib="K", mode_mods=["--warp-track-mode", "chain"], user_overrides=["--vocalisations", "skip"])
+
+
+def test_the_gate_curve_moves_only_where_the_paint_does():
+    """--coart-advance-ms moves the plan only on coart (mouth_warp); plan_t0 moves the gate's curve only there too."""
+    assert paint_api.advance_s(SHAPE) > 0 and paint_api.target(SHAPE) == "coart"
+    assert S.plan_t0(1.0, SHAPE, 50.0) > 1.0  # coart (classic, and the native candidate): moved, as the paint moves it
+    assert S.plan_t0(1.0, [*SHAPE, "--warp-target", "v9"], 50.0) == 1.0
+    assert S.plan_t0(1.0, S.routed(SHAPE), 50.0) == S.plan_t0(1.0, SHAPE, 50.0)  # shaped coart is not routed: the advance stands
+    adv = [*LAYERS, "--coart-advance-ms", "40"]  # landing with Tweaks sync_advance_ms 40
+    assert S.plan_t0(1.0, adv, 50.0) == 1.0 + 0.04
+    assert S.plan_t0(1.0, S.routed(adv), 50.0) == 1.0
+    assert S.plan_t0(1.0, ["--coart-advance-ms", "40"], 50.0) == 1.0  # a plain face: the paint never read it
+
+
+def test_a_shaped_coart_plan_stays_on_coart_with_no_stages():
+    assert S.routed(SHAPE) == list(SHAPE) and paint_api.target(S.routed(SHAPE)) == "coart"
+    assert not any(f in S.snap_paint(SHAPE, 2) for f in S.STAGES)
+    for f in S.COART_SHAPED:
+        assert any(str(x).startswith(f) for x in SHAPE)

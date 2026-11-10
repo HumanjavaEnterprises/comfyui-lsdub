@@ -96,14 +96,22 @@ def snap_paint(paint_args, m):
     return p
 
 
+# the coart planner's own shaping (recipe layers_v16_1_shape, the mouth_stack layers_shape): a face that asks for it keeps coart. On the
+# demo face, routed against classic: sung onsets met 8/12 -> 7/12, truth 0.465 -> 0.449 (the stray shuts 2 -> 0), so it stays.
+COART_SHAPED = ("--coart-phones", "--coart-function-gate", "--coart-closure-ramp", "--coart-gap-anchor")
+
+
 def routed(paint_args, snap=True):
     """the paint flags sing paints with. The vocal-driven mouth (STAGES) rides the plain targets only, so on a coart face (a preset's
     layer stack, e.g. landing's layers_v16_1) the stages would drop and the mouth stay 0.2.x. With SNAP on and --warp-events not
     `classic`/`off` in the caller's flags, a coart target paints on the plain target instead (`--warp-target v9` appended: the last one
     wins); the layer stack is unchanged and the coart-only flags fall inert. Classic (or snap off, or any other target): unchanged, so
-    the 0.2.x paint stays byte-identical. The native candidate of the auto pick keeps the caller's flags."""
+    the 0.2.x paint stays byte-identical. A shaped coart plan (COART_SHAPED) stays on coart too, with the stages off. The native candidate
+    of the auto pick keeps the caller's flags."""
     a = list(paint_args)
     if not snap or flag_value(a, "--warp-events") in ("classic", "off") or paint_api.target(a) != "coart":
+        return a
+    if any(has_flag(a, f) for f in COART_SHAPED):  # a shaped coart plan (layers_v16_1_shape) stays on coart: routed it did not hold up
         return a
     return [*a, "--warp-target", "v9"]
 
@@ -229,9 +237,12 @@ def compressed_vocal(vocal, work):
 
 
 def plan_t0(t0, paint_args, rate):
-    """where --coart-advance-ms puts the plan, on the track's whole frames as the paint moves it."""
+    """where --coart-advance-ms puts the plan, on the track's whole frames as the paint moves it. Only the coart planner reads the
+    advance (mouth_warp): on any other target (a routed coart face, sing.routed) the plan is not moved and neither is the gate's curve."""
     from .coart import whole_frames
 
+    if paint_api.target(paint_args) != "coart":
+        return t0
     return t0 + whole_frames(paint_api.advance_s(paint_args), rate)
 
 
@@ -450,7 +461,7 @@ def run(
                 n,
                 a2f,
                 info,
-                t_plan=t_plan,
+                t_plan=plan_t0(t0, native_args, fps * m),  # the native paint keeps the caller's target, so its own advance
                 native_occ=native_occ,
                 events_on=stage_value(paint_args, snap_flags, "--warp-events") == "vocal",
             )
