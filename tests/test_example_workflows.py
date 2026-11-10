@@ -26,7 +26,7 @@ def schemas(pack):
 
 
 PENDING = {'LSDubProject': ('mouth_stack',), 'LSDubScorecard': ('sharpness_mode',), 'LSDubAlign': ('retime_to_vocal', 'lead_sheet', 'lead_overrides', 'aligner'),
-           'LSDubTweaks': ('warp_events', 'warp_hold', 'warp_closures', 'warp_aperture')}  # appended trailing optionals
+           'LSDubTweaks': ('warp_events', 'warp_hold', 'warp_closures', 'warp_aperture', 'warp_realise')}  # appended trailing optionals
 PENDING_SOCKETS = {'LSDubFixIt': ('scorecard', 'ruler')}                                    # saved before these; regenerated with the rest
 
 

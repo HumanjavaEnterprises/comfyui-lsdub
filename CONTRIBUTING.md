@@ -49,8 +49,11 @@ Before it: write the `## X.Y.Z` section in CHANGELOG.md (see Release notes) and 
 microsite's `docs/changelog.html` on its main. The command refuses unless both trees are clean and on main and engine CI is
 green; bumps the version, the Icon/Banner URLs and CITATION.cff; regenerates the node tables and the bug form; vendors the
 engine; runs the pack checks; pushes `release/X.Y.Z` and waits for CI and Install path; then fast-forwards main, tags `vX.Y.Z`,
-watches the publish (which runs Install path again first), confirms the Registry lists the version and checks the site
-deploy. Any failure before the tag stops with a plain message and leaves nothing changed remotely.
+watches the publish (which runs Install path again first), confirms the Registry lists the version, then deploys the site
+from your box: a clean microsite checkout on main, equal to origin/main, through wrangler's own login (`npx wrangler login`
+once, account fa095a45453409a42f1c739a174e609f; an exported `CLOUDFLARE_API_TOKEN` is ignored), and checks that
+https://lsdub.sndbnch.app/changelog answers 200 with the new version. To deploy the site by hand: from the microsite's clean
+main, `env -u CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID=fa095a45453409a42f1c739a174e609f npx wrangler deploy`. Any failure before the tag stops with a plain message and leaves nothing changed remotely.
 
 If release.py stops part way:
 - Before "push release/X.Y.Z": nothing remote changed. Fix the cause; delete the local `release/X.Y.Z` branch
@@ -63,9 +66,5 @@ If release.py stops part way:
   release.py stopped before it did (`git -C ../lsdub push origin main`).
 release.py names what it already pushed whenever it stops.
 
-Repository secrets:
-- `REGISTRY_ACCESS_TOKEN` (here): the Comfy Registry publisher key, already set.
-- `MICROSITE_DISPATCH_TOKEN` (here): a fine-grained GitHub token, resource owner HumanjavaEnterprises, repository access only
-  `lsdub.web.microsite.src`, permission Contents: Read and write (what `POST /repos/.../dispatches` needs). Without it the
-  publish job's site step prints a notice and skips, and `release.py` starts the deploy itself with your `gh` login.
-- `CLOUDFLARE_API_TOKEN` (in the microsite repo): see its README, Deploys.
+Repository secrets: only `REGISTRY_ACCESS_TOKEN` (here), the Comfy Registry publisher key, already set. The site needs no
+secret: it deploys from the maintainer's box (above), the one deploy path.

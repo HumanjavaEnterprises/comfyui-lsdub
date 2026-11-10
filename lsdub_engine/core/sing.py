@@ -42,25 +42,48 @@ GATE_KEYS = (
     "corr", "corr_all", "best", "lag_ms", "corr_pm1", "open_in_silence", "rise_ms", "closure_hit", "pass", "vocal_frac",
     "truth", "truth_lag_ms", "truth_best", "truth_level", "truth_events", "truth_pass", "truth_kept", "truth_kept_lag_ms",
 )  # fmt: skip
+AUTO_EV_KEYS = (
+    "ev_read",
+    "ev_band",
+    "ev_band_why",
+    "ev_onset_hit",
+    "ev_onset_n",
+    "ev_closure_hit",
+    "ev_closure_n",
+    "ev_spurious",
+    "ev_odds",
+)
 AUTO_KEYS = ("truth", "truth_lag_ms", "corr", "best", "open_in_silence", "rise_ms", "closure_hit", "pass")
 SNAP = dict(
     lead=0.06,
     word_close=0.06,
     attack_ms=15.0,
-    paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15", "--warp-shape", "asym"],
-)  # --warp-follow: the plain target holds the opening near the plan, so a take's own mouth timing does not ride through.
+    paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15", "--warp-shape", "asym",
+           "--warp-events", "vocal", "--warp-hold", "nucleus-follow", "--warp-closures", "aligned-press", "--warp-aperture", "p95",
+           "--warp-realise", "events"],
+)  # fmt: skip
+# --warp-follow: the plain target holds the opening near the plan, so a take's own mouth timing does not ride through.
 # --warp-shape asym: closing edges 20 ms early, openings on time (core/drive_shape.py); a --warp-shape in the caller's flags wins
+# the vocal-driven mouth (0.3.0): the syllable events off the vocal, one held opening per syllable that follows the voice's level,
+# closures only on the lyric's p/b/m pressed to contact, vowels opened to the singer's own widest, and the plan realised inside each
+# onset window. Plain targets only (coart has its own planner); a caller's value for any of them wins, and `classic` on each is 0.2.x.
+STAGES = ("--warp-events", "--warp-hold", "--warp-closures", "--warp-aperture", "--warp-realise")
+CLASSIC = {"--warp-events": "off", "--warp-hold": "off", "--warp-closures": "plan", "--warp-aperture": "off", "--warp-realise": "off"}
+CALLER_WINS = ("--warp-shape", *STAGES)
 
 
 def snap_paint(paint_args, m):
     """SNAP's paint flags. A --warp-temporal in the caller's flags, in output frames, holds here at the internal rate (x m); it
     never goes under SNAP's own. --warp-temporal-width, in output frames too, the same, and --warp-temporal-spare eases over one output
-    frame. A --warp-shape in the caller's flags replaces SNAP's (--warp-shape off: the drive as it was before asym). Named by nobody:
-    SNAP's flags unchanged."""
+    frame. A --warp-shape or a mouth stage flag (STAGES) in the caller's flags replaces SNAP's (--warp-shape off: the drive as it was
+    before asym; `classic` on a stage: the 0.2.x mouth). The stages ride only on the plain targets. Named by nobody: SNAP's flags
+    unchanged."""
     p = list(SNAP["paint"])
-    if any(str(x) == "--warp-shape" or str(x).startswith("--warp-shape=") for x in paint_args):
-        i = p.index("--warp-shape")
-        del p[i : i + 2]
+    plain = paint_api.target(paint_args) not in ("coart", "own")
+    for f in CALLER_WINS:
+        if has_flag(paint_args, f) or (f in STAGES and not plain):
+            i = p.index(f)
+            del p[i : i + 2]
     t = paint_api.temporal(paint_args)
     if t is not None:
         i = p.index("--warp-temporal") + 1
@@ -71,6 +94,34 @@ def snap_paint(paint_args, m):
     if any(str(x) == "--warp-temporal-spare" for x in paint_args):
         p += ["--warp-temporal-spare-ease", str(float(m))]
     return p
+
+
+# the coart planner's own shaping (recipe layers_v16_1_shape, the mouth_stack layers_shape): a face that asks for it keeps coart. On the
+# demo face, routed against classic: sung onsets met 8/12 -> 7/12, truth 0.465 -> 0.449 (the stray shuts 2 -> 0), so it stays.
+COART_SHAPED = ("--coart-phones", "--coart-function-gate", "--coart-closure-ramp", "--coart-gap-anchor")
+
+
+def routed(paint_args, snap=True):
+    """the paint flags sing paints with. The vocal-driven mouth (STAGES) rides the plain targets only, so on a coart face (a preset's
+    layer stack, e.g. landing's layers_v16_1) the stages would drop and the mouth stay 0.2.x. With SNAP on and --warp-events not
+    `classic`/`off` in the caller's flags, a coart target paints on the plain target instead (`--warp-target v9` appended: the last one
+    wins); the layer stack is unchanged and the coart-only flags fall inert. Classic (or snap off, or any other target): unchanged, so
+    the 0.2.x paint stays byte-identical. A shaped coart plan (COART_SHAPED) stays on coart too, with the stages off. The native candidate
+    of the auto pick keeps the caller's flags."""
+    a = list(paint_args)
+    if not snap or flag_value(a, "--warp-events") in ("classic", "off") or paint_api.target(a) != "coart":
+        return a
+    if any(has_flag(a, f) for f in COART_SHAPED):  # a shaped coart plan (layers_v16_1_shape) stays on coart: routed it did not hold up
+        return a
+    return [*a, "--warp-target", "v9"]
+
+
+def stage_value(paint_args, snap_flags, name):
+    """the value a mouth stage flag has on this paint: the caller's, else SNAP's (snap_flags, as snap_paint gave them); `classic`
+    read as the 0.2.x value. None: neither names it (the paint's own default)."""
+    v = flag_value(paint_args, name)
+    v = flag_value(snap_flags, name) if v is None else v
+    return CLASSIC.get(name) if v == "classic" else v
 
 
 # ---------------------------------------------------------------------------------------------------- pick
@@ -102,12 +153,11 @@ def track_target(warp_json, n, m):
 
 
 def warp_audio(paint_args, snap_flags, vocal):
-    """the stem the event stage reads (--warp-audio), set when --warp-events is among the paint's flags (the caller's or SNAP's) and
-    the caller did not name one; () otherwise, so a paint without the stage gets the argv it always did."""
-    flags = [str(x) for x in (*paint_args, *snap_flags)]
-    if "--warp-events" not in flags and not any(f.startswith("--warp-events=") for f in flags):
+    """the stem the event stage reads (--warp-audio), set when --warp-events is on (vocal) in the paint's flags (the caller's or SNAP's)
+    and the caller did not name one; () otherwise, so a paint without the stage gets the argv it always did."""
+    if stage_value(paint_args, snap_flags, "--warp-events") in (None, "off"):
         return ()
-    if "--warp-audio" in flags or any(f.startswith("--warp-audio=") for f in flags):
+    if has_flag(paint_args, "--warp-audio") or has_flag(snap_flags, "--warp-audio"):
         return ()
     return ("--warp-audio", str(vocal))
 
@@ -187,9 +237,12 @@ def compressed_vocal(vocal, work):
 
 
 def plan_t0(t0, paint_args, rate):
-    """where --coart-advance-ms puts the plan, on the track's whole frames as the paint moves it."""
+    """where --coart-advance-ms puts the plan, on the track's whole frames as the paint moves it. Only the coart planner reads the
+    advance (mouth_warp): on any other target (a routed coart face, sing.routed) the plan is not moved and neither is the gate's curve."""
     from .coart import whole_frames
 
+    if paint_api.target(paint_args) != "coart":
+        return t0
     return t0 + whole_frames(paint_api.advance_s(paint_args), rate)
 
 
@@ -263,6 +316,9 @@ def run(
     again = dict(paint_args=paint_args, char=char, db=db, box=box, face_target=face_target, fps_mult=fps_mult, snap=snap, a2f=a2f,
                  lead=lead, word_close=word_close, auto=auto, preset=preset, lossless=lossless, pump=pump, drive_comp=drive_comp)  # fmt: skip
     align0 = align
+    native_args, paint_args = list(paint_args), routed(paint_args, snap)
+    if paint_args != native_args:
+        print("sing: the vocal-driven mouth rides the plain target: --warp-target v9 on coart (classic keeps coart)", file=sys.stderr)
     if not a2f:
         wt = paint_api.target(paint_args)
         by = (
@@ -322,13 +378,11 @@ def run(
     sd += paint_api.dyn_flags(paint_args)
     if word_close:
         vs += ["--word-close", str(word_close)]
-    hold = has_flag(paint_args, "--warp-hold") or has_flag(SNAP["paint"] if snap else (), "--warp-hold")
+    snap_flags = snap_paint(paint_args, m) if snap else ()
+    hold = stage_value(paint_args, snap_flags, "--warp-hold") not in (None, "off")
     if hold:  # the hold stage writes the opening: the track carries the class opening alone, no envelope under it
         vs += ["--open-curve", "off"]
-    if word_close and (flag_value(paint_args, "--warp-closures") or flag_value(SNAP["paint"] if snap else (), "--warp-closures")) in (
-        "aligned",
-        "aligned-press",
-    ):
+    if word_close and stage_value(paint_args, snap_flags, "--warp-closures") in ("aligned", "aligned-press"):
         vs += ["--word-close-vocal"]  # the between-word press only where the vocal drops
     steps.call("sung_dyn", sd, quiet=True)
     steps.call("visemes", vs, quiet=True)
@@ -341,9 +395,9 @@ def run(
         user_overrides=paint_args,
         operational=[
             *paint_api.coart_dyn(paint_args, dyn),
-            *(snap_paint(paint_args, m) if snap else ()),
+            *snap_flags,
             *(("--occluder-mask", occ) if mask else ()),
-            *warp_audio(paint_args, snap_paint(paint_args, m) if snap else (), drive),
+            *warp_audio(paint_args, snap_flags, drive),
         ],
     )
     t_plan = plan_t0(t0, paint_args, fps * m)  # the plan moved: the gate reads the same curve
@@ -393,7 +447,23 @@ def run(
     if auto:
         info.update(
             auto_select(
-                take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, info, t_plan=t_plan, native_occ=native_occ
+                take,
+                align,
+                vocal,
+                t0,
+                out,
+                work,
+                native_args,
+                dyn,
+                R,
+                target,
+                fps,
+                n,
+                a2f,
+                info,
+                t_plan=plan_t0(t0, native_args, fps * m),  # the native paint keeps the caller's target, so its own advance
+                native_occ=native_occ,
+                events_on=stage_value(paint_args, snap_flags, "--warp-events") == "vocal",
             )
         )
         tm["native"] = round(time.perf_counter() - t_, 3)
@@ -419,18 +489,49 @@ def run(
     return info
 
 
+def event_read(video, take, vocal, align, t0, n, fps, paint_args, work=None):
+    """Verify's sync band on one delivered candidate (audits/qa.candidate_events: the judge read through its readings)."""
+    from ..audits import qa
+
+    return qa.candidate_events(video, take, vocal, align, t0, n, fps, flag_value(paint_args, "--warp-phone-models"), work)
+
+
 def pick_paint(s, n):
-    """the rate that wins, by their gates: one that passes beats one that fails, else the better sync, within 0.02 the quieter silences. Unmeasured silence is the worst.
-    The sync is the audio sync (truth) when both gates read it, else the plan corr."""
+    """the rate that wins, by their gates (pick_rule's winner)."""
+    return pick_rule(s, n)[0]
+
+
+def pick_rule(s, n):
+    """(winner, by) of the two gates. 0.3.0: when both carry Verify's event band (a phones reading, s/n["ev_band"]), the one inside it
+    wins if the other is not, unless it is under the envelope floor (truth < TRUTH_FAIL); by = "events". Otherwise (both or neither
+    inside, or no phones reading) the 0.2.x rule: one that passes beats one that fails, else the better sync, within 0.02 the quieter
+    silences; by = "envelope (<why the event band did not decide>)". Unmeasured silence is the worst. The sync is the audio sync
+    (truth) when both gates read it, else the plan corr."""
+    from ..audits import sync_truth as ST
+
+    floor = lambda g: g.get("truth") is not None and g["truth"] < ST.TRUTH_FAIL  # noqa: E731
+    es, en = s.get("ev_band"), n.get("ev_band")
+    if es is None or en is None:
+        why = s.get("ev_read") or n.get("ev_read") or "no event band on both"
+    elif bool(es) == bool(en):
+        why = "both inside the event band" if es else "neither inside the event band"
+    else:
+        win = "sing" if es else "native"
+        if not floor(s if es else n):
+            return win, "events"
+        why = f"the {win} inside the event band is under the envelope floor"
     k = "truth" if s.get("truth") is not None and n.get("truth") is not None else "corr"
     key = lambda g: (g[k] if g[k] is not None else -9, -(g["open_in_silence"] if g.get("open_in_silence") is not None else 9))
+    by = f"envelope ({why})"
     if bool(s.get("pass")) != bool(n.get("pass")):
-        return "native" if n.get("pass") else "sing"
+        return ("native" if n.get("pass") else "sing"), by
     s_c, n_c = key(s), key(n)
-    return "native" if (n_c[0] > s_c[0] + 0.02) or (abs(n_c[0] - s_c[0]) <= 0.02 and n_c[1] > s_c[1]) else "sing"
+    return ("native" if (n_c[0] > s_c[0] + 0.02) or (abs(n_c[0] - s_c[0]) <= 0.02 and n_c[1] > s_c[1]) else "sing"), by
 
 
-def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info, t_plan=None, native_occ=()):
+def auto_select(
+    take, align, vocal, t0, out, work, paint_args, dyn, R, target, fps, n, a2f, sing_info, t_plan=None, native_occ=(), events_on=False
+):
     """Per-shot auto-selection: also run the native warp (lsdub paint on the full take at the frame rate, the pre-sing
     recipe) and keep pick_paint's choice of the two.
     Both are kept: <out>_sing.mp4 and <out>_native.mp4; <out> is the winner. native_occ: the native paint's occluder flags
@@ -471,14 +572,20 @@ def auto_select(take, align, vocal, t0, out, work, paint_args, dyn, R, target, f
     target = target if t_plan is None else moved_target(dyn, n, t_plan, fps, nat_json)  # its own paint, its own offsets
     g_n = gate(nat, R, target, vocal, align, t0, fps, work=os.path.join(work, "native_gate"), warp_json=nat_json)
 
-    win = pick_paint(sing_info, g_n)
+    if events_on:  # the vocal-driven mouth: Verify's event band decides between the two (pick_paint)
+        ev_s = event_read(sng, take, vocal, align, t0, n, fps, paint_args, work)
+        ev_n = event_read(nat, take, vocal, align, t0, n, fps, paint_args, work=None)
+    else:  # classic (0.2.x): the envelope gate alone, as 0.2.x picked
+        ev_s = ev_n = {"ev_read": "classic: the envelope gate picks"}
+    win, by = pick_rule({**sing_info, **ev_s}, {**g_n, **ev_n})
     if win == "native":
         shutil.copyfile(nat, out)
     return {
         "auto": {
             "winner": win,
-            "sing": {k: sing_info.get(k) for k in AUTO_KEYS},
-            "native": {k: g_n.get(k) for k in AUTO_KEYS},
+            "sing": {**{k: sing_info.get(k) for k in AUTO_KEYS}, **{k: ev_s.get(k) for k in AUTO_EV_KEYS if k in ev_s}},
+            "native": {**{k: g_n.get(k) for k in AUTO_KEYS}, **{k: ev_n.get(k) for k in AUTO_EV_KEYS if k in ev_n}},
+            "by": by,
         },
         **(
             {

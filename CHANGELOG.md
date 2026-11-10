@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 (2026-11-09)
+
+- The new mouth is now the default, on the shipped demo face too; set the switches to classic for 0.2.x output (Mouth Tweaks' five mouth switches and Align's `aligner`).
+- Verify's bands now read the mouth against the vocal: PASS needs clearly more sung syllables met than chance, the p/b/m shut and no extra shuts.
+- On 190 test shots against 0.1.11: syllables met 0.54 → 0.72, p/b/m shut 0.27 → 0.55, vowel opening 0.89 → 0.97, stray shuts 2 → 0.
+- Verify PASS on those shots: 0.1.11 8, the new mouth 59, the 1140 controls 0. The stricter target is shown beside it.
+- New Mouth Tweaks switch `warp_realise`; Align now defaults to `ctc` (downloads 1.2 GB on first use).
+- Workflows saved with 0.2.x values still load and keep the 0.2.x mouth.
+
+Full changelog: https://lsdub.sndbnch.app/changelog
+
 ## 0.2.2 (2026-11-09)
 
 - Fixed: LSDub Dub renders again with the new mouth switches on (0.2.1 failed every shot there).

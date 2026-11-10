@@ -164,10 +164,10 @@ class LSDubAlign(io.ComfyNode):
                                          'read by Verify.'),
                 io.String.Input('lead_overrides', multiline=True, default='', optional=True,
                                 tooltip='With lead_sheet: your corrections, one per line: pass 10.04 11.93 or lead 10.04 10.49 (seconds).'),
-                io.Combo.Input('aligner', options=['sphinx', 'ctc'], default='sphinx', optional=True,
-                               tooltip='How the lyric is timed on the vocal. sphinx = the 0.1.11 chain (speech aligner per phrase, '
-                                       'speech-to-text spread where it fails); ctc = the lyric\'s sounds forced onto a phone recogniser\'s '
-                                       'frames (first use downloads a 1.2 GB model); speech-to-text then only picks which lines are sung.'),
+                io.Combo.Input('aligner', options=['ctc', 'classic'], default='ctc', optional=True,
+                               tooltip='How the lyric is timed on the vocal. ctc = the lyric\'s sounds forced onto a phone recogniser\'s '
+                                       'frames (first use downloads a 1.2 GB model); speech-to-text then only picks which lines are sung. '
+                                       'classic = the 0.2.x chain (speech aligner per phrase, speech-to-text spread where it fails).'),
             ],
             outputs=[T.LSDubAlign.Output(display_name='align', tooltip='Word timings + the song viseme track.'),
                      io.String.Output(display_name='lyric_check', tooltip='Markdown: least certain words and the '
@@ -179,23 +179,35 @@ class LSDubAlign(io.ComfyNode):
         return (song.lead or song.mix) if vocal is None else None
 
     @classmethod
-    def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal=False, lead_sheet=False, lead_overrides='', aligner='sphinx'):
+    def _key(cls, project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal=False, lead_sheet=False, lead_overrides='', aligner='ctc'):
         transcript_json = _input_path(transcript_json)
         vh = media.audio_hash(vocal) if vocal is not None else (song.hashes.get('lead') or song.hash or file_hash(cls._vocal(song, None)))
         tj = file_hash(transcript_json) if transcript_json else ''
+        aligner = cls._aligner(aligner)
         return stage_key('LSDubAlign', {'vocal': vh, 'lyrics': lyrics.hash if lyrics else 'transcript', 'pron': text_hash(pronunciations.strip()),
                                         'stt': stt_model, 'transcript': tj, 'v': 3, 'which': 'given' if vocal is not None else
                                         ('lead' if song.lead else 'mix'), **({'retime': 1} if retime_to_vocal else {}),
-                                        **({'lead_sheet': text_hash(lead_overrides.strip())} if lead_sheet else {})}, [project.cache_key()])
+                                        **({'lead_sheet': text_hash(lead_overrides.strip())} if lead_sheet else {}),
+                                        **({'aligner': aligner} if aligner != 'sphinx' else {})}, [project.cache_key()])
+
+    @staticmethod
+    def _aligner(aligner):
+        """the engine's aligner for the Combo: classic (and sphinx, a 0.2.x workflow's saved value) is sphinx."""
+        return 'sphinx' if aligner in ('classic', 'sphinx') else aligner
 
     @classmethod
-    def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides='', aligner='sphinx'):
+    def validate_inputs(cls, aligner='ctc'):
+        return True if aligner in ('ctc', 'classic', 'sphinx') else f'aligner must be ctc or classic, not {aligner!r}'
+
+    @classmethod
+    def fingerprint_inputs(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides='', aligner='ctc'):
         return cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal, lead_sheet, lead_overrides, aligner)
 
     @classmethod
-    def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides='', aligner='sphinx'):
+    def execute(cls, project, song, lyrics=None, vocal=None, pronunciations='', stt_model='large-v3', transcript_json='', retime_to_vocal=False, lead_sheet=False, lead_overrides='', aligner='ctc'):
         from .lsdub_engine.core import lead_sheet as LS, lyric_align as LA, viseme_track as VT, vocalisations as VO, vocal_retime as VR
         transcript_json = _input_path(transcript_json)
+        aligner = cls._aligner(aligner)
         st = project.stage('audio/align', cls._key(project, song, lyrics, vocal, pronunciations, stt_model, transcript_json, retime_to_vocal, lead_sheet, lead_overrides, aligner))
         align, vis, vis_skip, md = st.path('align.json'), st.path('visemes.json'), st.path('visemes_skip.json'), st.path('lyric_check.md')
         if not st.is_done():

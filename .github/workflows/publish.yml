@@ -22,20 +22,3 @@ jobs:
         with:
           personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}   # set this secret in the repo settings
           skip_checkout: 'true'
-  site:   # after a good publish: ask the microsite to deploy its main branch (it serves /changelog)
-    needs: publish
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dispatch lsdub-release to the microsite
-        env:
-          TOKEN: ${{ secrets.MICROSITE_DISPATCH_TOKEN }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          if [ -z "$TOKEN" ]; then
-            echo "::notice title=Site deploy skipped::MICROSITE_DISPATCH_TOKEN is not set, so the microsite was not asked to deploy. Add it (CONTRIBUTING.md, Releases) or deploy the site by hand."
-            exit 0
-          fi
-          curl -sSf -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/HumanjavaEnterprises/lsdub.web.microsite.src/dispatches \
-            -d "{\"event_type\":\"lsdub-release\",\"client_payload\":{\"tag\":\"$TAG\"}}"
-          echo "::notice title=Site deploy requested::lsdub-release $TAG sent to the microsite"

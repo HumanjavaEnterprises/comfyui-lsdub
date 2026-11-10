@@ -941,11 +941,12 @@ def main(argv=None):
     ap.add_argument("--stt-only", action="store_true")
     ap.add_argument(
         "--aligner",
-        choices=["sphinx", "mfa", "best", "ctc"],
+        choices=["sphinx", "mfa", "best", "ctc", "classic"],
+        type=lambda v: "sphinx" if v == "classic" else v,
         default="sphinx",
         help="mfa = Montreal Forced Aligner per phrase, sphinx/whisper chain for phrases MFA fails; best = per phrase, "
         "MFA vs the sphinx/whisper chain, whichever sits better on the vocal envelope (env_score); ctc = the lyric's phones forced "
-        "onto a CTC phone recogniser's frames (core/ctc_align.py), speech-to-text used only to pick the lyric window",
+        "onto a CTC phone recogniser's frames (core/ctc_align.py), speech-to-text used only to pick the lyric window; classic = sphinx (the 0.2.x chain)",
     )
     ap.add_argument(
         "--phone-models", help="ctc: the recogniser's folder (default: LSDUB_PHONE_MODELS, LSDUB_HF_MODELS/wav2vec2-espeak, else the hub)"

@@ -210,6 +210,12 @@ def _not_negative(x):
 
 
 @functools.lru_cache(maxsize=1)
+def classic(old):
+    """argparse type for a mouth drive stage flag: `classic` is the 0.2.x value (old), any other choice as typed. sing's SNAP turns
+    the stages on from 0.3.0; `classic` on each switch gives back the 0.2.x mouth exactly."""
+    return lambda v: old if v == "classic" else v
+
+
 def _parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipe", help="a named recipe (recipes.py): its flags go in at this point, later flags override them")
@@ -439,16 +445,19 @@ def _parser():
     )
     ap.add_argument(
         "--warp-events",
-        choices=["off", "vocal"],
+        choices=["off", "vocal", "classic"],
+        type=classic("off"),
         default="off",
         help="warp (plain targets): the vocal's syllable events written onto the drive track (core/nucleus_events.py): nuclei off the "
         "phone network and the spectral flux, closures off the alignment's P/B/M, rests; read from --warp-audio. Annotation only: no "
-        "pixel moves until a stage reads it",
+        "pixel moves until a stage reads it. classic, here and on --warp-hold / --warp-closures / --warp-aperture / --warp-realise, is the "
+        "0.2.x value (off; plan for closures): sing turns the stages on, classic turns each back off",
     )
     ap.add_argument("--warp-audio", help="warp (--warp-events): the lead stem the events are read from (song time; the track's t0 cuts it)")
     ap.add_argument(
         "--warp-hold",
-        choices=["off", "nucleus", "nucleus-follow"],
+        choices=["off", "nucleus", "nucleus-follow", "classic"],
+        type=classic("off"),
         default="off",
         help="warp (plain targets, needs --warp-events vocal): one held opening per sung syllable (core/nucleus_hold.py): the vowel's "
         "class times a coarse loudness, attack ahead of the onset, held to the next syllable, decayed only into a rest; replaces the "
@@ -460,7 +469,8 @@ def _parser():
     )
     ap.add_argument(
         "--warp-realise",
-        choices=["off", "events"],
+        choices=["off", "events", "classic"],
+        type=classic("off"),
         default="off",
         help="warp (plain targets, needs --warp-events vocal): inside each sung syllable's onset window (the release and the attack) the "
         "plan is applied as planned: full confidence, no residual easing, no temporal smoothing there; everything outside the windows "
@@ -468,7 +478,8 @@ def _parser():
     )
     ap.add_argument(
         "--warp-closures",
-        choices=["plan", "aligned", "aligned-press"],
+        choices=["plan", "aligned", "aligned-press", "classic"],
+        type=classic("plan"),
         default="plan",
         help="warp (plain targets, needs --warp-events vocal): where the lips shut (core/closure_plan.py). plan = the viseme track's PP "
         "frames as planned; aligned = PP only at the alignment's P / B / M read off the vocal, ahead of the burst, every stray PP lifted; "
@@ -476,7 +487,8 @@ def _parser():
     )
     ap.add_argument(
         "--warp-aperture",
-        choices=["off", "map", "loop", "p95"],
+        choices=["off", "map", "loop", "p95", "classic"],
+        type=classic("off"),
         default="off",
         help="warp (plain targets): how far the mouth opens (core/aperture.py). map = the track's opening scaled per shot so its "
         "p95 is a full opening of the take's range; p95 = the same gain read on the wide-vowel nuclei only (needs --warp-events vocal); "

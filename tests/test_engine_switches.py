@@ -14,6 +14,9 @@ import pytest
 BASE = (0.06, 0.06, 512.0, True, True, True, '')
 OLD = ('off', 'take', 'all')                       # the 0.1.9 behaviour
 SNAP_019 = ['--warp-sigma', '0.8', '--warp-temporal', '0.6', '--warp-close-depth', '0.05', '--warp-follow', '0.15']
+STAGES_030 = ['--warp-events', 'vocal', '--warp-hold', 'nucleus-follow', '--warp-closures', 'aligned-press', '--warp-aperture', 'p95',
+              '--warp-realise', 'events']           # 0.3.0: sing's vocal-driven mouth
+CLASSIC = ('classic',) * 5                          # the five mouth-stage Combos at 0.2.x
 
 
 def _engine(pack, name):
@@ -76,14 +79,14 @@ def test_the_defaults_reach_the_engine(pack, tmp_path, monkeypatch):
     c = _run_shot(pack, tmp_path, monkeypatch, _tweaks(pack, 'asym', 'aligner', 'remade'))
     assert c['run']['travel_ref'] == 'aligner' and c['repair']['charge'] == 'remade'
     assert '--warp-shape' not in c['paint']                                     # sing's own asym stands
-    assert SING.snap_paint(c['paint'], 2) == [*SNAP_019, '--warp-shape', 'asym']
+    assert SING.snap_paint(c['paint'], 2) == [*SNAP_019, '--warp-shape', 'asym', *STAGES_030]
     assert _run_shot(pack, tmp_path, monkeypatch, pack.nodes_mouth.DEFAULT_TWEAKS) == c   # no Tweaks node: the same
 
 
 def test_the_0_1_9_values_make_the_0_1_9_calls(pack, tmp_path, monkeypatch):
     SING, MP = _engine(pack, 'sing'), _engine(pack, 'mouth_paint')
-    new = _run_shot(pack, tmp_path, monkeypatch, _tweaks(pack, 'asym', 'aligner', 'remade'))
-    old = _run_shot(pack, tmp_path, monkeypatch, _tweaks(pack, *OLD))
+    new = _run_shot(pack, tmp_path, monkeypatch, _tweaks(pack, 'asym', 'aligner', 'remade', *CLASSIC))
+    old = _run_shot(pack, tmp_path, monkeypatch, _tweaks(pack, *OLD, *CLASSIC))
     assert old['run'] == {**new['run'], 'travel_ref': 'take'} and old['repair'] == {**new['repair'], 'charge': 'all'}
     i = old['paint'].index('--warp-shape')
     assert old['paint'][:i] + old['paint'][i + 2:] == new['paint'] and old['paint'][i + 1] == 'off'

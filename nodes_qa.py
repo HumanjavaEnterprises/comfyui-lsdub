@@ -46,7 +46,9 @@ class LSDubVerify(io.ComfyNode):
                         'dub left as source reads N/A. Frames in vocalisation spans are left out of the sync score. The events column '
                         'reads the mouth against the vocal syllable by syllable (onsets met, p/b/m shut, stray shuts, vowel '
                         'opening, how late the mouth rises), with the phone recogniser when Align downloaded it, else the '
-                        'vocal\'s onsets alone; reported only, it moves no band.',
+                        'vocal\'s onsets alone. With the recogniser it decides the sync: a shot can PASS when its mouth opens on '
+                        'clearly more sung syllables than chance would give, shuts on the sung p/b/m and shuts nowhere else more often '
+                        'than the take; without it the sync is banded as in 0.2.x. The stricter target is shown as its own reading.',
             inputs=[
                 T.LSDubProject.Input('project', tooltip='The LSDub project.'),
                 T.LSDubSource.Input('source', tooltip='The video before the dub.'),
