@@ -72,7 +72,7 @@ def _top_atoms(path):
 
 
 def test_the_watermarked_file_is_faststart(clip, tmp_path):
-    """moov ahead of mdat (G10 lane 11: the saved cut, the site's redub.mp4, was the one file with its moov at the end)."""
+    """moov ahead of mdat (the saved cut, the site's redub.mp4, was the one file with its moov at the end)."""
     out = str(tmp_path / "wm.mp4")
     watermark.apply(clip, out)
     a = _top_atoms(out)

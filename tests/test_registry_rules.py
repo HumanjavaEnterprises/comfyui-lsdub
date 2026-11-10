@@ -22,7 +22,7 @@ def _files(exts=('.py', '.md', '.json', '.txt', '.toml', '.cff', '.yaml', '.yml'
         ds[:] = [x for x in ds if x not in SKIP_DIRS]
         for f in fs:
             if f in SKIP_DIRS: continue                                    # a worktree's .git is a FILE
-            if os.path.splitext(f)[1] in exts: yield os.path.join(d, f)
+            if exts is None or os.path.splitext(f)[1] in exts: yield os.path.join(d, f)
 
 
 def test_no_machine_paths():
@@ -32,6 +32,30 @@ def test_no_machine_paths():
         except (UnicodeDecodeError, OSError): continue
         hits += [f'{os.path.relpath(p, ROOT)}:{i + 1}' for i, ln in enumerate(txt.splitlines()) if MACHINE_PATH.search(ln)]
     assert not hits, hits
+
+
+# the pack ships product code and user docs; the methods stay private (the engine's ledger tools, review reports,
+# research and plan docs). release.py runs this file, so a tree that carries any of them is never tagged.
+METHODS = re.compile('|'.join(['G1' + r'\d\b', 'truth' + '-fix', 'lsdub-tryit' + '-assets', 'review/' + 'G1']))
+METHODS_PATHS = re.compile(r'(^|/)ledger(/|$)|^tests/ledger|^docs/(research|plans)/')
+
+
+def _tracked():
+    try:
+        out = subprocess.run(['git', '-C', ROOT, 'ls-files', '-z'], capture_output=True, check=True).stdout.decode()
+        return [f for f in out.split('\0') if f]
+    except (OSError, subprocess.CalledProcessError):
+        return [os.path.relpath(p, ROOT).replace(os.sep, '/') for p in _files(exts=None)]
+
+
+def test_no_private_methods_in_shipped_tree():
+    files = [f for f in _tracked() if os.path.isfile(os.path.join(ROOT, f))]
+    hits = [f for f in files if METHODS_PATHS.search(f)]
+    for f in files:
+        try: txt = open(os.path.join(ROOT, f), encoding='utf-8').read()
+        except (UnicodeDecodeError, OSError): continue
+        hits += [f'{f}:{i + 1}' for i, ln in enumerate(txt.splitlines()) if METHODS.search(ln)]
+    assert not hits, f'private methods in the shipped tree (keep them in the engine repo): {hits}'
 
 
 def _ruff():

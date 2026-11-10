@@ -1,0 +1,80 @@
+# The install-path test: LSDub in a clean ComfyUI the way a user gets it (ComfyUI's requirements + requirements.txt, no dev
+# extras), CPU only. Every LSDub node registers; Align with aligner ctc from an empty models folder (the real recogniser
+# download); a Dub at defaults; a Dub with the mouth Combos. scripts/install_path_check.py does the work; it runs the same on a
+# laptop. publish.yml calls this workflow first, so a tag that fails it is never published.
+name: Install path
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: ["release/**"]   # scripts/release.py waits for this run before it tags
+  workflow_dispatch:
+  workflow_call:
+  schedule:
+    - cron: "17 6 * * 1"   # weekly: ComfyUI's pin stays put, but PyPI and the Hub do not
+permissions:
+  contents: read
+concurrency:
+  group: install-path-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  COMFYUI_REPO: https://github.com/comfyanonymous/ComfyUI.git
+  COMFYUI_COMMIT: 355cd6b14c92c19ac3188fe528e47a3f21ef5178   # v0.42.0
+  RECOGNISER_REVISION: ae45363bf3413b374fecd9dc8bc1df0e24c3b7f4   # facebook/wav2vec2-lv-60-espeak-cv-ft, as lsdub_engine/_models.py pins it
+  # only used if scripts/fetch_demo.py itself fails (that still fails the job): the released v0.1.0 demo zip at its real checksum
+  DEMO_FALLBACK_URL: https://github.com/HumanjavaEnterprises/comfyui-lsdub/releases/download/v0.1.0/lsdub-demo-0.1.0.zip
+  DEMO_FALLBACK_SHA: 7981fef8f453b0bf29e47b3ffc00b3adcba1d22d8dbe259504f66c2beb00de17
+jobs:
+  install-path:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5
+        with:
+          path: pack
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065   # v5
+        with:
+          python-version: "3.12"
+      - name: System deps (what the README asks a user for)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libgles2 libegl1
+      - name: The pinned recogniser revision is the one the pack pins
+        run: grep -q "$RECOGNISER_REVISION" pack/lsdub_engine/_models.py
+      - name: ComfyUI at the pinned commit
+        run: |
+          git init -q comfy && cd comfy
+          git fetch -q --depth 1 "$COMFYUI_REPO" "$COMFYUI_COMMIT" && git checkout -q FETCH_HEAD
+      - name: A user's venv (ComfyUI requirements + requirements.txt, CPU torch)
+        run: |
+          python -m venv venv
+          venv/bin/pip install -q --upgrade pip
+          venv/bin/pip install -q torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+          venv/bin/pip install -q -r comfy/requirements.txt -r pack/requirements.txt
+          venv/bin/pip freeze | grep -iE '^(torch|transformers|huggingface.hub|mediapipe|numpy|phonemizer)=' || true
+          if venv/bin/python -c "import phonemizer" 2>/dev/null; then echo "::error::phonemizer is installed; the test needs a venv without it"; exit 1; fi
+      - name: Recogniser cache (fetched from the Hub once per revision, then served to the same client path)
+        id: hfcache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
+        with:
+          path: hf-mirror
+          key: lsdub-recogniser-${{ env.RECOGNISER_REVISION }}
+      - name: Demo fallback zip
+        run: curl -sSfL -o demo-fallback.zip "$DEMO_FALLBACK_URL"
+      - name: Install path (nodes, align ctc from empty, dub at defaults, dub with the mouth Combos)
+        run: |
+          venv/bin/python pack/scripts/install_path_check.py --comfyui comfy --pack pack \
+            --hf-mirror hf-mirror --save-mirror hf-mirror \
+            --demo-fallback demo-fallback.zip --demo-fallback-sha "$DEMO_FALLBACK_SHA"
+      - name: "Save the recogniser cache (also when another step failed; the files are checked by sha256 either way)"
+        if: always() && steps.hfcache.outputs.cache-hit != 'true' && hashFiles('hf-mirror/pytorch_model.bin') != ''
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830   # v4
+        with:
+          path: hf-mirror
+          key: lsdub-recogniser-${{ env.RECOGNISER_REVISION }}
+      - name: ComfyUI log
+        if: always()
+        run: tail -n 300 comfy/install-path-comfyui.log || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+        if: failure()
+        with:
+          name: install-path-log
+          path: comfy/install-path-comfyui.log

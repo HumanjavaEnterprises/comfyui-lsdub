@@ -20,10 +20,10 @@ import tempfile
 import urllib.request
 import zipfile
 
-VERSION = '0.1.0'
-TAG = f'v{VERSION}'
+VERSION = '0.1.1'
+TAG = 'demo-0.1.1'
 URL = f'https://github.com/HumanjavaEnterprises/comfyui-lsdub/releases/download/{TAG}/lsdub-demo-{VERSION}.zip'
-SHA256 = 'a431085d931f2b983b620d31710ac868a459d461a6dcb158177d199637790edb'
+SHA256 = '0b15dfcf069b6dc2cac25bbe312137eda435e4ac350cce6b61436419fd2b518c'
 
 
 def unpack(zf, dst):
