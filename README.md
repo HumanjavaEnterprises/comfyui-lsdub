@@ -282,3 +282,7 @@ To cite LSDub, use `CITATION.cff`.
 
 LSDub's output carries an invisible watermark and a metadata tag. Dub only people and characters you have the right
 to use. The demo characters are synthetic.
+
+---
+
+Built by [Humanjava Enterprises](https://humanjava.com) · [Vergel Evans](https://vveerrgg.online) · [Get in touch](https://humanjava.com/#contact)
