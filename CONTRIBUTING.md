@@ -26,10 +26,9 @@ By contributing you agree your work is licensed under the Apache License 2.0, th
 - Each version's section in CHANGELOG.md is what the Comfy Registry shows: at most 6 short topline bullets in
   plain words (what a ComfyUI user gets), then a last line `Full changelog: https://lsdub.sndbnch.app/changelog`.
   The full detail of every change goes on that page, not here.
-- No `## Unreleased` heading in the file; write the `## X.Y.Z` section before running release.py, which does the bump.
-- At the tag the heading names the version in pyproject.toml: `python scripts/release_notes.py` checks all of this and
-  the publish job fails without it. CI (`tests/test_release_notes.py`) checks the same rules on the top section and
-  lets it be one version ahead of pyproject, the state between writing the section and the release.
+- No `## Unreleased` heading in the file; add the section when the version is released.
+- The heading names the version in pyproject.toml. `python scripts/release_notes.py` checks all of this; CI runs it
+  (`tests/test_release_notes.py`) and the publish job fails without it.
 
 ## Stability policy
 - Releases are batched; patch versions only for breakage. Features go into the next minor version.
