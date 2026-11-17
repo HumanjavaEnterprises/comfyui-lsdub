@@ -155,6 +155,8 @@ and `LSDub/qa`.
     (`aligned-press`), `warp_aperture` (`p95`) and `warp_realise` (`events`): one opening per sung syllable, lips shut only on
     the lyric's p/b/m, vowels as wide as the singer's own. Set all five to `classic`, and Align's `aligner` to `classic`, for
     the 0.2.x mouth.
+  - `warp_nuclei` (`lyric`, since 0.3.1): the mouth opens on the sung syllables that fall on a vowel of the lyric, and a held
+    note stays open. `classic` is the 0.3.0 mouth, which opens on every syllable heard in the vocal. Needs `warp_events` `vocal`.
 - **LSDub Dub:** dubs each DUB and DUB-MEDIUM shot.
   - The shot is cropped to a 512 px face and warped at 2x the frame rate. The lower face is pasted back and a measured
     sync gate is applied.
