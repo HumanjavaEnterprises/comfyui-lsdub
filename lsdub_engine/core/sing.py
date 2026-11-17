@@ -51,6 +51,7 @@ AUTO_EV_KEYS = (
     "ev_closure_hit",
     "ev_closure_n",
     "ev_spurious",
+    "ev_spurious_take",
     "ev_odds",
 )
 AUTO_KEYS = ("truth", "truth_lag_ms", "corr", "best", "open_in_silence", "rise_ms", "closure_hit", "pass")
@@ -60,15 +61,18 @@ SNAP = dict(
     attack_ms=15.0,
     paint=["--warp-sigma", "0.8", "--warp-temporal", "0.6", "--warp-close-depth", "0.05", "--warp-follow", "0.15", "--warp-shape", "asym",
            "--warp-events", "vocal", "--warp-hold", "nucleus-follow", "--warp-closures", "aligned-press", "--warp-aperture", "p95",
-           "--warp-realise", "events"],
+           "--warp-realise", "events", "--warp-nuclei", "lyric"],
 )  # fmt: skip
 # --warp-follow: the plain target holds the opening near the plan, so a take's own mouth timing does not ride through.
 # --warp-shape asym: closing edges 20 ms early, openings on time (core/drive_shape.py); a --warp-shape in the caller's flags wins
 # the vocal-driven mouth (0.3.0): the syllable events off the vocal, one held opening per syllable that follows the voice's level,
 # closures only on the lyric's p/b/m pressed to contact, vowels opened to the singer's own widest, and the plan realised inside each
 # onset window. Plain targets only (coart has its own planner); a caller's value for any of them wins, and `classic` on each is 0.2.x.
-STAGES = ("--warp-events", "--warp-hold", "--warp-closures", "--warp-aperture", "--warp-realise")
-CLASSIC = {"--warp-events": "off", "--warp-hold": "off", "--warp-closures": "plan", "--warp-aperture": "off", "--warp-realise": "off"}
+# 0.3.1: --warp-nuclei lyric, a syllable event only where a sung lyric vowel supports it, held notes kept (`classic`/`all`: every detection, 0.3.0).
+# It reads the event stage, so it goes with it: --warp-events classic / off in the caller's flags drops it too (snap_paint).
+STAGES = ("--warp-events", "--warp-hold", "--warp-closures", "--warp-aperture", "--warp-realise", "--warp-nuclei")
+CLASSIC = {"--warp-events": "off", "--warp-hold": "off", "--warp-closures": "plan", "--warp-aperture": "off", "--warp-realise": "off",
+           "--warp-nuclei": "all"}  # fmt: skip
 CALLER_WINS = ("--warp-shape", *STAGES)
 
 
@@ -80,8 +84,9 @@ def snap_paint(paint_args, m):
     unchanged."""
     p = list(SNAP["paint"])
     plain = paint_api.target(paint_args) not in ("coart", "own")
+    events_off = flag_value(paint_args, "--warp-events") in ("classic", "off")
     for f in CALLER_WINS:
-        if has_flag(paint_args, f) or (f in STAGES and not plain):
+        if has_flag(paint_args, f) or (f in STAGES and not plain) or (f == "--warp-nuclei" and events_off):
             i = p.index(f)
             del p[i : i + 2]
     t = paint_api.temporal(paint_args)
@@ -469,6 +474,7 @@ def run(
         tm["native"] = round(time.perf_counter() - t_, 3)
     info["timings"] = tm
     info["medium"] = {k: R[k] for k in ("face_h_px", "zoom", "crop_px", "outside_max_preencode", "not_pasted", "picked")}
+    info["repair_plan"] = repair_plan(native_args, snap)
     if (info.get("retime") or {}).get("used"):
         info = travel_guard(info, take, align0, vocal, t0, out, work, R, again, ref=travel_ref)
     if report:
@@ -501,13 +507,37 @@ def pick_paint(s, n):
     return pick_rule(s, n)[0]
 
 
-def pick_rule(s, n):
+PICK_THINS = ("envelope", "events")
+PICK_THIN = "envelope"  # what picks when Verify's event band reads both candidates and cannot tell them apart (pick_rule)
+PICK_MARGIN = 2  # events: a lead under this is inside the judge's own reading noise on a thin shot (one file read through two boxes
+# differed by 2 of 8 onsets in the 29 stored pairs) and is left to the envelope rule
+
+
+def event_count(g):
+    """the events a candidate's phones reading delivered: sung onsets met + p/b/m shut - the stray shuts over the take's own; None
+    when the gate carries no phones reading with its onset count (classic, flux only, unread)."""
+    if g.get("ev_read") != "phones" or g.get("ev_onset_hit") is None or not g.get("ev_onset_n"):
+        return None
+    on = int(round(g["ev_onset_hit"] * g["ev_onset_n"]))
+    cl = int(round((g.get("ev_closure_hit") or 0.0) * (g.get("ev_closure_n") or 0)))
+    return on + cl - max(0, (g.get("ev_spurious") or 0) - (g.get("ev_spurious_take") or 0))
+
+
+def pick_rule(s, n, thin=None):
     """(winner, by) of the two gates. 0.3.0: when both carry Verify's event band (a phones reading, s/n["ev_band"]), the one inside it
     wins if the other is not, unless it is under the envelope floor (truth < TRUTH_FAIL); by = "events". Otherwise (both or neither
     inside, or no phones reading) the 0.2.x rule: one that passes beats one that fails, else the better sync, within 0.02 the quieter
     silences; by = "envelope (<why the event band did not decide>)". Unmeasured silence is the worst. The sync is the audio sync
-    (truth) when both gates read it, else the plan corr."""
+    (truth) when both gates read it, else the plan corr.
+    thin (PICK_THINS; None = PICK_THIN): "events" puts one more rule ahead of the envelope's when both carry a phones reading the band
+    could not split (both inside, or neither: mostly shots with too few onsets to read): the candidate that delivered more events
+    (event_count) by PICK_MARGIN or more wins unless it is under the envelope floor; by = "event count (<why>)". A smaller lead goes on
+    to the envelope."""
     from ..audits import sync_truth as ST
+
+    thin = PICK_THIN if thin is None else thin
+    if thin not in PICK_THINS:
+        raise ValueError(f"pick_rule: thin {thin!r} is not one of {PICK_THINS}")
 
     floor = lambda g: g.get("truth") is not None and g["truth"] < ST.TRUTH_FAIL  # noqa: E731
     es, en = s.get("ev_band"), n.get("ev_band")
@@ -520,6 +550,10 @@ def pick_rule(s, n):
         if not floor(s if es else n):
             return win, "events"
         why = f"the {win} inside the event band is under the envelope floor"
+    if thin == "events" and es is not None and en is not None and bool(es) == bool(en):
+        cs, cn = event_count(s), event_count(n)
+        if cs is not None and cn is not None and abs(cs - cn) >= PICK_MARGIN and not floor(s if cs > cn else n):
+            return ("sing" if cs > cn else "native"), f"event count ({why})"
     k = "truth" if s.get("truth") is not None and n.get("truth") is not None else "corr"
     key = lambda g: (g[k] if g[k] is not None else -9, -(g["open_in_silence"] if g.get("open_in_silence") is not None else 9))
     by = f"envelope ({why})"
@@ -770,17 +804,52 @@ def repaired_silence(video, info, work):
     return SN.snap_metrics(op, vox, [], info["t0"], info["fps"], dt=dt)["open_in_silence"]
 
 
-def repair(take, sung, out, info, work, report=None, charge="remade"):
+REPAIR_PLANS = ("off", "warp")
+REPAIR_PLAN = "warp"  # sing's default for the vocal-driven mouth (repair_plan); the 0.2.x mouth (classic) is always "off"
+
+
+def repair_plan(paint_args, snap=True):
+    """the repair's plan mode for a paint: REPAIR_PLAN, and "off" for the 0.2.x mouth (snap off, or --warp-events classic / off in the
+    caller's flags), whose repair stays as 0.2.x made it."""
+    classic = not snap or flag_value(paint_args, "--warp-events") in ("classic", "off")
+    return "off" if classic else REPAIR_PLAN
+
+
+def delivered_plan(info, work):
+    """(take gap, planned gap) per output frame of the paint the shot delivers: the sing paint's warp json at the frames medium picked,
+    or the native candidate's (painted at the output rate) when the auto pick took it. None when there is none to read."""
+    from . import continuity as CONT
+
+    wj = info.get("warp_json")
+    if not wj or not os.path.exists(wj):
+        return None
+    if (info.get("auto") or {}).get("winner") == "native":  # (beside the sing paint's json: the work dir of the run that delivered)
+        return CONT.plan_of(os.path.join(os.path.dirname(wj), "native_warp.json"), n=info.get("frames"))
+    picked = (info.get("medium") or {}).get("picked")
+    return CONT.plan_of(wj, picked=picked) if picked else CONT.plan_of(wj, n=info.get("frames")) if info.get("fps_mult", 1) == 1 else None
+
+
+def repair(take, sung, out, info, work, report=None, charge="remade", plan=None):
     """the continuity repair (single-frame pops against the take) on a sung shot, delivered only when the repaired mouth still follows
     the vocal: it puts take frames back, and a take's mouth is not on the song. A repair that costs more than REPAIR_DROP of the audio
     sync, turns a passing shot into a failing one, or puts its open-in-silence over GATE_SILENCE, is undone (out = the sung shot).
     charge: what the continuity pass's coherence share is charged with (continuity.run's charge: "remade", the default, or "all").
+    plan: "warp" = the pass reads the paint's plan (delivered_plan): a change the plan asked for is not a pop, and the take's mouth
+    is not put back where it is off the plan; "off" = the pass sees the pixels only (0.3.0). None: what sing.run recorded for this
+    paint (info["repair_plan"]; "off" when it recorded none).
     -> the reading, into the gate's info."""
     import shutil
 
     from . import continuity as CONT
 
-    CONT.run(take, sung, out, report=report, charge=charge)
+    mode = info.get("repair_plan", "off") if plan is None else plan
+    if mode not in REPAIR_PLANS:
+        raise ValueError(f"repair plan {mode!r}")
+    P = delivered_plan(info, work) if mode == "warp" else None
+    if P is None:
+        CONT.run(take, sung, out, report=report, charge=charge)  # (the 0.3.0 call, as it was)
+    else:
+        CONT.run(take, sung, out, report=report, charge=charge, plan=P)
     if info.get("truth") is None or not os.path.exists(os.path.join(work, "medium.json")):
         return {"repair": "kept"}
     t = delivered_truth(out, info, work)

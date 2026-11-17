@@ -43,6 +43,10 @@ APEX_LEAD_S = 0.0  # s the apex is placed ahead of the onset. Measured and REFUS
 # output frame after the plan's (median 1.0 frame, 106 onsets, ledger S5R-apex-lag.json), but a 0.04 s lead moved the judge's rise mark
 # (the attack's steepest point, ~50 ms before the apex) outside its +-60 ms and the plan's own onset reading fell 0.93 -> 0.63 while
 # the render followed it down (0.67 -> 0.58); the realisation stage closes the render-plan gap instead. Kept as a constant at 0.
+ONSETS = ("apex", "rise")  # where the attack sits on the onset: its apex (0.3.0), or its rise
+RISE_LAG_S = 0.04  # s: onset "rise" lands the apex this long after the onset, so the attack's steepest point (the judge's rise mark,
+# ~50 ms before the apex) sits 10 ms ahead of the onset instead of 50. The 190 stored plans replayed (ledger plan04.py): the plan's
+# own onsets met 1042 -> 1113 of 1173, rise lag median -20 -> +6 ms, sd 37 -> 25 ms; 0.02 gives 1088, 0.06 no more than 0.04.
 RELEASE_S = 0.06  # s the pre-onset release takes, ending where the attack starts
 DIP = 0.19  # the pre-onset release depth under the lower of the two syllables' levels: the upper quartile of the six takes' own pre-onset
 # dips (peak in the 150 ms after a judge onset minus the trough in the 150 ms before, over the take's p5..p95 range: median 0.03, q75 0.19,
@@ -130,10 +134,13 @@ def follow(times, events, level, hop, c, floor=FOLLOW_FLOOR, span_db=FOLLOW_DB, 
     return out
 
 
-def held(frames, fps, t0=None, mode="nucleus", level=None, hop=0.01):
+def held(frames, fps, t0=None, mode="nucleus", level=None, hop=0.01, onset="apex"):
     """-> (new frames with `open` held per nucleus, info). Frames need the event stage's `ev`; frames without it come back unchanged.
     t0: the clip's start in the frames' `t` clock (default: the first frame's t). mode nucleus-follow: `follow` on top, from the
-    clip's level per hop (level, clip clock)."""
+    clip's level per hop (level, clip clock). onset (ONSETS): "rise" puts the attack's rise on the onset (apex RISE_LAG_S after it)."""
+    if onset not in ONSETS:
+        raise ValueError(f"--warp-onset {onset!r}")
+    lead = APEX_LEAD_S if onset == "apex" else -RISE_LAG_S
     if not frames or not any("ev" in f for f in frames):
         return list(frames), {"mode": "nucleus", "events": 0, "note": "no events on the track"}
     t0 = float(frames[0].get("t", 0.0)) if t0 is None else float(t0)
@@ -144,7 +151,7 @@ def held(frames, fps, t0=None, mode="nucleus", level=None, hop=0.01):
         if e.get("k", -1) >= 0 and e["k"] not in seen:
             seen.add(e["k"])
             events.append(dict(e))
-    c = curve(times, events)
+    c = curve(times, events, lead=lead)
     if mode == "nucleus-follow" and level is not None:
         c = follow(times, events, level, hop, c)
     out = []
@@ -163,7 +170,8 @@ def held(frames, fps, t0=None, mode="nucleus", level=None, hop=0.01):
         nuclei=sum(1 for e in events if e["kind"] == "nucleus"),
         reversals=reversals,
         attack_s=ATTACK_S,
-        apex_lead_s=APEX_LEAD_S,
+        apex_lead_s=lead,
+        onset=onset,
         decay_s=DECAY_S,
         rest_open=REST_OPEN,
         release_s=RELEASE_S,
