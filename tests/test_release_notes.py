@@ -3,6 +3,7 @@
 """The publish workflow's release-notes rule, run on the repo's CHANGELOG.md so CI fails before a tag does."""
 
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -13,9 +14,18 @@ rn = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(rn)
 
 
+def _key(v):
+    return tuple(int(x) for x in v.split("."))
+
+
 def test_repo_changelog_passes():
-    notes = rn.check((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), rn.pyproject_version())
-    assert notes.startswith(f"LSDub {rn.pyproject_version()}")
+    """The top section is the released version, or the next one: release.py wants that section written before it bumps
+    pyproject. Every other rule holds either way; the publish job itself stays strict (the heading names pyproject)."""
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    top = re.search(r"\d+\.\d+\.\d+", rn.top_section(text)[0]).group(0)
+    assert _key(top) >= _key(rn.pyproject_version())
+    notes = rn.check(text, top)
+    assert notes.startswith(f"LSDub {top}")
     assert "Unreleased" not in notes.splitlines()[0]
 
 
