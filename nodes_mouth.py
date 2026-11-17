@@ -29,16 +29,19 @@ WARP_SHAPES = ('asym', 'off')                               # the first is the e
 TRAVEL_GUARDS = ('aligner', 'take')
 # the vocal-driven mouth stages (engine core/nucleus_events, nucleus_hold, closure_plan, aperture, the realise stage): since 0.3.0 the first
 # value is the engine's default (sing.SNAP turns them on); `classic` is the 0.2.x mouth, one choice away on each. STAGE_FLAGS maps a Combo
-# to its paint flag. LEGACY: the values a 0.2.x workflow saved for the old default, read as `classic`.
+# to its paint flag. LEGACY: the values a 0.2.x workflow saved for the old default, read as `classic`. warp_nuclei (0.3.1) rides the
+# event stage: its `classic` is the 0.3.0 mouth, and no 0.2.x workflow saved it (LEGACY_STAGES leaves it out).
 WARP_EVENTS = ('vocal', 'classic')
 WARP_HOLDS = ('nucleus-follow', 'nucleus', 'classic')
 WARP_CLOSURES = ('aligned-press', 'aligned', 'classic')
 WARP_APERTURES = ('p95', 'map', 'classic')
 WARP_REALISES = ('events', 'classic')
+WARP_NUCLEI = ('lyric', 'classic')
 STAGE_FLAGS = {'warp_events': ('--warp-events', WARP_EVENTS), 'warp_hold': ('--warp-hold', WARP_HOLDS),
                'warp_closures': ('--warp-closures', WARP_CLOSURES), 'warp_aperture': ('--warp-aperture', WARP_APERTURES),
-               'warp_realise': ('--warp-realise', WARP_REALISES)}
+               'warp_realise': ('--warp-realise', WARP_REALISES), 'warp_nuclei': ('--warp-nuclei', WARP_NUCLEI)}
 LEGACY = {'off': 'classic', 'plan': 'classic'}
+LEGACY_STAGES = ('warp_events', 'warp_hold', 'warp_closures', 'warp_aperture', 'warp_realise')
 COHERENCE_CHARGES = ('remade', 'all')
 SWITCH_TIPS = dict(
     warp_shape='Mouth shape on the snap warp: asym closes the lips 20 ms early and opens them on time; off is the 0.1.9 shape.',
@@ -58,6 +61,8 @@ SWITCH_TIPS = dict(
                   'over every frame; classic = as planned (0.2.x). p95 needs warp_events vocal: without it p95 is the same as map.',
     warp_realise='events lets each sung syllable\'s attack through the smoothing, so short syllables still show; classic = the 0.2.x '
                  'smoothing everywhere. Needs warp_events vocal.',
+    warp_nuclei='Which sung syllables open the mouth: lyric keeps the ones on a vowel of the lyric and holds a long note open; classic = '
+                'every syllable heard in the vocal, the 0.3.0 mouth shapes. Needs warp_events vocal.',
 )
 SING_EXTRA = ['--warp-track-mode', 'chain']                 # the standard sing recipe's track mode
 
@@ -259,6 +264,8 @@ class LSDubTweaks(io.ComfyNode):
                                tooltip=SWITCH_TIPS['warp_aperture']),
                 io.Combo.Input('warp_realise', options=['events', 'classic'], default='events', optional=True,
                                tooltip=SWITCH_TIPS['warp_realise']),
+                io.Combo.Input('warp_nuclei', options=['lyric', 'classic'], default='lyric', optional=True,
+                               tooltip=SWITCH_TIPS['warp_nuclei']),
             ],
             outputs=[T.LSDubTweaks.Output(display_name='tweaks', tooltip='The mouth controls.')],
         )
@@ -277,7 +284,7 @@ class LSDubTweaks(io.ComfyNode):
     @classmethod
     def execute(cls, lead, word_close, face_target, snap, auto, continuity, settings, jaw_csv='', sync_advance_ms=0.0, sync_phrases=False,
                 warp_shape='asym', travel_guard='aligner', coherence_charge='remade', warp_events='vocal', warp_hold='nucleus-follow',
-                warp_closures='aligned-press', warp_aperture='p95', warp_realise='events'):
+                warp_closures='aligned-press', warp_aperture='p95', warp_realise='events', warp_nuclei='lyric'):
         try:
             paint_api.split_settings(settings)
         except ValueError as e:
@@ -293,8 +300,9 @@ class LSDubTweaks(io.ComfyNode):
         for name, value, options in (('warp_shape', warp_shape, WARP_SHAPES), ('travel_guard', travel_guard, TRAVEL_GUARDS),
                                      ('coherence_charge', coherence_charge, COHERENCE_CHARGES), ('warp_events', warp_events, WARP_EVENTS),
                                      ('warp_hold', warp_hold, WARP_HOLDS), ('warp_closures', warp_closures, WARP_CLOSURES),
-                                     ('warp_aperture', warp_aperture, WARP_APERTURES), ('warp_realise', warp_realise, WARP_REALISES)):
-            if name in STAGE_FLAGS and value not in options and LEGACY.get(value) in options:
+                                     ('warp_aperture', warp_aperture, WARP_APERTURES), ('warp_realise', warp_realise, WARP_REALISES),
+                                     ('warp_nuclei', warp_nuclei, WARP_NUCLEI)):
+            if name in LEGACY_STAGES and value not in options and LEGACY.get(value) in options:
                 _log(f'Mouth Tweaks: {name} {value!r} is a 0.2.x value, read as classic (the 0.2.x mouth); pick {options[0]} for the 0.3.0 mouth')
                 value = 'classic'
             if value not in options: raise ValueError(f'LSDub Mouth Tweaks: {name} must be one of {", ".join(options)}, not {value!r}')

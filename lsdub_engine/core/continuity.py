@@ -356,6 +356,22 @@ def squeeze_frames(warp_json, n, open_frac=0.4, keep=0.35):
     return out
 
 
+def plan_of(warp_json, picked=None, n=None):
+    """(take gap, planned gap) per OUTPUT frame off a paint's warp json: its frames at `picked` (the internal frame each output frame
+    was taken from, medium's `picked`), or its first n frames when the json is at the output rate. None when it cannot be read."""
+    try:
+        W = json.load(open(warp_json))["frames"]
+    except (OSError, ValueError, KeyError):
+        return None
+    if not W:
+        return None
+    idx = [min(max(int(j), 0), len(W) - 1) for j in picked] if picked is not None else list(range(min(len(W), n or len(W))))
+    try:
+        return np.array([float(W[j]["gap"]) for j in idx]), np.array([float(W[j]["egap"]) for j in idx])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def fix_alt(T, R, A, flag, M, ease=2, feather=5, take_frames=None, blue_floor=BLUE_FLOOR, keep=None):
     """flagged frames take the ALTERNATE render (e.g. the plain own-pixel warp) over the paint region, eased in and out
     over `ease` frames each side so the switch never pops. -> (frames, weights)."""
@@ -500,8 +516,12 @@ def run(
     plan_tol=0.12,
     max_frac=0.10,
     charge="remade",
+    plan=None,
 ):
-    """charge: what the coherence pass's max_frac share is charged with. "remade" (default): only runs it can re-make; a run it would
+    """plan: (take gap, planned gap) per OUTPUT frame, in one unit (plan_of gives a warp json's): the coherence pass then leaves a run
+    the plan asked for alone (plan_tol), and never puts the take's own mouth back where the take is off the plan. It is warp_json's
+    plan without the squeeze pass, for a caller whose warp json is not at the output rate (sing paints at fps x m).
+    charge: what the coherence pass's max_frac share is charged with. "remade" (default): only runs it can re-make; a run it would
     keep as it is (longer than a blip, no alternate render) changes no frame, so it spends none of the share. "all": every run it lets
     through, re-made or not."""
     if charge not in CHARGES:
@@ -517,7 +537,7 @@ def run(
         sq_plan = sq
         sq, _ = squeeze_with_ghost(sq, T, R, M)  # only runs that show the ghost
         flag0 = flag0 | sq
-    plan = None
+    given, plan = plan, None
     desync = None  # the mouth plan (egap): change it asks for is not a glitch
     if warp_json:
         J = json.load(open(warp_json))
@@ -525,6 +545,10 @@ def run(
         rng = max(1e-6, float(np.percentile(plan, 95) - np.percentile(plan, 5)))
         tgap = np.array([f["gap"] for f in J["frames"][:n]], float)
         desync = np.abs(tgap - plan) > DESYNC_FRAC * rng  # the take's own mouth is off the plan here
+    elif given is not None:
+        tgap, plan = np.asarray(given[0], float)[:n], np.asarray(given[1], float)[:n]
+        rng = max(1e-6, float(np.percentile(plan, 95) - np.percentile(plan, 5)))
+        desync = np.abs(tgap - plan) > DESYNC_FRAC * rng
     cur, allfix, skipped = R, [], []
     if (alt or sq is not None) and flag0.any():  # maker: alternate render / take over each bad stretch
         A = _read(alt)[0][:n] if alt else None

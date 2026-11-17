@@ -87,7 +87,7 @@ They live in `example_workflows/` and show up in ComfyUI's template browser. Wor
    from the generated clip, then dub, QA and save. Needs a GPU and the generator models.
 2. **BYO Clip and Song.** The demo clip, song, lead vocal, lyrics and lip kit, then triage, align, dub, verify, fix-it
    and save. It uses the bundled lip kit, so it runs on the CPU only (no GPU, no generator models). On the 7.5 s demo
-   clip it dubs the one close-up.
+   clip it dubs three shots.
 3. **Test and Learn.** Triage, alignment, sync QA with its review card, and the fix-it notes. No dub. Run this first
    on any new video.
 4. **Make Your Character Sing** (experimental). A song and a character image (lyrics optional): vocal split, lead
@@ -155,6 +155,9 @@ and `LSDub/qa`.
     (`aligned-press`), `warp_aperture` (`p95`) and `warp_realise` (`events`): one opening per sung syllable, lips shut only on
     the lyric's p/b/m, vowels as wide as the singer's own. Set all five to `classic`, and Align's `aligner` to `classic`, for
     the 0.2.x mouth.
+  - `warp_nuclei` (`lyric`, since 0.3.1): the mouth opens on the sung syllables that fall on a vowel of the lyric, and a held
+    note stays open. `classic` gives the 0.3.0 mouth shapes (every syllable heard in the vocal opens the mouth); the finished frames still differ a
+    little from 0.3.0's, because the repair pass after the dub changed in 0.3.1 at both settings. Needs `warp_events` `vocal`.
 - **LSDub Dub:** dubs each DUB and DUB-MEDIUM shot.
   - The shot is cropped to a 512 px face and warped at 2x the frame rate. The lower face is pasted back and a measured
     sync gate is applied.

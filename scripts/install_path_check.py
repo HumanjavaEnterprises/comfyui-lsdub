@@ -28,6 +28,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -234,6 +235,31 @@ def check_dub(comfy, name, outputs, label):
     say(f'{label}: {len(renders)} render file(s), cut {os.path.relpath(cuts[0], comfy)}; Verify: {rep.splitlines()[0][:120] if rep else ""}')
 
 
+def stop_comfyui(proc, grace=30):
+    """stop the ComfyUI this script started, and only that one: its own Popen handle (its PID), never a match by name.
+    Safe to call when it never started (None) or has already exited."""
+    if proc is None or proc.poll() is not None: return
+    proc.terminate()
+    try: proc.wait(grace)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+
+class Stopped(SystemExit):
+    def __init__(self, sig): super().__init__(f'INSTALL-PATH STOPPED: signal {sig}')
+
+
+def stop_on_signals():
+    """SIGTERM/SIGHUP (a cancelled or timed-out CI job, a closed terminal) raise instead of killing this process outright, so
+    the finally that stops ComfyUI still runs. Ctrl-C (SIGINT) already raises KeyboardInterrupt. Returns the old handlers."""
+    def raise_(sig, _frame): raise Stopped(sig)
+    old = {}
+    for sig in (signal.SIGTERM, getattr(signal, 'SIGHUP', None)):
+        if sig is not None: old[sig] = signal.signal(sig, raise_)
+    return old
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--comfyui', required=True)
@@ -276,9 +302,11 @@ def main():
         say('recogniser files from the Hugging Face Hub')
     log = os.path.join(comfy, 'install-path-comfyui.log')
     lf = open(log, 'w')
-    proc = subprocess.Popen([sys.executable, 'main.py', '--cpu', '--listen', '127.0.0.1', '--port', str(a.port), '--disable-auto-launch'],
-                            cwd=comfy, env=env, stdout=lf, stderr=subprocess.STDOUT)
+    proc = None
+    old = stop_on_signals()
     try:
+        proc = subprocess.Popen([sys.executable, 'main.py', '--cpu', '--listen', '127.0.0.1', '--port', str(a.port), '--disable-auto-launch'],
+                                cwd=comfy, env=env, stdout=lf, stderr=subprocess.STDOUT)
         t0 = time.time()
         while True:
             if proc.poll() is not None: raise Fail(f'ComfyUI exited ({proc.returncode}); see {log}')
@@ -337,10 +365,9 @@ def main():
         if failures: raise Fail(f'{len(failures)} step(s) failed:\n  ' + '\n  '.join(failures))
         say('PASS')
     finally:
-        proc.terminate()
-        try: proc.wait(30)
-        except subprocess.TimeoutExpired: proc.kill()
+        stop_comfyui(proc)
         lf.close()
+        for sig, h in old.items(): signal.signal(sig, h)
 
 
 if __name__ == '__main__':

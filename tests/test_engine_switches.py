@@ -16,6 +16,7 @@ OLD = ('off', 'take', 'all')                       # the 0.1.9 behaviour
 SNAP_019 = ['--warp-sigma', '0.8', '--warp-temporal', '0.6', '--warp-close-depth', '0.05', '--warp-follow', '0.15']
 STAGES_030 = ['--warp-events', 'vocal', '--warp-hold', 'nucleus-follow', '--warp-closures', 'aligned-press', '--warp-aperture', 'p95',
               '--warp-realise', 'events']           # 0.3.0: sing's vocal-driven mouth
+NUCLEI_031 = ['--warp-nuclei', 'lyric']             # 0.3.1: sing keeps the syllables the lyric's vowels support
 CLASSIC = ('classic',) * 5                          # the five mouth-stage Combos at 0.2.x
 
 
@@ -79,7 +80,7 @@ def test_the_defaults_reach_the_engine(pack, tmp_path, monkeypatch):
     c = _run_shot(pack, tmp_path, monkeypatch, _tweaks(pack, 'asym', 'aligner', 'remade'))
     assert c['run']['travel_ref'] == 'aligner' and c['repair']['charge'] == 'remade'
     assert '--warp-shape' not in c['paint']                                     # sing's own asym stands
-    assert SING.snap_paint(c['paint'], 2) == [*SNAP_019, '--warp-shape', 'asym', *STAGES_030]
+    assert SING.snap_paint(c['paint'], 2) == [*SNAP_019, '--warp-shape', 'asym', *STAGES_030, *NUCLEI_031]
     assert _run_shot(pack, tmp_path, monkeypatch, pack.nodes_mouth.DEFAULT_TWEAKS) == c   # no Tweaks node: the same
 
 
@@ -92,6 +93,29 @@ def test_the_0_1_9_values_make_the_0_1_9_calls(pack, tmp_path, monkeypatch):
     assert old['paint'][:i] + old['paint'][i + 2:] == new['paint'] and old['paint'][i + 1] == 'off'
     assert MP.paint_warnings(['--mode', 'warp']) == MP.paint_warnings(['--mode', 'warp', '--warp-shape', 'off'])  # off is paint's default
     assert SING.snap_paint(old['paint'], 2) == SNAP_019                          # sing's paint flags as 0.1.9 had them
+
+
+def test_warp_nuclei_is_a_combo_and_classic_is_the_0_3_0_mouth(pack, tmp_path, monkeypatch):
+    from test_example_workflows import schemas
+    SING = _engine(pack, 'sing')
+    p = {p.id: p for p in schemas(pack)['LSDubTweaks'].inputs}['warp_nuclei']
+    assert p.io_type == 'COMBO' and p.optional and p.kw['options'] == ['lyric', 'classic'] and p.kw['default'] == 'lyric'
+    assert '0.3.0' in p.tooltip and '\n' not in p.tooltip
+    stages = ('vocal', 'nucleus-follow', 'aligned-press', 'p95', 'events')
+    base = _tweaks(pack, 'asym', 'aligner', 'remade')
+    lyric = _tweaks(pack, 'asym', 'aligner', 'remade', *stages, 'lyric')
+    assert lyric.hash == base.hash and lyric.flags == base.flags                # absent at its default
+    classic = _tweaks(pack, 'asym', 'aligner', 'remade', *stages, 'classic')
+    assert classic.flags == {**base.flags, 'warp_nuclei': 'classic'} and classic.hash != base.hash
+    new, old = _run_shot(pack, tmp_path, monkeypatch, lyric), _run_shot(pack, tmp_path, monkeypatch, classic)
+    assert '--warp-nuclei' not in new['paint']                                  # sing's own lyric stands
+    i = old['paint'].index('--warp-nuclei')
+    assert old['paint'][i + 1] == 'classic' and old['paint'][:i] + old['paint'][i + 2:] == new['paint']
+    assert SING.snap_paint(old['paint'], 2) == [*SNAP_019, '--warp-shape', 'asym', *STAGES_030]   # sing's paint flags as 0.3.0 had them
+    with pytest.raises(ValueError, match='warp_nuclei'):
+        _tweaks(pack, 'asym', 'aligner', 'remade', *stages, 'off')              # not a 0.2.x stage: no legacy value
+    tw = _tweaks(pack, 'asym', 'aligner', 'remade', *CLASSIC, 'lyric')          # the five at classic: the 0.2.x mouth, whatever this one says
+    assert SING.snap_paint(_run_shot(pack, tmp_path, monkeypatch, tw)['paint'], 2) == [*SNAP_019, '--warp-shape', 'asym']
 
 
 def test_the_engines_own_defaults_are_the_new_values(pack):

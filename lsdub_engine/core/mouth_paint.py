@@ -486,6 +486,39 @@ def _parser():
         "aligned-press = aligned, and the lip-erase layer and the slit seal on those frames only, so the closure is a contact",
     )
     ap.add_argument(
+        "--warp-onset",
+        choices=["apex", "rise", "classic"],
+        type=classic("apex"),
+        default="apex",
+        help="warp (with --warp-hold): where a syllable's opening sits on its onset. apex = fully open on the onset (the rise ends "
+        "there); rise = the rise itself on the onset, fully open 40 ms after it",
+    )
+    ap.add_argument(
+        "--warp-nuclei",
+        choices=["all", "lyric", "classic"],
+        type=classic("all"),
+        default="all",
+        help="warp (--warp-events vocal): which detected onsets are sung syllables. all = every recogniser nucleus and spectral-flux "
+        "peak (a held note's wobble opens the mouth again); lyric = only those a sung lyric vowel supports: one onset per vowel, and "
+        "the detections inside a vowel still held keep the mouth on it without a new rise",
+    )
+    ap.add_argument(
+        "--warp-rise",
+        choices=["off", "floor", "lift", "classic"],
+        type=classic("off"),
+        default="off",
+        help="warp (plain targets, needs --warp-events vocal): the least opening rise a sung syllable's onset carries. off = the rise as "
+        "planned (a small one is lost in the picture); floor = every onset's two frames rise by at least 0.3 of the take's range; lift = the same, never lowering the frame before",
+    )
+    ap.add_argument(
+        "--warp-pbm",
+        choices=["off", "contact", "classic"],
+        type=classic("off"),
+        default="off",
+        help="warp (plain targets): how far a P / B / M shuts. off = --warp-close-depth under the take's own shut gap (a take that never "
+        "seals keeps a slit); contact = also down to the lips' contact itself, whatever the take's own nearest to it is",
+    )
+    ap.add_argument(
         "--warp-aperture",
         choices=["off", "map", "loop", "p95", "classic"],
         type=classic("off"),

@@ -64,10 +64,18 @@ PRESS_MIN_AL = 0.5  # the erase layer's alpha a pressed frame needs before the s
 PRESS_REF_IOD = (
     0.03  # the press mode's reference frame (the take's most-closed) must have its lips this close (eye distances) or there is no press
 )
+SEAL_GAP = -1.0  # --warp-pbm contact: a P/B/M's inner-lip gap target, canonical px (0 = the lips touch; under it they press)
+SEAL_BACK = (0.25, 0.25, 0.25, 0.25)  # the fold guard gives a folding seal's extra depth back in these shares, deepest non-folding kept
+SEAL_BACK_MIN = 0.25  # canonical px: a frame asked this far past the plain press counts as a seal frame
 REALISE_WIN = (-0.16, 0.06)  # --warp-realise events: s around a nucleus onset (the release + the attack, and the apex) applied as planned
 REALISE_SPARE = (
     0.5  # inside a window this share of the gap's own residual escapes the temporal smoothing (1.0 showed a one-frame teeth pop)
 )
+RISE_FLOOR = (
+    0.30  # --warp-rise floor: the least opening rise an onset's two frames carry, x the take's range (the judge reads 0.10 delivered)
+)
+RISE_TROUGH = 0.15  # the floor never lowers the frame before an onset under this much of the take's range (no new shut frames)
+RISE_NEAR = 0.04  # s: the rise is put on the frame nearest the onset, or the one beside it that already rises most
 
 LIP_OUT = mp_.LIP_OUT  # outer lip loop (20)
 LIP_IN = mm.LIP_IN  # inner lip loop (20), ordered
@@ -258,6 +266,72 @@ def event_windows(fr_t, n, fps):
     return m
 
 
+def onset_frames(fr_t, n, fps):
+    """the frames' centre times and each tagged nucleus onset's time (the clip's clock), one per event."""
+    if not fr_t:
+        return np.zeros(0), []
+    t0 = float(fr_t[0].get("t", 0.0))
+    seen, ons = set(), []
+    for f in fr_t:
+        e = f.get("ev") or {}
+        if e.get("kind") == "nucleus" and e.get("t_on") is not None and e.get("k") not in seen:
+            seen.add(e.get("k"))
+            ons.append(t0 + float(e["t_on"]))
+    return t0 + (np.arange(n) + 0.5) / fps, ons  # a frame is on screen for 1 / fps: its time is the middle of that
+
+
+def rise_floor(gap, t, onsets, rng, shut=None, floor=RISE_FLOOR, trough=RISE_TROUGH, near=RISE_NEAR, lower=True):
+    """--warp-rise floor: every sung syllable's onset carries an opening rise of at least `floor` x the take's range over two frames.
+
+    gap: the effective gap target per frame (canonical px, after the easing and the temporal smoothing); t: the frame times;
+    onsets: the nucleus onsets on the same clock. A planned rise under the floor (a low vowel after a shallow release) reaches the
+    picture at 0.9 of its size on top of the take's own closing mouth and reads as no rise. The missing part is split: the frame
+    before the rise is lowered (never under `trough` of the range, never a frame kept shut) and the frame after it raised (never
+    over the take's widest), each with half as much on the frame beyond it, so the rise stays the largest on its own frame.
+    -> (gap', info). A rise already at the floor is left as planned. lower=False (--warp-rise lift): the frame before is never
+    lowered, the whole missing part goes on the frames after (a lowered frame before a rise can read as a shut nobody sang)."""
+    e = np.asarray(gap, float).copy()
+    n = len(e)
+    go, gs = float(rng["g_lo"]), max(1e-6, float(rng["g_hi"]) - float(rng["g_lo"]))
+    shut = np.zeros(n, bool) if shut is None else np.asarray(shut, bool)
+    lifted, short, added = 0, 0, []
+    for on in onsets:
+        c = np.where(np.abs(np.asarray(t) - on) <= near + 1e-9)[0]
+        c = c[(c >= 2) & (c <= n - 3)]
+        if not len(c):
+            continue
+        c = c[np.argsort(np.abs(np.asarray(t)[c] - on), kind="stable")]  # a tie goes to the frame nearest the onset
+        j = int(c[np.argmax(e[c + 1] - e[c - 1])])
+        need = floor * gs - (e[j + 1] - e[j - 1])
+        if need <= 0:
+            continue
+        room_lo = 0.0 if shut[j - 1] or not lower else max(0.0, e[j - 1] - (go + trough * gs))
+        room_hi = max(0.0, go + gs - e[j + 1])
+        lo = min(need / 2.0, room_lo)
+        hi = min(need - lo, room_hi)
+        lo = min(need - hi, room_lo)
+        if lo + hi <= 0:
+            short += 1
+            continue
+        e[j - 1] -= lo
+        e[j + 1] += hi
+        if not shut[j - 2]:
+            e[j - 2] -= min(lo / 2.0, max(0.0, e[j - 2] - (go + trough * gs)))
+        e[j + 2] += min(hi / 2.0, max(0.0, go + gs - e[j + 2]))
+        lifted += 1
+        short += int(lo + hi < need - 1e-9)
+        added.append((lo + hi) / gs)
+    info = dict(
+        mode="floor" if lower else "lift",
+        floor=floor,
+        onsets=len(onsets),
+        lifted=lifted,
+        short=short,
+        mean_added=round(float(np.mean(added)), 3) if added else 0.0,
+    )
+    return e, info
+
+
 def target_features(
     fr_t,
     F,
@@ -271,6 +345,7 @@ def target_features(
     close_depth=0.0,
     follow=0.0,
     keep=None,
+    seal=None,
 ):
     """per-frame target (gap, width): the observed features F (T x 2) clipped into the viseme's band (vis/vis2 mixed),
     bands in the take's own range; vowels' lower bound is raised by the audio's openness (A2F jaw / envelope).
@@ -280,6 +355,8 @@ def target_features(
     close_depth: PP targets this far BELOW the take's shut gap (units of its range): a press, not a touch, so the closure
     survives the field's smoothing and reads shut.
     keep (bool per frame): frames whose residual is not eased (an onset window under --warp-realise events).
+    seal (canonical px, --warp-pbm contact: SEAL_GAP): PP also targets this absolute gap or under. close_depth is counted from the
+    take's own shut gap (rng g_lo), and a take that never seals has that several px open: a press below it is still a parted mouth.
     follow (> 0): the opening band of every frame but a closure is also held within +-follow of the track's planned opening (its
     `open`, 0..1 of the take's range), so the take's own mouth passes only that near the plan. 0 (the default): a take's mouth
     anywhere inside the viseme's band is kept as it is, with its own timing, which is not the song's."""
@@ -303,6 +380,9 @@ def target_features(
             lo = max(lo, min(hi, 0.8 * float(f.get("open", 0))))
         if v1 == "PP":
             lo, hi = -close_depth, 0.03 - close_depth
+            if seal is not None and (seal - go) / gs < hi:  # the lips' contact, not this take's nearest to it
+                hi = (seal - go) / gs
+                lo = min(lo, hi - 0.03)
         elif follow > 0:
             u = float(f.get("open", 0.0))
             a, b = max(lo, u - follow), min(hi, u + follow)
@@ -1393,7 +1473,7 @@ class WarpClip:
                     fr_plan, self.aperture_gain = aperture.mapped(fr_t)
                     print(f"aperture map: the track's opening x{self.aperture_gain:.2f} (its p{aperture.Q:.0f} -> a full opening)")
                 self.drive_info["aperture"] = dict(mode=a.warp_aperture, gain=round(float(self.aperture_gain), 3))
-            Ft = target_features(
+            tf = lambda seal: target_features(
                 fr_plan,
                 Fs,
                 model.rng,
@@ -1406,7 +1486,13 @@ class WarpClip:
                 g("warp_close_depth", 0.0),
                 g("warp_follow", 0.0),
                 keep=event_windows(fr_t, n, float(T.get("fps", 25))) if vars(a).get("warp_realise", "off") == "events" else None,
+                seal=seal,
             )
+            Ft = tf(None)
+            if g("warp_pbm", "off") == "contact":
+                # what the seal asks beyond the plain press, per frame (canonical px, <= 0): the fold guard gives this back first
+                Fp, Ft = Ft, tf(SEAL_GAP)
+                self.seal_d = np.minimum(0.0, Ft[:, 0] - Fp[:, 0])
         # ---- end coart
         dl = np.array([np.linalg.norm(S[i][33, :2] - S[i][168, :2]) for i in range(n)])
         dr = np.array([np.linalg.norm(S[i][263, :2] - S[i][168, :2]) for i in range(n)])
@@ -1458,6 +1544,13 @@ class WarpClip:
                 f"size cap x{cap_k}: gap <= {cap_k * rr['g_hi']:.1f}, width {rr['w_p5'] / cap_k:.1f}..{cap_k * rr['w_p95']:.1f} "
                 f"(canonical px); {ncap} frames cut by > 0.5 px"
             )
+        if g("warp_rise", "off") in ("floor", "lift") and vars(a).get("warp_events", "off") != "off":
+            # (opt-in) stage: a planned onset rise too small to survive the picture is brought up to the floor, on the onset's frame
+            tt, ons = onset_frames(fr_t, n, float(T.get("fps", 25)))
+            ge, self.drive_info["rise"] = rise_floor(F[:, 0] + dFe[:, 0], tt, ons, model.rng, shut, lower=a.warp_rise == "floor")
+            dFe[:, 0] = ge - F[:, 0]
+            ri = self.drive_info["rise"]
+            print(f"rise floor: {ri['lifted']} of {ri['onsets']} onsets lifted to x{RISE_FLOOR} of the range ({ri['short']} short of it)")
         Fe = F + dFe  # effective target features
         rot = np.array([pl.s[i] * pl.R[i] for i in range(n)])  # canonical -> frame linear part
         self.events = vars(a).get("coart_events")
@@ -1506,6 +1599,7 @@ class WarpClip:
         self.interp, self.ell, self.ring_f, self.W, self.H, self.frames = interp, ell, ring_f, W, H, frames
         self.dFe_pre_fold = dFe.copy()  # (the residual before the fold guard)
         fscale = np.ones(n)
+        seal_back = 0
         if g("warp_fold_guard", 0.0) > 0 and ell is not None:
             # fold guard: per frame, the largest share of the residual whose warp does not fold; min-filtered (a fold's
             # neighbours give way too) and eased zero-phase so the guard itself does not pop
@@ -1521,10 +1615,24 @@ class WarpClip:
                     an, wm = self.geometry(i, src, dst)
                     return fold_det(src, dst, an, wm, a.warp_lam, inner=dst[iin])
 
+                sd = getattr(self, "seal_d", None)
+                if sd is not None and sd[i] < -SEAL_BACK_MIN and det_at(1.0) < a.warp_fold_guard:
+                    # a seal that folds is no seal: the guard would scale the whole closure away. Give the seal's own extra
+                    # depth back first, a quarter at a time, and keep the deepest press that does not fold
+                    for k in SEAL_BACK:
+                        dFe[i, 0] -= k * sd[i]
+                        seal_back += 1
+                        if det_at(1.0) >= a.warp_fold_guard:
+                            break
                 fscale[i] = fold_scale(det_at, a.warp_fold_guard)
             fscale = np.minimum(fscale, gaussian_filter1d(minimum_filter1d(fscale, 3, mode="nearest"), 1.0, mode="nearest"))
             dFe = dFe * fscale[:, None]
             Fe = F + dFe
+            if getattr(self, "seal_d", None) is not None:
+                self.drive_info["pbm"] = dict(mode="contact", frames=int((self.seal_d < -SEAL_BACK_MIN).sum()), given_back=seal_back)
+                print(
+                    f"P/B/M contact: {self.drive_info['pbm']['frames']} frames asked past the take's shut, {seal_back} quarter steps given back to the fold guard"
+                )
         self.fscale, self.dFe, self.Fe = fscale, dFe, Fe
         self.yc = None
         if g("warp_yaw_clamp", 0.0) > 0:
@@ -1632,7 +1740,9 @@ class WarpClip:
         if vars(a).get("warp_hold", "off") != "off":
             from . import nucleus_hold
 
-            fr_t, self.drive_info["hold"] = nucleus_hold.held(fr_t, fps, mode=a.warp_hold, level=getattr(self, "vocal_level", None))
+            fr_t, self.drive_info["hold"] = nucleus_hold.held(
+                fr_t, fps, mode=a.warp_hold, level=getattr(self, "vocal_level", None), onset=vars(a).get("warp_onset", "apex")
+            )
             h = self.drive_info["hold"]
             print(
                 f"drive hold ({a.warp_hold}): {h.get('nuclei', 0)} targets held, {h.get('reversals', 0)} reversals"
@@ -1688,12 +1798,19 @@ class WarpClip:
         except Exception as e:  # no weights, no torch: the flux detector alone -- a different mouth from the one the ledger read
             note = f"WARNING: phone network not loaded ({type(e).__name__}: {str(e)[:120]}): syllable events from the spectral flux alone"
             print(f"drive events: {note}", file=sys.stderr)
+        mode = vars(a).get("warp_nuclei", "all")
         ev = NE.events(x, words, dur, logp, net, vocal_read=vocal_read)
+        found = sum(1 for e in ev if e["kind"] == "nucleus")
+        if mode == "lyric":  # only the detections a sung lyric vowel supports are events (its onset, and the vowel held)
+            ev, _ = NE.supported(ev, words)
         self.vocal_level = PN.level_db(x)  # the clip's level per 10 ms, for the hold's follow mode
         if net is not None:
             net.release()
         out, info = NE.annotate(fr_t, ev, fps, t0=float(fr_t[0].get("t", t0)) if fr_t else t0)
         info["network"] = "flux-only" if net is None else os.path.basename(str(net.source))
+        if mode != "all":
+            info["nuclei_mode"], info["detected"] = mode, found
+            info["held"] = sum(1 for e in ev if e["kind"] == "nucleus" and e.get("src") == "held")
         if note:
             info["note"] = note
         return out, info
