@@ -62,7 +62,7 @@ SWITCH_TIPS = dict(
     warp_realise='events lets each sung syllable\'s attack through the smoothing, so short syllables still show; classic = the 0.2.x '
                  'smoothing everywhere. Needs warp_events vocal.',
     warp_nuclei='Which sung syllables open the mouth: lyric keeps the ones on a vowel of the lyric and holds a long note open; classic = '
-                'every syllable heard in the vocal (0.3.0). Needs warp_events vocal.',
+                'every syllable heard in the vocal, the 0.3.0 mouth shapes. Needs warp_events vocal.',
 )
 SING_EXTRA = ['--warp-track-mode', 'chain']                 # the standard sing recipe's track mode
 

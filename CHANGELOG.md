@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.3.1 (2026-11-16)
+## 0.3.1 (2026-11-17)
 
 - The mouth follows the lyric's vowels more closely: openings land on the sung syllables, and a held note stays open.
 - Fewer stray closures. On 190 test shots against 0.3.0: sung syllables met 844 → 1001 of 1173, stray shuts 137 → 93, p/b/m shut 154 of 251 (was 139).
-- New Mouth Tweaks switch `warp_nuclei` (`lyric` by default); set it to `classic` for the 0.3.0 mouth.
+- New Mouth Tweaks switch `warp_nuclei` (`lyric` by default); set it to `classic` for the 0.3.0 mouth shapes.
+- The repair pass after the dub changed for every dub driven by the vocal, so finished frames differ a little from 0.3.0's at either setting of the switch.
 - Saved workflows load unchanged and pick up the new default; shots dubbed with 0.3.0 re-dub.
 - Housekeeping: the install-path check always stops the ComfyUI it started.
 
