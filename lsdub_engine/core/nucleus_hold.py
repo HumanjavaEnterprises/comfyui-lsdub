@@ -27,6 +27,16 @@ times a coarse loudness, held) and shape the curve around the onset. The rule he
   minimum  events closer than MIN_EVENT_S were merged by the event stage toward the earlier one; nothing is dropped here
 
 `open` is written per frame; `vis`, `vis2`, `mix` and every other key are kept. The rest level before the first event is REST_OPEN.
+
+  rest     (opt-in, --warp-rest closed) inside each rest, once the decay has reached REST_OPEN, the lips ease on to 0, the take's own
+           most-closed (the range's g_lo): a raised cosine over REST_CLOSE_S (slope 0 where the decay ends, so the two read as one
+           settle and no step is steeper than the decay's own), and back to REST_OPEN over REST_REOPEN_S, done where the voice comes
+           back or the next syllable's release would start, whichever is first. So the breath
+           before a phrase and every onset's release and attack are the 0.3.x curve exactly; a short rest closes only part way (the two
+           ramps multiply). Only the event stage's rests (the stem off >= REST_S, at its own floor) rest: a soft held vowel, a consonant
+           or a quiet tail the stem still carries keeps its syllable's hold. A rest at the clip's start is closed from its start; one
+           that runs to the clip's last frame stays closed; one that ends inside the clip with no syllable after it eases back to
+           REST_OPEN over REST_REOPEN_S, done at its end (never a one-frame step). Default `apart`: REST_OPEN through the rest, as before.
 """
 
 import numpy as np
@@ -54,6 +64,9 @@ DIP = 0.19  # the pre-onset release depth under the lower of the two syllables' 
 # and the smallest the judge's rise rule (0.10 of the range over two frames) reads reliably after the warp's easing.
 DECAY_S = 0.12  # s the opening falls into a rest
 REST_OPEN = 0.15  # the opening at rest: lips apart, jaw relaxed (never a shut)
+RESTS = ("apart", "closed")  # --warp-rest: the rest's opening. apart = REST_OPEN (0.3.x); closed = eased to the take's own most-closed
+REST_CLOSE_S = 0.16  # s: --warp-rest closed: the lips' easing from REST_OPEN down to closed, from the end of the decay into the rest
+REST_REOPEN_S = 0.20  # s: --warp-rest closed: the easing back to REST_OPEN, ending where the voice returns or the next release starts
 MIN_EVENT_S = 0.08  # s: the event stage's spacing; stated here, enforced there
 TONGUE = ("L", "N", "T", "D", "G", "K", "NG")
 
@@ -106,6 +119,39 @@ def curve(times, events, rest=REST_OPEN, attack=ATTACK_S, decay=DECAY_S, lead=AP
     return out
 
 
+def rest_closed(
+    times, events, c, rest=REST_OPEN, attack=ATTACK_S, lead=APEX_LEAD_S, decay=DECAY_S, close_s=REST_CLOSE_S, reopen_s=REST_REOPEN_S
+):
+    """--warp-rest closed: the held curve c with each rest's opening taken from `rest` toward 0 by k(t) = rise x fall in [0, 1]: rise a
+    raised cosine over close_s from the decay's end, `decay` after the rest's start (1 from the start for a rest before the first
+    nucleus), fall one over reopen_s
+    ending at e = the rest's end or the next nucleus's release start (its onset less lead, attack and RELEASE_S), whichever is first
+    (with no nucleus after, e = the rest's end and the same fall if the clip goes on past it, else 1 to the end).
+    out = max(0, c - k x rest) on [rest start, e]; every other time is c exactly, so the release, the attack and the hold of every
+    syllable are untouched."""
+    t = np.asarray(times, float)
+    out = np.asarray(c, float).copy()
+    nuc = sorted(e["t_on"] for e in events if e["kind"] == "nucleus")
+    for r in events:
+        if r["kind"] != "rest":
+            continue
+        a, b = float(r["t_on"]), float(r.get("t_off", r["t_on"]))
+        before = any(x < a for x in nuc)
+        nxt = next((x for x in nuc if x >= b - 1e-9), None)
+        e = b if nxt is None else min(b, nxt - lead - attack - RELEASE_S)
+        m = (t >= a) & (t <= e)
+        if e <= a or not m.any():
+            continue
+        rise = _cos((t[m] - a - decay) / close_s) if before else np.ones(int(m.sum()))
+        # the way back out: over reopen_s ending at e, whenever the clip goes on past e (a nucleus follows, or the rest ends inside the
+        # clip with none after it: un-nucleated voice or nothing returns at b, and a one-frame 0 -> rest step there would be a pop);
+        # only a rest that runs to the clip's last frame stays closed to the end
+        reopen = nxt is not None or t[-1] > e + 1e-9
+        fall = _cos((e - t[m]) / reopen_s) if reopen else np.ones(int(m.sum()))
+        out[m] = np.maximum(0.0, out[m] - rise * fall * float(rest))
+    return out
+
+
 def follow(times, events, level, hop, c, floor=FOLLOW_FLOOR, span_db=FOLLOW_DB, smooth_s=FOLLOW_S):
     """nucleus-follow: the held curve c scaled, inside each nucleus's hold (from its onset to the next event), by the voice's level
     against that syllable's own peak: 1 at the peak, `floor` at span_db under it, smoothed over smooth_s. The attack and the release
@@ -134,12 +180,15 @@ def follow(times, events, level, hop, c, floor=FOLLOW_FLOOR, span_db=FOLLOW_DB, 
     return out
 
 
-def held(frames, fps, t0=None, mode="nucleus", level=None, hop=0.01, onset="apex"):
+def held(frames, fps, t0=None, mode="nucleus", level=None, hop=0.01, onset="apex", rest="apart"):
     """-> (new frames with `open` held per nucleus, info). Frames need the event stage's `ev`; frames without it come back unchanged.
     t0: the clip's start in the frames' `t` clock (default: the first frame's t). mode nucleus-follow: `follow` on top, from the
-    clip's level per hop (level, clip clock). onset (ONSETS): "rise" puts the attack's rise on the onset (apex RISE_LAG_S after it)."""
+    clip's level per hop (level, clip clock). onset (ONSETS): "rise" puts the attack's rise on the onset (apex RISE_LAG_S after it).
+    rest (RESTS): "closed" eases each rest down to the take's own most-closed (`rest_closed`); "apart" keeps REST_OPEN."""
     if onset not in ONSETS:
         raise ValueError(f"--warp-onset {onset!r}")
+    if rest not in RESTS:
+        raise ValueError(f"--warp-rest {rest!r}")
     lead = APEX_LEAD_S if onset == "apex" else -RISE_LAG_S
     if not frames or not any("ev" in f for f in frames):
         return list(frames), {"mode": "nucleus", "events": 0, "note": "no events on the track"}
@@ -154,6 +203,8 @@ def held(frames, fps, t0=None, mode="nucleus", level=None, hop=0.01, onset="apex
     c = curve(times, events, lead=lead)
     if mode == "nucleus-follow" and level is not None:
         c = follow(times, events, level, hop, c)
+    if rest == "closed":
+        c = rest_closed(times, events, c, lead=lead)
     out = []
     for f, o in zip(frames, c):
         if f.get("vis") == "PP":
@@ -179,4 +230,8 @@ def held(frames, fps, t0=None, mode="nucleus", level=None, hop=0.01, onset="apex
         released=sum(1 for e in events if e["kind"] == "nucleus" and (e.get("cons") or "flux" in str(e.get("src") or ""))),
         targets=[dict(t_on=e["t_on"], vowel=e["vowel"], bin=e["bin"], target=target_of(e["vowel"], e["bin"])) for e in events if e["kind"] == "nucleus"],
     )  # fmt: skip
+    if rest == "closed":  # (the 0.3.x info is unchanged without it)
+        info.update(
+            rest="closed", rest_close_s=REST_CLOSE_S, rest_reopen_s=REST_REOPEN_S, rests=sum(1 for e in events if e["kind"] == "rest")
+        )
     return out, info

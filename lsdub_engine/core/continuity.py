@@ -29,14 +29,13 @@ import argparse, json
 import cv2, numpy as np
 from .retime import _read, interp
 
-DIS = None
-
 
 def _dis():
-    global DIS
-    if DIS is None:
-        DIS = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
-    return DIS
+    """a new flow object, for one use. Never kept: cv2's DIS lowers its own finest scale on an image whose longer side is 45 px or
+    less and keeps it lowered, so an object that lives on gives every later flow a result that depends on what it was handed before
+    (the repair of a shot then depended on the shots its process had repaired earlier). Cost: a whole-frame flow is about a quarter
+    slower than on a reused object; crops cost the same. Callers pass None as calc's flow argument: an array there seeds the result."""
+    return cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
 
 
 def _carry(img, g_from, g_to):

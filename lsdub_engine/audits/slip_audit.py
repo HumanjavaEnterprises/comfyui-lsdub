@@ -84,15 +84,12 @@ def region_mask(p, idx, shape, grow=0.0):
     return m
 
 
-DIS = None
-
-
 def flows(F):
-    """Dense DIS optical flow t-1 -> t (computed once per video, shared by all regions)."""
-    global DIS
-    DIS = DIS or cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
+    """Dense DIS optical flow t-1 -> t (computed once per video, shared by all regions). The flow object is this call's own: one kept
+    for the process carries a setting cv2 lowers on a small image into every later video."""
+    dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
     g = [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in F]
-    return [DIS.calc(g[t - 1], g[t], None) for t in range(1, len(g))]
+    return [dis.calc(g[t - 1], g[t], None) for t in range(1, len(g))]
 
 
 def track_region(Fl, mask):

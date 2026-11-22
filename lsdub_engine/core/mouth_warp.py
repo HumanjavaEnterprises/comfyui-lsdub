@@ -81,6 +81,9 @@ LIP_OUT = mp_.LIP_OUT  # outer lip loop (20)
 LIP_IN = mm.LIP_IN  # inner lip loop (20), ordered
 CHIN_C = [18, 200, 199, 175]  # soft chin under the lower lip: rides the jaw with the opening
 CTRL = LIP_OUT + LIP_IN + CHIN_C
+HOLD_GAIN_LAYERS = 0.4  # --warp-corners hold under --warp-compose layers: the share of the hold kept (EYE5b, measured on 8 shots)
+HOLD_BACK = (0.75, 0.5, 0.25, 0.0)  # --warp-corners hold: the shares of the hold the fold guard tries, before it scales a closure
+HOLD_CORNERS = (61, 78, 291, 308)  # --warp-corners hold: outer, inner corner on one side, then the other
 # upper lip (outer + inner, corners excluded): rides the skull. --warp-jaw re-references the opening to it, so a gap change
 # moves the lower lip + chin (the jaw) and leaves the upper lip where the skull holds it
 UPPER = [185, 40, 39, 37, 0, 267, 269, 270, 409, 191, 80, 81, 82, 13, 312, 311, 310, 415]
@@ -210,6 +213,7 @@ class MouthModel:
         Y = Xc.reshape(T, -1)
         self.coef, *_ = np.linalg.lstsq(A, Y, rcond=None)  # (3, K*3)
         self.J = self.coef[1:].reshape(2, K, 3)  # d(points)/d(gap, width)
+        self.mean_shape = Y.mean(0).reshape(K, 3)
         Z = Y - Y.mean(0)
         _, s, Vt = np.linalg.svd(Z, full_matrices=False)
         ev = s**2 / max(1e-9, (s**2).sum())
@@ -234,9 +238,77 @@ class MouthModel:
         self.J = self.J.copy()
         self.J[0] = self.J[0] - self.J[0][upper_idx].mean(0)
 
-    def delta(self, dF):
-        """canonical displacement (K x 3) of the control points for a feature change dF = (dgap, dwidth)."""
-        return np.tensordot(dF, self.J, axes=(0, 0))
+    hold = None  # --warp-corners hold: set by hold_corners; None = the fitted map as it is (model)
+
+    def hold_corners(self, ctrl, gain=1.0):
+        """--warp-corners hold: a closing never lowers the mouth corners against the lips' centre, and neither does a narrowing.
+        The fitted map is one global line, steepest on the take's open frames, so its corners rise less than the lips' centre
+        as the mouth closes (an arch with its ends down, a frown the take does not have). Set up here from the take's own mean
+        shape: which way is up in the canonical frame, the lips' centre (13 / 14), and per lip point the corner whose height it
+        takes up, weighted by how near that corner it sits ((|x| / half-width)^3, so the lip line bends without a kink)."""
+        X0 = self.mean_shape
+        ix = {k: j for j, k in enumerate(ctrl)}
+        up = -1.0 if X0[ix[17], 1] > X0[ix[0], 1] else 1.0  # the lower lip's centre sits below the upper's
+        mid = [ix[13], ix[14]]
+        corners = [ix[c] for c in HOLD_CORNERS]  # 61 / 78 on one side, 291 / 308 on the other
+        cx = 0.5 * (X0[ix[61], 0] + X0[ix[291], 0])
+        left = np.sign(X0[ix[61], 0] - cx)
+        gov, w = np.full(len(ctrl), -1), np.zeros(len(ctrl))
+        for loop, (cl, cr) in ((LIP_OUT, (0, 2)), (LIP_IN, (1, 3))):
+            for k in loop:
+                j = ix[k]
+                c = cl if np.sign(X0[j, 0] - cx) == left else cr
+                hw = max(1e-6, abs(X0[corners[c], 0] - cx))
+                gov[j], w[j] = c, float(np.clip(abs(X0[j, 0] - cx) / hw, 0.0, 1.0)) ** 3
+        w[mid] = 0.0  # the lips' centre is the reference: it never moves for this
+        w[[ix[0], ix[17]]] = 0.0
+        for c in corners:
+            w[c] = 1.0
+        self.hold = dict(up=up, mid=mid, corners=corners, gov=gov, w=w, gain=float(gain))
+
+    def corner_lift(self, part):
+        """per corner (HOLD_CORNERS order): how far a canonical move `part` (K x 3) raises the corner against the lips' centre."""
+        h = self.hold
+        return h["up"] * (part[h["corners"], 1] - 0.5 * (part[h["mid"][0], 1] + part[h["mid"][1], 1]))
+
+    def delta(self, dF, hold=1.0):
+        """canonical displacement (K x 3) of the control points for a feature change dF = (dgap, dwidth). hold: the share of
+        the --warp-corners hold this frame keeps (the fold guard gives it back before it scales a closure); 1 = all of it."""
+        d = np.tensordot(dF, self.J, axes=(0, 0))
+        if self.hold is None:
+            return d
+        # --warp-corners hold, one-sided: a narrowing's own share never lowers a corner against the lips' centre; a closing
+        # leaves each corner at least where the take frame has it against that centre (it rides up with the lip line). A
+        # widening's lift still counts toward a closing, its drop is not taken back (an opening with the same widening keeps
+        # it too, so the step is continuous as the gap change crosses 0). An opening (or no move) keeps the fitted map. The
+        # lift goes onto the lip points by their nearness to the corner.
+        dg, dw = float(dF[0]), float(dF[1])
+        k = float(hold) * self.hold["gain"]
+        if (dg >= 0 and dw >= 0) or k <= 0:
+            return d
+        lw = self.corner_lift(dw * self.J[1])
+        cw = np.maximum(0.0, -lw) if dw < 0 else np.zeros(len(lw))
+        cg = np.maximum(0.0, -(self.corner_lift(dg * self.J[0]) + np.maximum(lw, 0.0))) if dg < 0 else np.zeros(len(lw))
+        c = k * (cw + cg)
+        if not c.any():
+            return d
+        h = self.hold
+        on = h["gov"] >= 0
+        d = d.copy()
+        d[on, 1] += h["up"] * h["w"][on] * c[h["gov"][on]]
+        return d
+
+    def deltas(self, dFe):
+        """delta for every row of dFe (T x 2) -> T x K x 3."""
+        if self.hold is None:
+            return np.einsum("tf,fkd->tkd", dFe, self.J)
+        return np.stack([self.delta(f) for f in dFe])
+
+
+def delta_of(clip, i, dF):
+    """clip.model.delta for frame i: with --warp-corners hold, the share of the hold the fold guard left that frame."""
+    hk = getattr(clip, "hold_k", None)
+    return clip.model.delta(dF) if hk is None else clip.model.delta(dF, float(hk[i]))
 
 
 def _to_band(u, lo, hi, centre):
@@ -1432,6 +1504,10 @@ class WarpClip:
         if g("warp_jaw_gain", 1.0) != 1.0:  # the soft chin's share of an opening / closing (jaw drop / raise)
             model.J = model.J.copy()
             model.J[0, [ix[k] for k in CHIN_C]] *= a.warp_jaw_gain
+        if vars(a).get("warp_corners", "model") == "hold":  # (opt-in) a closing / narrowing never lowers the corners (MouthModel.delta)
+            # the layer stack lifts the corners of a closing on its own (its lips are composited, not only warped): there the
+            # hold keeps a measured share, so the two lifts do not stack past the take
+            model.hold_corners(CTRL, HOLD_GAIN_LAYERS if vars(a).get("warp_compose", "plates") == "layers" else 1.0)
         bands = library_bands(a.lib) if a.lib else None
         if g("warp_class_width", 0.0) > 0:
             bands = class_floor(bands, a.warp_class_width, model.rng, g("warp_class_ref", "half"))
@@ -1518,6 +1594,7 @@ class WarpClip:
             print(f"realise (events): {int(realise.sum())} frames inside onset windows applied unsmoothed at full confidence")
         dFe = dF * conf[:, None] * a.warp_gain
         shut = spared_shut(a, n, pp)
+        self.rise_shut, self.track_fps = shut, float(T.get("fps", 25))  # (read by --warp-rise achieved, core/rise_loop.py)
         sp = temporal_spare(g, Ft[:, 0], shut)
         if realise is not None:  # inside the windows the temporal smoothing runs at half strength (a one-frame guard against pops)
             sp = np.maximum(np.asarray(sp, float) if sp is not None else np.zeros(n), realise.astype(float) * REALISE_SPARE)
@@ -1562,7 +1639,7 @@ class WarpClip:
         interp = cv2.INTER_LANCZOS4 if g("warp_interp", "cubic") == "lanczos" else cv2.INTER_CUBIC
         ell = None
         if g("warp_falloff", "hull") == "ellipse":
-            Xall = np.concatenate([C[:, CTRL], C[:, CTRL] + np.einsum("tf,fkd->tkd", dFe, model.J)])
+            Xall = np.concatenate([C[:, CTRL], C[:, CTRL] + model.deltas(dFe)])
             Xall = Xall[:, [ix[k] for k in LIP_OUT + LIP_IN + [18, 200]]]  # the chin-tip points stay in the falloff
             ell = HeadEllipse(Xall, C[:, [13, 14, 61, 291]].mean((0, 1)), g("warp_core", 1.0), a.warp_ring or 2.6)
         ring_f = a.warp_ring or 1.6
@@ -1600,6 +1677,9 @@ class WarpClip:
         self.dFe_pre_fold = dFe.copy()  # (the residual before the fold guard)
         fscale = np.ones(n)
         seal_back = 0
+        # --warp-corners hold: the share of the hold each frame keeps (the fold guard gives it back before it scales a closure)
+        self.hold_k = None if model.hold is None else np.ones(n)
+        hold_back = []
         if g("warp_fold_guard", 0.0) > 0 and ell is not None:
             # fold guard: per frame, the largest share of the residual whose warp does not fold; min-filtered (a fold's
             # neighbours give way too) and eased zero-phase so the guard itself does not pop
@@ -1611,20 +1691,47 @@ class WarpClip:
                     continue
 
                 def det_at(k, i=i, src=src):
-                    dst = src + (model.delta(k * dFe[i]) @ rot[i].T)[:, :2]
+                    dst = src + (delta_of(self, i, k * dFe[i]) @ rot[i].T)[:, :2]
                     an, wm = self.geometry(i, src, dst)
                     return fold_det(src, dst, an, wm, a.warp_lam, inner=dst[iin])
 
                 sd = getattr(self, "seal_d", None)
-                if sd is not None and sd[i] < -SEAL_BACK_MIN and det_at(1.0) < a.warp_fold_guard:
-                    # a seal that folds is no seal: the guard would scale the whole closure away. Give the seal's own extra
-                    # depth back first, a quarter at a time, and keep the deepest press that does not fold
-                    for k in SEAL_BACK:
-                        dFe[i, 0] -= k * sd[i]
-                        seal_back += 1
-                        if det_at(1.0) >= a.warp_fold_guard:
-                            break
-                fscale[i] = fold_scale(det_at, a.warp_fold_guard)
+
+                def seal_then_scale(i=i, det_at=det_at, sd=sd):
+                    """the seal's quarter steps given back (a seal that folds is no seal: the guard would scale the whole
+                    closure away, so its own extra depth goes back first, the deepest press that does not fold kept), then the
+                    share of the residual that does not fold. dFe[i] is left as the steps leave it."""
+                    steps = 0
+                    if sd is not None and sd[i] < -SEAL_BACK_MIN and det_at(1.0) < a.warp_fold_guard:
+                        for k in SEAL_BACK:
+                            dFe[i, 0] -= k * sd[i]
+                            steps += 1
+                            if det_at(1.0) >= a.warp_fold_guard:
+                                break
+                    return steps, fold_scale(det_at, a.warp_fold_guard)
+
+                if self.hold_k is not None and det_at(1.0) < a.warp_fold_guard:
+                    # a corner held up is never paid for with a closure: where the held move folds, the guard is run with the
+                    # hold given back a quarter at a time, and the frame keeps the most hold whose seal and closure come out as
+                    # deep as with none (no more seal steps given back, no smaller share of the residual)
+                    d0 = dFe[i].copy()
+                    runs = {}
+                    for hk in (1.0, *HOLD_BACK):
+                        dFe[i] = d0
+                        self.hold_k[i] = hk
+                        runs[hk] = (*seal_then_scale(), dFe[i].copy())
+                    s0, f0 = runs[0.0][:2]
+                    hk = next(h for h in (1.0, *HOLD_BACK) if runs[h][0] <= s0 and runs[h][1] >= f0)
+                    self.hold_k[i] = hk
+                    steps, fscale[i], dFe[i] = runs[hk]
+                    seal_back += steps
+                    if hk < 1.0:
+                        hold_back.append((i, hk))
+                else:
+                    steps, fscale[i] = seal_then_scale()
+                    seal_back += steps
+            if hold_back:
+                print(f"corners hold: given back to the fold guard on {len(hold_back)} frames (frame, hold kept): {hold_back}")
             fscale = np.minimum(fscale, gaussian_filter1d(minimum_filter1d(fscale, 3, mode="nearest"), 1.0, mode="nearest"))
             dFe = dFe * fscale[:, None]
             Fe = F + dFe
@@ -1641,7 +1748,7 @@ class WarpClip:
                 self,
                 a.warp_yaw_clamp,
                 [S[i][CTRL, :2] for i in range(n)],
-                [S[i][CTRL, :2] + (model.delta(dFe[i]) @ rot[i].T)[:, :2] for i in range(n)],
+                [S[i][CTRL, :2] + (delta_of(self, i, dFe[i]) @ rot[i].T)[:, :2] for i in range(n)],
             )
             fz = np.flatnonzero(self.yc.b > 0)
             print(
@@ -1730,7 +1837,12 @@ class WarpClip:
         if vars(a).get("warp_closures", "plan") != "plan":
             from . import closure_plan
 
-            fr_t, self.drive_info["closures"] = closure_plan.placed(fr_t, fps)
+            lead = vars(a).get("warp_closure_lead", "plan")
+            if lead == "plan":
+                fr_t, self.drive_info["closures"] = closure_plan.placed(fr_t, fps)
+            else:  # --warp-closure-lead phone: shut from --warp-closure-lead-s (0.02 s) before the aligned P / B / M, the vowel ahead open
+                lead_s = vars(a).get("warp_closure_lead_s", closure_plan.LEAD_PHONE_S)
+                fr_t, self.drive_info["closures"] = closure_plan.placed(fr_t, fps, lead=lead, lead_s=lead_s)
             if a.warp_closures == "aligned-press":
                 self.pressed = np.array([bool(f.get("pp_aligned")) for f in fr_t])
             c = self.drive_info["closures"]
@@ -1741,7 +1853,12 @@ class WarpClip:
             from . import nucleus_hold
 
             fr_t, self.drive_info["hold"] = nucleus_hold.held(
-                fr_t, fps, mode=a.warp_hold, level=getattr(self, "vocal_level", None), onset=vars(a).get("warp_onset", "apex")
+                fr_t,
+                fps,
+                mode=a.warp_hold,
+                level=getattr(self, "vocal_level", None),
+                onset=vars(a).get("warp_onset", "apex"),
+                rest=vars(a).get("warp_rest", "apart"),
             )
             h = self.drive_info["hold"]
             print(
@@ -1834,8 +1951,14 @@ class WarpClip:
         Si = self.S[i] if Si is None else Si
         dFe_i = self.dFe[i] if dFe_i is None else dFe_i
         src = Si[CTRL, :2]
-        dst = src + (self.model.delta(dFe_i) @ self.rot[i].T)[:, :2] + self.shape_at(i)
+        dst = src + (delta_of(self, i, dFe_i) @ self.rot[i].T)[:, :2] + self.shape_at(i)
         return src, (dst if getattr(self, "yc", None) is None else self.yc.apply(i, src, dst))  # --warp-yaw-clamp
+
+    hold_k = None  # --warp-corners hold: per frame, the share of the hold kept (None: no hold)
+
+    def hk(self, i):
+        """frame i's share of the --warp-corners hold (1.0 without one: MouthModel.delta ignores it)."""
+        return 1.0 if self.hold_k is None else float(self.hold_k[i])
 
     def fold_det_of(self, i, dFe_i=None, Si=None, ell=None, lam=None):
         """the minimum Jacobian determinant of frame i's applied warp (1.0: no move)."""
@@ -1885,11 +2008,13 @@ class WarpClip:
             mix={str(k): round(v, 2) for k, v in msrc[i].items()},
             move_px=0.0,
         )
+        if self.hold_k is not None:
+            ent["hold"] = round(self.hk(i), 2)  # --warp-corners hold: the share the fold guard left this frame
         dst_i = None
         shut = vars(self.a).get("warp_shut_bank", False)
         for k, wk in msrc[i].items():
             if k >= 0:  # bank entry k: its canonical shape corrected to the target by J, projected with THIS frame's pose
-                Xt = C[k, CTRL] + model.delta(Fe_i - F[k])
+                Xt = C[k, CTRL] + delta_of(self, i, Fe_i - F[k])
                 dst = pl.rigid(i, Xt) - pl.rigid(i, C[i, CTRL]) + src + (self.shape_at(i) if shut else 0.0)
                 if getattr(self, "yc", None) is not None:
                     dst = self.yc.apply(i, src, dst, ent)
@@ -1900,7 +2025,7 @@ class WarpClip:
                     fr, S[k][CTRL, :2], dst, anchors, lam=lam, src_img=frames[k], anchors_src=a_src, weight=wmap, interp=self.interp
                 )
             else:
-                dl = model.delta(dFe_i)
+                dl = delta_of(self, i, dFe_i)
                 dst = src + (dl @ self.rot[i].T)[:, :2] + self.shape_at(i)
                 if getattr(self, "yc", None) is not None:
                     dst = self.yc.apply(i, src, dst, ent)  # inside the face
@@ -2329,7 +2454,7 @@ class WarpClip:
         if short >= 0:
             return P_out
         P = np.array(P_out, float)
-        P[CTRL] += (self.model.delta(np.array([short, 0.0])) @ self.rot[i].T)[:, :2]
+        P[CTRL] += (delta_of(self, i, np.array([short, 0.0])) @ self.rot[i].T)[:, :2]
         return P
 
     def setup_lock(self):
@@ -2578,6 +2703,8 @@ class WarpClip:
                 teeth=self.teeth_info(),
                 frames=log,
             )
+            if model.hold is not None:
+                d["corners"] = "hold"
             if extra_json:
                 d.update(extra_json)
             json.dump(d, open(a.warp_json, "w"))
@@ -2609,6 +2736,15 @@ def run(a):
         from . import aperture
 
         extra = {"aperture": dict(aperture.close_loop(clip), gain=getattr(clip, "aperture_gain", None))}
+    if (
+        vars(a).get("warp_rise", "off") == "achieved"
+        and vars(a).get("warp_events", "off") != "off"
+        and vars(a).get("warp_target", "v9") not in ("coart", "own")
+    ):
+        # (opt-in) stage: the onset rises read on the rendered mouth, the short ones lifted with an attack shape (core/rise_loop.py)
+        from . import rise_loop
+
+        clip.drive_info["rise"] = rise_loop.close_rise(clip)
     if getattr(a, "warp_gate", "off") not in (None, "off"):
         # the per-frame maker / checker / confirmation gate (core/frame_gate.py)
         from . import frame_gate

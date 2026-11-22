@@ -170,6 +170,16 @@ RULES = (
         ),
     ),
     Rule(
+        ("--warp-closure-lead",),
+        "--warp-closures plan: the closure stage does not run, so there is no shut window to lead",
+        lambda a: a.warp_closures == "plan",
+    ),
+    Rule(
+        ("--warp-closure-lead-s",),
+        "--warp-closure-lead is not phone (or --warp-closures plan): the lead in seconds is read only by the phone lead",
+        lambda a: a.warp_closures == "plan" or vars(a).get("warp_closure_lead", "plan") != "phone",
+    ),
+    Rule(
         ("--warp-aperture",),
         "p95 with no --warp-events vocal (with --warp-audio): no wide-vowel nuclei are tagged, so p95 reads every frame and is the "
         "same as map",
@@ -186,6 +196,11 @@ RULES = (
         ("--warp-round", "--warp-contact"),
         "read only with the coart planner's phones, no --warp-target coart here",
         lambda a: a.warp_target != "coart",
+    ),
+    Rule(
+        ("--warp-corners",),
+        "--warp-target own plans no move (the null build): there is no closing or narrowing for the corners to hold",
+        lambda a: a.warp_target == "own",
     ),
     Rule(
         ("--warp-sigma", "--warp-follow", "--warp-aperture", "--warp-shape", "--warp-lead-gate"),

@@ -216,6 +216,16 @@ def classic(old):
     return lambda v: old if v == "classic" else v
 
 
+def _closure_lead_s(x):
+    """argparse type of --warp-closure-lead-s: closure_plan.lead_seconds, its refusal an argparse error."""
+    from . import closure_plan
+
+    try:
+        return closure_plan.lead_seconds(x)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
 def _parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipe", help="a named recipe (recipes.py): its flags go in at this point, later flags override them")
@@ -486,12 +496,39 @@ def _parser():
         "aligned-press = aligned, and the lip-erase layer and the slit seal on those frames only, so the closure is a contact",
     )
     ap.add_argument(
+        "--warp-closure-lead",
+        choices=["plan", "phone"],
+        default="plan",
+        help="warp (with --warp-closures aligned / aligned-press): where a closure's shut frames start (core/closure_plan.py). plan = "
+        "0.12 s before the aligned P / B / M onset; phone = 0.02 s before it (shut about 0.04 s ahead of the bilabial with the shape "
+        "stage's advance), so the voiced vowel before it keeps its opening; a PP frame the track carries on that vowel is lifted. "
+        "The release side and the frames inside the window are as plan has them",
+    )
+    ap.add_argument(
+        "--warp-closure-lead-s",
+        type=_closure_lead_s,
+        default=0.02,
+        metavar="S",
+        help="warp (with --warp-closure-lead phone, read only there): seconds before the aligned P / B / M onset that a closure's shut "
+        "frames start, 0 .. 0.12 (default 0.02, one internal frame; 0.12 is plan's lead)",
+    )
+    ap.add_argument(
         "--warp-onset",
         choices=["apex", "rise", "classic"],
         type=classic("apex"),
         default="apex",
         help="warp (with --warp-hold): where a syllable's opening sits on its onset. apex = fully open on the onset (the rise ends "
         "there); rise = the rise itself on the onset, fully open 40 ms after it",
+    )
+    ap.add_argument(
+        "--warp-rest",
+        choices=["apart", "closed"],
+        default="apart",
+        help="warp (with --warp-hold): the mouth in a rest (the vocal stem off for 0.15 s or more at its own floor). apart = lips "
+        "apart at the hold's rest opening (0.15 of the take's range, 0.3.x); closed = once the decay into the rest is done, eased "
+        "on down to the take's own most-closed mouth over 0.16 s, and back to the rest opening by the time the voice returns or the next syllable's release starts (the breath "
+        "before a phrase and every onset are as with apart; a short rest closes part way). A soft held vowel, a consonant or a quiet "
+        "tail the stem still carries is not a rest",
     )
     ap.add_argument(
         "--warp-nuclei",
@@ -504,11 +541,12 @@ def _parser():
     )
     ap.add_argument(
         "--warp-rise",
-        choices=["off", "floor", "lift", "classic"],
+        choices=["off", "floor", "lift", "achieved", "classic"],
         type=classic("off"),
         default="off",
         help="warp (plain targets, needs --warp-events vocal): the least opening rise a sung syllable's onset carries. off = the rise as "
-        "planned (a small one is lost in the picture); floor = every onset's two frames rise by at least 0.3 of the take's range; lift = the same, never lowering the frame before",
+        "planned (a small one is lost in the picture); floor = every onset's two frames rise by at least 0.3 of the take's range; lift = the same, never lowering the frame before; "
+        "achieved = the rise read on the rendered mouth, only the onsets that fell short lifted, with an attack shape (ramp, hold, release)",
     )
     ap.add_argument(
         "--warp-pbm",
@@ -530,6 +568,15 @@ def _parser():
     )
     ap.add_argument(
         "--warp-jaw-gain", type=float, default=1.0, help="warp: gain on the soft chin's share of an opening / closing (jaw drop / raise)"
+    )
+    ap.add_argument(
+        "--warp-corners",
+        choices=["model", "hold"],
+        default="model",
+        help="warp: the mouth corners when the plan closes or narrows the mouth. model = as the take's fitted mouth map moves them "
+        "(a closing can leave the corners under the lips' centre, a frown the take does not have); hold = a closing never puts the "
+        "corners lower against the lips' centre than the take frame has them (they ride up with the lip line, the lip points near "
+        "them following), and a narrowing never lowers them; opening frames and frames the plan leaves alone are as planned",
     )
     ap.add_argument(
         "--warp-donor-min",
