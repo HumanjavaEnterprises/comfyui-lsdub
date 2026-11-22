@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 (2026-11-21)
+
+- A small release: four optional mouth settings, all off by default. Type them into the Mouth Tweaks `settings` box.
+- `--warp-closure-lead phone`: the lips shut just before a p/b/m instead of well ahead of it, so the vowel before it stays open. Closures get shorter and a few are lost. `--warp-closure-lead-s` sets how early (0 to 0.12 s, default 0.02).
+- `--warp-rest closed`: in a long rest the mouth eases shut and opens again before the voice returns.
+- `--warp-rise achieved` lifts short syllables; `--warp-corners hold` keeps a closing from pulling the mouth corners down. Both are experiments.
+- The repair pass after the dub now gives the same result every run, so finished frames can differ a little from 0.3.1's.
+- Saved workflows load unchanged; shots dubbed with 0.3.1 dub again with this release.
+
+Full changelog: https://lsdub.sndbnch.app/changelog
+
 ## 0.3.1 (2026-11-17)
 
 - The mouth follows the lyric's vowels more closely: openings land on the sung syllables, and a held note stays open.
